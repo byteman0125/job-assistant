@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Job Searcher Icon Generator</title>
+</head>
+<body>
+  <canvas id="canvas" width="512" height="512"></canvas>
+  <br>
+  <button onclick="downloadIcon()">Download Icon</button>
+  
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Background
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Briefcase outline
+    ctx.strokeStyle = '#ffffff';
+    ctx.fillStyle = '#ffffff';
+    ctx.lineWidth = 20;
+    
+    // Briefcase body
+    ctx.beginPath();
+    ctx.roundRect(100, 200, 312, 200, 20);
+    ctx.stroke();
+    ctx.globalAlpha = 0.9;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    // Handle
+    ctx.beginPath();
+    ctx.arc(256, 180, 40, 0, Math.PI, true);
+    ctx.stroke();
+    
+    // Lock/clasp
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(236, 280, 40, 60);
+    
+    // Magnifying glass
+    ctx.strokeStyle = '#2196F3';
+    ctx.lineWidth = 15;
+    ctx.beginPath();
+    ctx.arc(350, 350, 50, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(390, 390);
+    ctx.lineTo(430, 430);
+    ctx.stroke();
+    
+    function downloadIcon() {
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'icon.png';
+        a.click();
+      });
+    }
+  </script>
+</body>
+</html>
+

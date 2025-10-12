@@ -1,0 +1,118 @@
+---
+alwaysApply: true
+---
+* Don't make md file for each action. I need only readme file
+
+## APPLICATION TYPE
+-  You have to make job search application (Electron).
+
+## WEB SCRAPING & BOT AVOIDANCE
+- Web browser structure (load all page perfectly, fastly, avoid bot action perfectly. if bot action detected, resolve)
+- Use proper user-agents, random delays, and cookie persistence
+- Follow redirect chains automatically to get final job URLs (not tracking URLs)
+- Save final redirected URLs to database for deduplication
+
+## JOB PLATFORMS (Priority Order)
+1. Himalayas (remote + startup focused)
+2. Jobgether (remote-first)
+3. BuiltIn (tech/startup)
+4. ZipRecruiter (volume + variety)
+5. Jobright.ai (AI-powered)
+6. RemoteOK (pure remote tech)
+7. We Work Remotely (quality remote)
+- Create platform-specific scrapers (modular design)
+- Save platform-specific actions/selectors in config or separate modules
+- Save all behavioral actions (clicks, scrolls, waits, selectors) persistently
+- If scraper encounters unknown action/page, pause and ask me for guidance
+- Allow me to provide additional actions for unexpected situations through UI
+- Action recording system: record what actions work and save them for future runs
+
+## DATA RECORDING
+-  Record searched jobs: Company, Title, URL (final redirected), Timestamp, Startup status, Salary, Tech stack
+-  Extract Company and Job Title from redirected URL page elements (use saved selectors)
+-  If page structure is unexpected/flexible: Use ChatGPT to extract ALL information from page content:
+   * Company name
+   * Job title
+   * Salary/compensation
+   * Tech stack/technologies
+   * Remote status (fully remote/hybrid/on-site)
+   * Startup status (is it a startup?)
+   * Location
+   * Any other relevant details
+-  Avoid same position (if company AND job title are repeated = duplicate)
+-  Find most recent jobs only
+-  Work automatically without human intervention
+-  Avoid Easy Apply jobs
+
+## DATABASE
+- Use SQLite with better-sqlite3 (fast, easy, offline mode)
+- Schema: id, company, title, url (UNIQUE), platform, timestamp, salary, tech_stack, is_remote, is_startup
+- Implement UNIQUE constraint on (company, title) for deduplication
+- Store platform scraper configs/actions persistently
+
+## JOB FILTERING
+- US only jobs
+- Fully remote positions only
+- For remote detection: use ChatGPT (right navbar integration)
+
+## CHATGPT INTEGRATION
+-  Load chatgpt.com in webview/iframe in right navbar
+-  Use provided cookies for authentication (NO API key needed)
+-  Save cookies persistently (encrypted storage)
+-  Send full job content to ChatGPT for:
+   * Remote position verification
+   * Data extraction (Company, Title, Salary, Tech stack) from unexpected page structures
+   * Job classification
+-  Fallback strategy: If element selectors fail, use ChatGPT to parse job page HTML/text
+-  Handle frozen content with refresh capability
+-  I can classify jobs with ChatGPT through web interface
+
+## SETTINGS PAGE
+-  Platform Selection: Checkboxes to enable/disable job platforms
+-  Default enabled: Jobright only
+-  Ignore Keywords: Add/remove keywords to skip jobs with matching titles
+-  If job title contains ignore keyword → Mark as "already applied" and skip
+-  Ignore Domains: Add/remove domains to block job redirects
+-  Default ignore domains: indeed.com, linkedin.com, dice.com
+-  If job URL contains ignore domain → Skip and mark as applied
+-  All settings saved persistently in SQLite database
+
+## USER INTERFACE
+-  Record page: Display jobs in table/sheet-like format
+-  Copy button: Click to copy job info to clipboard
+-  Best practices: Easy to use, lightweight, modern design
+-  Main window: ChatGPT integrated in right navbar with controls
+-  Settings Page: Configure platforms, ignore keywords, and ignore domains
+-  When scraper needs help: Show notification/modal asking for action guidance
+-  Real-time log display: Show all scraping actions in "Current Step" field
+
+## SYSTEM TRAY
+-  App runs in system tray with icon
+-  Tray icon menu items: Show, Hide, Start Scraping, Stop Scraping, Close
+-  Window close button (X) → Hide to tray (don't quit app)
+-  Only "Close" from tray menu → Actually quit the app
+-  Badge on tray icon: Show count of new jobs found today
+-  Tray icon notifications: Show when new jobs are found
+-  App continues scraping in background when hidden
+
+## COOKIE MANAGEMENT
+-  Cookie Management Page/Interface in the app
+-  I can provide cookie info for chatgpt.com and job platforms in JSON format:
+   Example: [{"name":"cookie_name","value":"cookie_value"}, ...]
+-  Support Gmail login cookies
+-  Save all cookies persistently with encryption
+-  Allow adding/updating/deleting cookies through UI
+-  Test cookie validity before saving
+
+## TESTING
+-  After each update, test automatically
+
+## PACKAGING & DEPLOYMENT
+-  Build packaged executable after development complete
+-  Use electron-builder for packaging
+-  Cross-platform support: Windows (.exe), macOS (.dmg), Linux (.AppImage/.deb)
+-  Include high-quality app icon (use professional job search themed icon)
+-  Icon requirements: Multiple sizes (16x16, 32x32, 48x48, 256x256)
+-  Icon formats: .ico (Windows), .icns (macOS), .png (Linux)
+-  Package includes all dependencies and SQLite database
+-  Auto-updater support for future updates

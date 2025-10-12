@@ -1,0 +1,1787 @@
+const BaseScraper = require('../baseScraper');
+
+class JobrightScraper extends BaseScraper {
+  constructor(database, gptExtractor) {
+    super(database, 'Jobright', gptExtractor);
+    this.baseUrl = 'https://jobright.ai/jobs/recommend';
+  }
+  
+  getBaseDomain() {
+    return 'jobright.ai';
+  }
+  
+  // Helper: Check if a job is older than 7 days
+  isJobOlderThanOneDay(postedTime) {
+    if (!postedTime) return false;
+    
+    const text = postedTime.toLowerCase();
+    
+    // Fresh jobs (< 7 days)
+    if (text.includes('hour') || text.includes('minute') || text.includes('second')) {
+      return false; // Fresh (hours/minutes ago)
+    }
+    
+    // Check for day-based posts
+    if (text.includes('day')) {
+      const match = text.match(/(\d+)\s*day/);
+      if (match) {
+        const days = parseInt(match[1]);
+        return days > 7; // Fresh if 1-7 days, old if 8+ days
+      }
+      return false; // If we can't parse, assume fresh
+    }
+    
+    // Old jobs (weeks, months, years)
+    if (text.includes('week') || text.includes('month') || text.includes('year')) {
+      return true; // Anything in weeks/months/years is old
+    }
+    
+    return false; // Default: assume fresh if can't determine
+  }
+
+  // Helper: Click "Not Interested" button and handle modal
+  async clickNotInterestedButton(jobCard, options = {}) {
+    const { highlight = false, showForDuration = 0 } = options;
+    
+    try {
+      // STEP 1: Optionally highlight the card
+      if (highlight && showForDuration > 0) {
+        const highlighted = await this.page.evaluate((company, title) => {
+          const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+          for (const card of cards) {
+            const companyEl = card.querySelector('div.index_company-name__gKiOY');
+            const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+            if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
+              card.style.border = '4px solid #ff0000';
+              card.style.backgroundColor = '#ffe6e6';
+              card.style.boxShadow = '0 0 20px rgba(255,0,0,0.5)';
+              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              return true;
+            }
+          }
+          return false;
+        }, jobCard.company, jobCard.title);
+        
+        if (highlighted) {
+          console.log(`${this.platform}: 🔴 Card highlighted!`);
+          console.log(`${this.platform}: 👀 Showing for ${showForDuration / 1000}s...`);
+          await new Promise(r => setTimeout(r, showForDuration));
+        }
+      }
+      
+      // STEP 2: Click "Not Interested" button
+      // First, log what page we're on and what cards are visible
+      const pageInfo = await this.page.evaluate(() => {
+        const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+        const cardList = Array.from(cards).slice(0, 5).map(card => {
+          const companyEl = card.querySelector('div.index_company-name__gKiOY');
+          const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+          return {
+            company: companyEl?.textContent?.trim() || 'N/A',
+            title: titleEl?.textContent?.trim() || 'N/A'
+          };
+        });
+        return {
+          url: window.location.href,
+          totalCards: cards.length,
+          firstFiveCards: cardList
+        };
+      });
+      
+      console.log(`${this.platform}: 📍 Current URL: ${pageInfo.url}`);
+      console.log(`${this.platform}: 📊 ${pageInfo.totalCards} cards on page`);
+      console.log(`${this.platform}: 🔍 Looking for: "${jobCard.company}" - "${jobCard.title}"`);
+      if (pageInfo.firstFiveCards.length > 0) {
+        console.log(`${this.platform}: 📋 First 5 cards on page:`);
+        pageInfo.firstFiveCards.forEach((card, idx) => {
+          console.log(`${this.platform}:    ${idx + 1}. ${card.company} - ${card.title}`);
+        });
+      }
+      
+      console.log(`${this.platform}: 🖱️ Clicking "Not Interested" button...`);
+      const clicked = await this.page.evaluate((company, title) => {
+        const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+        for (const card of cards) {
+          const companyEl = card.querySelector('div.index_company-name__gKiOY');
+          const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+          if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
+            const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+            if (dislikeBtn) {
+              dislikeBtn.click();
+              return true;
+            }
+          }
+        }
+        return false;
+      }, jobCard.company, jobCard.title);
+      
+      if (!clicked) {
+        console.log(`${this.platform}: ⚠️ Not Interested button not found - card may have been auto-removed`);
+        return false;
+      }
+      
+      console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+      
+      // STEP 3: Handle modal (select reason and submit)
+      console.log(`${this.platform}: ⏳ Waiting for reason modal to appear...`);
+      await new Promise(r => setTimeout(r, 1500)); // Wait a bit longer for modal
+      
+      // Check what's on the page and log it
+      const modalInfo = await this.page.evaluate(() => {
+        // Check for modal
+        const modal = document.querySelector('.ant-modal');
+        const popup = document.querySelector('[class*="not-interest-popup"]');
+        
+        // Get all radio options
+        const radios = document.querySelectorAll('input.ant-radio-input');
+        const radioInfo = Array.from(radios).map(radio => ({
+          value: radio.value,
+          text: radio.parentElement?.parentElement?.textContent?.trim() || 'Unknown',
+          visible: radio.offsetParent !== null
+        }));
+        
+        // Check for submit button
+        const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+        
+        return {
+          modalVisible: !!modal || !!popup,
+          radioCount: radios.length,
+          radioOptions: radioInfo,
+          submitButtonExists: !!submitBtn,
+          submitButtonDisabled: submitBtn?.disabled || false
+        };
+      });
+      
+      console.log(`${this.platform}: 📋 Modal Info:`, JSON.stringify(modalInfo, null, 2));
+      
+      if (!modalInfo.modalVisible) {
+        console.log(`${this.platform}: ⚠️ Modal not found! Skipping modal handling...`);
+        await new Promise(r => setTimeout(r, 2000));
+        return true;
+      }
+      
+      console.log(`${this.platform}: ✅ Modal detected with ${modalInfo.radioCount} options`);
+      
+      // Try to click "I already applied" radio button (value="5")
+      const submitted = await this.page.evaluate(() => {
+        const radio = document.querySelector('input.ant-radio-input[value="5"]');
+        
+        if (!radio) {
+          console.log('❌ Radio button with value="5" not found');
+          return { success: false, reason: 'Radio not found' };
+        }
+        
+        console.log('✅ Found radio button with value="5", clicking...');
+        radio.click();
+        
+        return new Promise(resolve => {
+          setTimeout(() => {
+            const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+            if (submitBtn && !submitBtn.disabled) {
+              console.log('✅ Submit button is enabled, clicking...');
+              submitBtn.click();
+              resolve({ success: true, reason: 'Submitted' });
+            } else {
+              console.log('❌ Submit button not found or disabled');
+              resolve({ success: false, reason: 'Submit button unavailable' });
+            }
+          }, 500);
+        });
+      });
+      
+      console.log(`${this.platform}: 📤 Modal submit result:`, JSON.stringify(submitted));
+      
+      if (submitted.success) {
+        console.log(`${this.platform}: ✅ Submitted "I already applied" - waiting for card to disappear...`);
+        await this.randomDelay(3000, 4000);
+      } else {
+        console.log(`${this.platform}: ⚠️ Submit failed (${submitted.reason}), waiting anyway...`);
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      
+      return true;
+    } catch (err) {
+      console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
+      return false;
+    }
+  }
+
+  async scrape() {
+    let newJobsCount = 0;
+    this.isRunning = true;
+
+    try {
+      await this.initBrowser();
+      
+      // Update UI status
+      this.updateStatus('Loading job list page...', '0/0');
+      
+      console.log(`${this.platform}: Navigating to ${this.baseUrl}`);
+      await this.navigateToUrl(this.baseUrl);
+      console.log(`${this.platform}: ⏳ Waiting 1.5-2s for page to load...`);
+      await this.randomDelay(1500, 2000);
+
+      // Check for and close "Resume needs Attention" modal
+      this.updateStatus('Checking for modals...', '0/0');
+      console.log(`${this.platform}: Checking for resume modal...`);
+      
+      try {
+        const modalExists = await this.page.$('.ant-modal-content');
+        if (modalExists) {
+          const closeBtn = await this.page.$('button.ant-modal-close[aria-label="Close"]');
+          if (closeBtn) {
+            await closeBtn.click();
+            console.log(`${this.platform}: ✅ Closed "Resume needs Attention" modal`);
+            console.log(`${this.platform}: ⏳ Waiting 1-1.5s...`);
+            await this.randomDelay(1000, 1500);
+          }
+        }
+      } catch (err) {
+        // No modal, continue
+      }
+
+      // CONTINUOUS LOOP: Keep loading jobs until we find jobs older than 7 days
+      let continueScraping = true;
+      let batchNumber = 0;
+      let totalProcessedCount = 0; // Track total jobs processed across all batches
+      
+      while (continueScraping && this.isRunning) {
+        batchNumber++;
+        console.log(`\n${this.platform}: ═══════════════════════════════════════════`);
+        console.log(`${this.platform}: 📦 BATCH ${batchNumber} - Loading job cards...`);
+        console.log(`${this.platform}: ═══════════════════════════════════════════\n`);
+        
+        this.updateStatus(`Loading batch ${batchNumber}...`, `Processed: ${totalProcessedCount}`);
+        
+        // Get job cards from the list
+        const jobCards = await this.page.evaluate(() => {
+        const listContainer = document.querySelector('.ant-list-items');
+        if (!listContainer) return [];
+        
+        const cards = Array.from(listContainer.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC'));
+        
+        return cards.slice(0, 20).map((card, index) => {
+          const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+          const companyEl = card.querySelector('div.index_company-name__gKiOY');
+          const timeEl = card.querySelector('span.index_publish-time__cMfCi');
+          const applyBtn = card.querySelector('button.index_apply-button__kp79C');
+          
+          return {
+            index: index,
+            title: titleEl ? titleEl.textContent.trim() : null,
+            company: companyEl ? companyEl.textContent.trim() : null,
+            postedTime: timeEl ? timeEl.textContent.trim() : null,
+            hasApplyButton: !!applyBtn
+          };
+        }).filter(job => job.title && job.company && job.hasApplyButton);
+      });
+
+      console.log(`${this.platform}: Found ${jobCards ? jobCards.length : 0} job cards`);
+
+      if (!jobCards || jobCards.length === 0) {
+        console.log(`${this.platform}: ⚠️ No job cards found - may need to login or refresh`);
+        
+        // Send warning to UI  
+        const path = require('path');
+        const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
+        const mainWindow = getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send('scraper-warning', {
+            platform: this.platform,
+            message: 'No job cards found. Please save Jobright cookies and login.'
+          });
+        }
+        
+        await this.closeBrowser();
+        this.isRunning = false;
+        return newJobsCount;
+      }
+
+      // Process each job card - STOP if we find a job older than 7 days
+      let foundOldJob = false;
+      
+      for (let i = 0; i < jobCards.length; i++) {
+        if (!this.isRunning) break;
+
+        const jobCard = jobCards[i];
+        console.log(`\n${this.platform}: Processing job ${i + 1}/${jobCards.length}`);
+        console.log(`  Company: ${jobCard.company}`);
+        console.log(`  Title: ${jobCard.title}`);
+        console.log(`  Posted: ${jobCard.postedTime}`);
+        
+        // CHECK: Is this job older than 7 days?
+        const isOld = this.isJobOlderThanOneDay(jobCard.postedTime);
+        if (isOld) {
+          console.log(`${this.platform}: 🛑 🛑 🛑 FOUND OLD JOB 🛑 🛑 🛑`);
+          console.log(`${this.platform}: Job: "${jobCard.title}"`);
+          console.log(`${this.platform}: Posted: ${jobCard.postedTime}`);
+          console.log(`${this.platform}: ✅ STOPPING - Reached jobs older than 7 days`);
+          foundOldJob = true;
+          break;
+        }
+        
+        console.log(`${this.platform}: ✅ Job is fresh (≤ 7 days old) - Processing...`);
+        
+        // CHECK: Ignore keywords in job title
+        const ignoreKeywords = this.db.getSetting('ignore_keywords') || [];
+        const titleLower = jobCard.title.toLowerCase();
+        const matchedKeyword = ignoreKeywords.find(keyword => 
+          titleLower.includes(keyword.toLowerCase())
+        );
+        
+        if (matchedKeyword) {
+          console.log(`${this.platform}: 🚫 Ignored - Title contains keyword "${matchedKeyword}"`);
+          console.log(`${this.platform}: Title: "${jobCard.title}"`);
+          console.log(`${this.platform}: Marking as "already applied" and skipping...`);
+          
+          // Mark as already applied on Jobright (no tab opening needed)
+          try {
+            await this.clickNotInterestedButton(jobCard);
+          } catch (err) {
+            console.log(`${this.platform}: ⚠️ Error marking as applied: ${err.message}`);
+          }
+          
+          continue; // Skip to next job
+        }
+
+        try {
+          totalProcessedCount++; // Increment total processed count
+          
+          // Step 1: Click APPLY NOW button with retry (up to 3 attempts)
+          this.updateStatus(`Clicking APPLY NOW for: ${jobCard.company}`, `Processed: ${totalProcessedCount}`);
+          
+          let newPage = null;
+          
+          for (let clickAttempt = 1; clickAttempt <= 3; clickAttempt++) {
+            // Check if scraper was stopped
+            if (!this.isRunning) {
+              console.log(`${this.platform}: 🛑 Scraper stopped by user`);
+              break;
+            }
+            
+            console.log(`${this.platform}: 🖱️ Click attempt ${clickAttempt}/3...`);
+            
+            // Set up promise to wait for new tab
+            const newTabPromise = new Promise((resolve) => {
+              this.browser.once('targetcreated', async (target) => {
+                try {
+                  if (target.type() === 'page') {
+                    console.log(`${this.platform}: 🆕 New tab detected, getting page object...`);
+                    const newPage = await target.page();
+                    console.log(`${this.platform}: ✅ Page object obtained successfully`);
+                    
+                    // IMMEDIATELY show the page to user
+                    const quickUrl = newPage.url();
+                    console.log(`${this.platform}: 📺 INSTANT MIRROR: ${quickUrl}`);
+                    this.mirrorToWebview(quickUrl);
+                    
+                    resolve(newPage);
+                  }
+                } catch (err) {
+                  console.log(`${this.platform}: ❌ Error getting page: ${err.message}`);
+                  resolve(null);
+                }
+              });
+              
+              // Timeout after 20 seconds per attempt
+              setTimeout(() => {
+                console.log(`${this.platform}: ⏰ No tab after 20s`);
+                resolve(null);
+              }, 20000);
+            });
+          
+            // Click the button (try to match by company/title, fallback to first card)
+            try {
+              console.log(`${this.platform}: Looking for: ${jobCard.company} - ${jobCard.title}`);
+              
+              const clicked = await this.page.evaluate((company, title) => {
+                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                
+                for (const card of cards) {
+                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                  
+                  const cardCompany = companyEl?.textContent?.trim();
+                  const cardTitle = titleEl?.textContent?.trim();
+                  
+                  if (cardCompany === company && cardTitle === title) {
+                    const btn = card.querySelector('button.index_apply-button__kp79C');
+                    if (btn) {
+                      btn.click();
+                      return true;
+                    }
+                  }
+                }
+                
+                // Fallback: Click first card
+                const firstCard = cards[0];
+                if (firstCard) {
+                  const btn = firstCard.querySelector('button.index_apply-button__kp79C');
+                  if (btn) {
+                    btn.click();
+                    return true;
+                  }
+                }
+                
+                return false;
+              }, jobCard.company, jobCard.title);
+              
+              if (clicked) {
+                console.log(`${this.platform}: ✅ Clicked button`);
+                console.log(`${this.platform}: ⏳ Waiting 1s for tab to open...`);
+                await new Promise(r => setTimeout(r, 1000));
+              } else {
+                console.log(`${this.platform}: ⚠️ Button not found`);
+              }
+            } catch (clickError) {
+              console.log(`${this.platform}: ⚠️ Click error: ${clickError.message}`);
+            }
+            
+            // Check if tab opened
+            const tabOpened = await newTabPromise;
+            
+            if (tabOpened) {
+              console.log(`${this.platform}: ✅ Tab opened successfully!`);
+              newPage = tabOpened;
+              break; // Exit retry loop
+            } else {
+              console.log(`${this.platform}: ❌ No tab opened`);
+              
+              if (clickAttempt < 3) {
+                console.log(`${this.platform}: 🔄 Retrying click...`);
+                await new Promise(r => setTimeout(r, 2000)); // Wait before retry
+              }
+            }
+          } // End retry loop
+          
+          // If no tab opened after 3 attempts, skip job
+          if (!newPage) {
+            console.log(`${this.platform}: ❌ Failed to open tab after 3 attempts - skipping job`);
+            
+            // Mark as "Not Interested" so we don't keep trying
+            try {
+              const clicked = await this.page.evaluate((company, title) => {
+                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                for (const card of cards) {
+                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                  if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
+                    const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                    if (dislikeBtn) {
+                      dislikeBtn.click();
+                      return true;
+                    }
+                  }
+                }
+                return false;
+              }, jobCard.company, jobCard.title);
+              
+              if (clicked) {
+                console.log(`${this.platform}: ✅ Marked as "Not Interested" - won't retry this job`);
+                await new Promise(r => setTimeout(r, 2000));
+              }
+            } catch (err) {
+              // Ignore
+            }
+            
+            continue;
+          }
+          
+          console.log(`${this.platform}: 🆕 New tab opened!`);
+          
+          // Page already mirrored instantly - user can see it!
+          let finalJobUrl = newPage.url();
+          
+          // Navigate to clean URL if needed (for full job details!)
+          if (finalJobUrl.includes('/apply')) {
+            const cleanUrl = finalJobUrl.split('/apply')[0] + '/';
+            console.log(`${this.platform}: 🔄 Quick nav to: ${cleanUrl}`);
+            
+            newPage.goto(cleanUrl, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+            await new Promise(r => setTimeout(r, 500)); // Brief pause for navigation to start
+            finalJobUrl = cleanUrl;
+            this.mirrorToWebview(cleanUrl);
+            console.log(`${this.platform}: ✅ Navigating...`);
+            
+          } else if (finalJobUrl.includes('/application')) {
+            const cleanUrl = finalJobUrl.split('/application')[0];
+            console.log(`${this.platform}: 🔄 Quick nav to: ${cleanUrl}`);
+            
+            newPage.goto(cleanUrl, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+            await new Promise(r => setTimeout(r, 500)); // Brief pause for navigation to start
+            finalJobUrl = cleanUrl;
+            this.mirrorToWebview(cleanUrl);
+            console.log(`${this.platform}: ✅ Navigating...`);
+            
+          } else {
+            console.log(`${this.platform}: ✅ Final job URL: ${finalJobUrl}`);
+          }
+          
+          // CRITICAL: Wait for page content to fully load (not just DOM)
+          console.log(`${this.platform}: Waiting for content to fully render...`);
+          
+          // Smart wait: Check every 1s if content loaded (max 20s)
+          let contentLoaded = false;
+          for (let waitAttempt = 0; waitAttempt < 20; waitAttempt++) {
+            // Check if scraper was stopped
+            if (!this.isRunning) {
+              console.log(`${this.platform}: 🛑 Scraper stopped by user during page load`);
+              await newPage.close();
+              return newJobsCount;
+            }
+            
+            await new Promise(r => setTimeout(r, 1000)); // ⚡ Fast check
+            
+            const checkContent = await newPage.evaluate(() => {
+              const title = document.title.toLowerCase();
+              const bodyLength = document.body ? document.body.innerText.length : 0;
+              
+              // Check if it's still Cloudflare
+              const isStillLoading = title.includes('just a moment') || 
+                                     title.includes('checking') ||
+                                     bodyLength < 500;
+              
+              return {
+                title,
+                bodyLength,
+                isStillLoading
+              };
+            });
+            
+            if (!checkContent.isStillLoading) {
+              console.log(`${this.platform}: ✅ Content loaded after ${waitAttempt + 1}s (${checkContent.bodyLength} chars)`);
+              contentLoaded = true;
+              break;
+            }
+            
+            console.log(`${this.platform}: Still loading (attempt ${waitAttempt + 1}/20, ${checkContent.bodyLength} chars)...`);
+          }
+          
+          if (!contentLoaded) {
+            console.log(`${this.platform}: ❌ Content didn't load after 20s - SKIPPING (stuck on Cloudflare)`);
+            
+              // Close tab and mark as applied
+              try {
+                await newPage.close();
+                console.log(`${this.platform}: ✅ Tab closed`);
+              } catch (closeErr) {
+                console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+              }
+              
+              // Memory cleanup
+              const pages = await this.browser.pages();
+              if (pages.length > 1) {
+                for (let i = 1; i < pages.length; i++) {
+                  try { await pages[i].close(); } catch (err) {}
+                }
+              }
+              this.page = pages[0];
+              
+              // INSTANT MIRROR: Show Jobright.ai immediately
+              this.mirrorToWebview(this.baseUrl);
+              
+              // Navigate back
+            try {
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+              console.log(`${this.platform}: ✅ Back on job list`);
+              
+              // REFRESH to ensure cards are loaded
+              console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
+              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Page refreshed`);
+              
+              // Smart wait: Wait for cards to actually appear (up to 10s)
+              console.log(`${this.platform}: ⏳ Waiting for cards to appear...`);
+              let cardsLoaded = false;
+              for (let attempt = 0; attempt < 10; attempt++) {
+                await new Promise(r => setTimeout(r, 1000));
+                const cardCount = await this.page.evaluate(() => {
+                  return document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length;
+                });
+                
+                if (cardCount > 0) {
+                  console.log(`${this.platform}: ✅ ${cardCount} cards loaded after ${attempt + 1}s`);
+                  cardsLoaded = true;
+                  break;
+                }
+              }
+              
+              if (!cardsLoaded) {
+                console.log(`${this.platform}: ⚠️ No cards appeared after 10s`);
+              }
+            } catch (err) {
+              console.log(`${this.platform}: ⚠️ Nav error: ${err.message}`);
+            }
+            
+            this.mirrorToWebview(this.baseUrl);
+            
+            // FAST METHOD: Highlight card, then click "Not Interested"
+            console.log(`${this.platform}: 🚀 Using FAST method - highlighting card...`);
+            
+            try {
+              // STEP 1: Highlight the card
+              const highlighted = await this.page.evaluate((company, title) => {
+                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                
+                for (const card of cards) {
+                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                  
+                  const cardCompany = companyEl?.textContent?.trim();
+                  const cardTitle = titleEl?.textContent?.trim();
+                  
+                  if (cardCompany === company && cardTitle === title) {
+                    // HIGHLIGHT
+                    card.style.border = '4px solid #ff0000';
+                    card.style.backgroundColor = '#ffe6e6';
+                    card.style.boxShadow = '0 0 20px rgba(255,0,0,0.5)';
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return true;
+                  }
+                }
+                return false;
+              }, jobCard.company, jobCard.title);
+              
+              if (highlighted) {
+                console.log(`${this.platform}: 🔴 Card highlighted!`);
+              }
+              
+              // STEP 2: Wait so user can see it
+              console.log(`${this.platform}: 👀 Showing for 2s...`);
+              await new Promise(r => setTimeout(r, 2000));
+              
+              // STEP 3: Click "Not Interested"
+              console.log(`${this.platform}: 🖱️ Clicking "Not Interested" button...`);
+              const clicked = await this.page.evaluate((company, title) => {
+                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                
+                for (const card of cards) {
+                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                  
+                  const cardCompany = companyEl?.textContent?.trim();
+                  const cardTitle = titleEl?.textContent?.trim();
+                  
+                  if (cardCompany === company && cardTitle === title) {
+                    const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                    if (dislikeBtn) {
+                      dislikeBtn.click();
+                      return true;
+                    }
+                  }
+                }
+                return false;
+              }, jobCard.company, jobCard.title);
+              
+              if (clicked) {
+                console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+                
+                // Wait for modal to appear
+                console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
+                await new Promise(r => setTimeout(r, 1000));
+                
+                // Select reason and submit
+                const submitted = await this.page.evaluate(() => {
+                  // Click radio button (value="2" = "Not interested in job title")
+                  const radio = document.querySelector('input.ant-radio-input[value="2"]');
+                  if (radio) radio.click();
+                  
+                  // Wait a bit
+                  return new Promise(resolve => {
+                    setTimeout(() => {
+                      // Click Submit button
+                      const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+                      if (submitBtn && !submitBtn.disabled) {
+                        submitBtn.click();
+                        resolve(true);
+                      } else {
+                        resolve(false);
+                      }
+                    }, 500);
+                  });
+                });
+                
+                if (submitted) {
+                  console.log(`${this.platform}: ✅ Submitted reason - waiting for card to disappear...`);
+                  console.log(`${this.platform}: ⏳ Waiting 3-4s...`);
+                  await this.randomDelay(3000, 4000);
+                } else {
+                  console.log(`${this.platform}: ⚠️ Submit failed, waiting anyway...`);
+                  await new Promise(r => setTimeout(r, 3000));
+                }
+              }
+            } catch (err) {
+              console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
+            }
+            
+            continue; // Skip to next job
+          }
+          
+          // Mirror final page
+          this.mirrorToWebview(newPage.url());
+          
+          // FILTER: Skip if URL is from ignored domains (from settings)
+          const ignoreDomains = this.db.getSetting('ignore_domains') || ['indeed.com', 'linkedin.com', 'dice.com'];
+          let isBlocked = false;
+          let blockedPlatform = null;
+          
+          for (const domain of ignoreDomains) {
+            if (finalJobUrl.toLowerCase().includes(domain.toLowerCase())) {
+              isBlocked = true;
+              blockedPlatform = domain;
+              break;
+            }
+          }
+          
+          if (isBlocked) {
+            console.log(`${this.platform}: ❌ ❌ ❌ BLOCKED DOMAIN DETECTED ❌ ❌ ❌`);
+            console.log(`${this.platform}: Domain: ${blockedPlatform.toUpperCase()}`);
+            console.log(`${this.platform}: URL: ${finalJobUrl}`);
+            console.log(`${this.platform}: ⏭️ SKIPPING - Closing tab and marking as applied`);
+            
+            // Close the tab immediately
+            try {
+              await newPage.close();
+              console.log(`${this.platform}: ✅ Tab closed successfully`);
+            } catch (closeErr) {
+              console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+            }
+            
+            // Memory cleanup: Close any extra pages
+            const pages = await this.browser.pages();
+            if (pages.length > 1) {
+              for (let i = 1; i < pages.length; i++) {
+                try {
+                  await pages[i].close();
+                  console.log(`${this.platform}: 🧹 Closed extra page`);
+                } catch (err) {}
+              }
+            }
+            
+            this.page = pages[0];
+            
+            // INSTANT MIRROR: Show Jobright.ai immediately
+            this.mirrorToWebview(this.baseUrl);
+            
+            // Navigate back to job list to ensure we're on the right page
+            try {
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Navigated back to job list`);
+              
+              // REFRESH to ensure cards are loaded
+              console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
+              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Page refreshed`);
+              
+              // Smart wait: Wait for cards to actually appear (up to 10s)
+              console.log(`${this.platform}: ⏳ Waiting for cards to appear...`);
+              let cardsLoaded = false;
+              for (let attempt = 0; attempt < 10; attempt++) {
+                await new Promise(r => setTimeout(r, 1000));
+                const cardCount = await this.page.evaluate(() => {
+                  return document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length;
+                });
+                
+                if (cardCount > 0) {
+                  console.log(`${this.platform}: ✅ ${cardCount} cards loaded after ${attempt + 1}s`);
+                  cardsLoaded = true;
+                  break;
+                }
+              }
+              
+              if (!cardsLoaded) {
+                console.log(`${this.platform}: ⚠️ No cards appeared after 10s`);
+              }
+              
+              // Mirror to webview
+              this.mirrorToWebview(this.baseUrl);
+              
+              // FAST METHOD: Click "Not Interested" button
+              console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
+              
+              try {
+                const clicked = await this.page.evaluate((company, title) => {
+                  const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                  
+                  for (const card of cards) {
+                    const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                    const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                    
+                    const cardCompany = companyEl?.textContent?.trim();
+                    const cardTitle = titleEl?.textContent?.trim();
+                    
+                    if (cardCompany === company && cardTitle === title) {
+                      const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                      if (dislikeBtn) {
+                        dislikeBtn.click();
+                        return true;
+                      }
+                    }
+                  }
+                  return false;
+                }, jobCard.company, jobCard.title);
+                
+                if (clicked) {
+                  console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+                  
+                  // Wait for modal and submit reason
+                  console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
+                  await new Promise(r => setTimeout(r, 1000));
+                  
+                  const submitted = await this.page.evaluate(() => {
+                    const radio = document.querySelector('input.ant-radio-input[value="2"]');
+                    if (radio) radio.click();
+                    return new Promise(resolve => {
+                      setTimeout(() => {
+                        const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+                        if (submitBtn && !submitBtn.disabled) {
+                          submitBtn.click();
+                          resolve(true);
+                        } else {
+                          resolve(false);
+                        }
+                      }, 500);
+                    });
+                  });
+                  
+                  if (submitted) {
+                    console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
+                    await this.randomDelay(3000, 4000);
+                  } else {
+                    await new Promise(r => setTimeout(r, 3000));
+                  }
+                } else {
+                  console.log(`${this.platform}: ℹ️ Card not found or already removed`);
+                }
+              } catch (err) {
+                console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
+              }
+              
+            } catch (navError) {
+              console.log(`${this.platform}: ⚠️ Navigation error: ${navError.message}`);
+            }
+            
+            // Skip to next job
+            continue;
+          }
+          
+          console.log(`${this.platform}: ✅ ✅ ✅ URL is safe (not Indeed/LinkedIn/Dice)`);
+          
+          // Extract page content (page has already waited 5s to render)
+          this.updateStatus(`Extracting page content...`, `Processed: ${totalProcessedCount}`);
+          
+          const quickContent = await newPage.evaluate(() => {
+            return {
+              title: document.title,
+              bodyText: document.body ? document.body.innerText : '',
+              html: document.body ? document.body.innerHTML : '',
+              url: window.location.href
+            };
+          });
+          
+          console.log(`${this.platform}: 📄 Extracted content (${quickContent.bodyText?.length || 0} chars)`);
+          
+          // FAST CHECK: If content too small → skip immediately
+          if (quickContent.bodyText?.length < 400) {
+            console.log(`${this.platform}: ❌ Content too small (${quickContent.bodyText?.length} chars) - likely Cloudflare`);
+            
+            // Close tab
+            try {
+              await newPage.close();
+              console.log(`${this.platform}: ✅ Tab closed`);
+            } catch (closeErr) {
+              console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+            }
+            
+            // Memory cleanup
+            const pages = await this.browser.pages();
+            if (pages.length > 1) {
+              for (let i = 1; i < pages.length; i++) {
+                try { await pages[i].close(); } catch (err) {}
+              }
+            }
+            this.page = pages[0];
+            
+            // INSTANT MIRROR: Show Jobright.ai immediately
+            this.mirrorToWebview(this.baseUrl);
+            
+            // Navigate back to job list
+            console.log(`${this.platform}: Navigating back to job list...`);
+            try {
+              await this.page.goto(this.baseUrl, { 
+                waitUntil: 'domcontentloaded', 
+                timeout: 15000 
+              });
+              console.log(`${this.platform}: ✅ Back on job list page`);
+              
+              // REFRESH to ensure cards are loaded
+              console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
+              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Page refreshed`);
+              
+              // Smart wait: Wait for cards to actually appear (up to 10s)
+              console.log(`${this.platform}: ⏳ Waiting for cards to appear...`);
+              let cardsLoaded = false;
+              for (let attempt = 0; attempt < 10; attempt++) {
+                await new Promise(r => setTimeout(r, 1000));
+                const cardCount = await this.page.evaluate(() => {
+                  return document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length;
+                });
+                
+                if (cardCount > 0) {
+                  console.log(`${this.platform}: ✅ ${cardCount} cards loaded after ${attempt + 1}s`);
+                  cardsLoaded = true;
+                  break;
+                }
+              }
+              
+              if (!cardsLoaded) {
+                console.log(`${this.platform}: ⚠️ No cards appeared after 10s`);
+              }
+            } catch (navError) {
+              console.log(`${this.platform}: ⚠️ Navigation error: ${navError.message}`);
+            }
+            
+            this.mirrorToWebview(this.baseUrl);
+            
+            // FAST METHOD: Click "Not Interested" button (content didn't load)
+            console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
+            
+            try {
+              const clicked = await this.page.evaluate((company, title) => {
+                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                
+                for (const card of cards) {
+                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                  
+                  const cardCompany = companyEl?.textContent?.trim();
+                  const cardTitle = titleEl?.textContent?.trim();
+                  
+                  if (cardCompany === company && cardTitle === title) {
+                    const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                    if (dislikeBtn) {
+                      dislikeBtn.click();
+                      return true;
+                    }
+                  }
+                }
+                return false;
+              }, jobCard.company, jobCard.title);
+              
+              if (clicked) {
+                console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+                
+                // Wait for modal and submit reason
+                console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
+                await new Promise(r => setTimeout(r, 1000));
+                
+                const submitted = await this.page.evaluate(() => {
+                  const radio = document.querySelector('input.ant-radio-input[value="2"]');
+                  if (radio) radio.click();
+                  return new Promise(resolve => {
+                    setTimeout(() => {
+                      const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+                      if (submitBtn && !submitBtn.disabled) {
+                        submitBtn.click();
+                        resolve(true);
+                      } else {
+                        resolve(false);
+                      }
+                    }, 500);
+                  });
+                });
+                
+                if (submitted) {
+                  console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
+                  await this.randomDelay(3000, 4000);
+                } else {
+                  await new Promise(r => setTimeout(r, 3000));
+                }
+              }
+            } catch (err) {
+              console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
+            }
+            
+            continue; // Skip to next job
+          }
+          
+          // Send to ChatGPT for COMBINED verification + extraction (ONE call!)
+          this.updateStatus(`📤 Sending to ChatGPT for analysis...`, `Processed: ${totalProcessedCount}`);
+          console.log(`${this.platform}: 📤 Sending to ChatGPT for COMBINED analysis...`);
+          
+          let gptResult = null;
+          
+          if (this.gptExtractor) {
+            try {
+              gptResult = await this.gptExtractor.extractJobData(
+                quickContent,
+                this.platform,
+                finalJobUrl
+              );
+              
+              if (gptResult) {
+                console.log(`${this.platform}: ✅ ChatGPT analysis complete`);
+              } else {
+                console.log(`${this.platform}: ⚠️ ChatGPT returned null, using fallback`);
+              }
+              
+              // Check if scraper was stopped during ChatGPT analysis
+              if (!this.isRunning) {
+                console.log(`${this.platform}: 🛑 Scraper stopped by user during analysis`);
+                
+                // Clean up tab
+                try {
+                  await newPage.close();
+                  console.log(`${this.platform}: ✅ Tab closed`);
+                } catch (closeErr) {
+                  console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+                }
+                
+                // Memory cleanup - close ALL extra pages
+                const pages = await this.browser.pages();
+                if (pages.length > 1) {
+                  for (let i = 1; i < pages.length; i++) {
+                    try { await pages[i].close(); } catch (err) {}
+                  }
+                }
+                
+                break;
+              }
+            } catch (gptError) {
+              console.log(`${this.platform}: ⚠️ ChatGPT error: ${gptError.message}`);
+            }
+          }
+          
+          // Fallback if ChatGPT fails
+          if (!gptResult) {
+            console.log(`${this.platform}: Using basic extraction`);
+            gptResult = {
+              isVerificationPage: false,
+              company: jobCard.company,
+              title: jobCard.title,
+              isRemote: true,
+              isOnsite: false,
+              isHybrid: false,
+              isStartup: false,
+              location: 'United States',
+              salary: null,
+              techStack: null
+            };
+          }
+
+          // CHECK: Is this a verification page?
+          if (gptResult.isVerificationPage) {
+            console.log(`${this.platform}: ❌ ChatGPT confirmed: Verification page - SKIPPING`);
+            
+            // Close tab and go back
+            try {
+              await newPage.close();
+              console.log(`${this.platform}: ✅ Tab closed`);
+            } catch (closeErr) {
+              console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+            }
+            
+            // Memory cleanup
+            const pages = await this.browser.pages();
+            if (pages.length > 1) {
+              for (let i = 1; i < pages.length; i++) {
+                try { await pages[i].close(); } catch (err) {}
+              }
+            }
+            this.page = pages[0];
+            
+            // INSTANT MIRROR: Show Jobright.ai immediately
+            this.mirrorToWebview(this.baseUrl);
+            
+            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+            console.log(`${this.platform}: ✅ Back on job list`);
+            
+            // Refresh and wait for cards
+            console.log(`${this.platform}: 🔄 Refreshing page...`);
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+            
+            console.log(`${this.platform}: ⏳ Waiting for cards...`);
+            for (let attempt = 0; attempt < 10; attempt++) {
+              await new Promise(r => setTimeout(r, 1000));
+              const cardCount = await this.page.evaluate(() => document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length);
+              if (cardCount > 0) {
+                console.log(`${this.platform}: ✅ ${cardCount} cards loaded`);
+                break;
+              }
+            }
+            
+            this.mirrorToWebview(this.baseUrl);
+            
+            // Click "Not Interested"
+            console.log(`${this.platform}: 🚀 Clicking "Not Interested" button...`);
+            try {
+              // Highlight
+              await this.page.evaluate((company, title) => {
+                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                for (const card of cards) {
+                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                  if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
+                    card.style.border = '4px solid #ff0000';
+                    card.style.backgroundColor = '#ffe6e6';
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }
+              }, jobCard.company, jobCard.title);
+              
+              console.log(`${this.platform}: 👀 Showing for 2s...`);
+              await new Promise(r => setTimeout(r, 2000));
+              
+              // Click
+              const clicked = await this.page.evaluate((company, title) => {
+                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                for (const card of cards) {
+                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                  if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
+                    const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                    if (dislikeBtn) {
+                      dislikeBtn.click();
+                      return true;
+                    }
+                  }
+                }
+                return false;
+              }, jobCard.company, jobCard.title);
+              
+              if (clicked) {
+                console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+                
+                // Wait for modal and submit reason
+                console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
+                await new Promise(r => setTimeout(r, 1000));
+                
+                const submitted = await this.page.evaluate(() => {
+                  const radio = document.querySelector('input.ant-radio-input[value="2"]');
+                  if (radio) radio.click();
+                  return new Promise(resolve => {
+                    setTimeout(() => {
+                      const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+                      if (submitBtn && !submitBtn.disabled) {
+                        submitBtn.click();
+                        resolve(true);
+                      } else {
+                        resolve(false);
+                      }
+                    }, 500);
+                  });
+                });
+                
+                if (submitted) {
+                  console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
+                  await this.randomDelay(3000, 4000);
+                } else {
+                  await new Promise(r => setTimeout(r, 3000));
+                }
+              }
+            } catch (err) {
+              console.log(`${this.platform}: ⚠️ Error: ${err.message}`);
+            }
+            
+            continue;
+          }
+          
+          console.log(`${this.platform}: ✅ Real job page confirmed`);
+
+          if (gptResult) {
+            // Check if job should be filtered out
+            let shouldSkip = false;
+            
+            if (gptResult.isOnsite || gptResult.isHybrid) {
+              console.log(`${this.platform}: ⚠️ Skipping - Job is onsite/hybrid`);
+              shouldSkip = true;
+            } else if (gptResult.platform && ['indeed', 'linkedin', 'dice'].includes(gptResult.platform.toLowerCase())) {
+              console.log(`${this.platform}: ⚠️ Skipping - Job is from ${gptResult.platform} (blocked platform)`);
+              shouldSkip = true;
+            }
+            
+            if (shouldSkip) {
+              // FAST METHOD: Click "Not Interested" button to remove card
+              console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
+              
+              // Close the job tab first
+              try {
+                await newPage.close();
+                console.log(`${this.platform}: ✅ Tab closed`);
+              } catch (closeErr) {
+                console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+              }
+              
+              // Memory cleanup
+              const pages = await this.browser.pages();
+              if (pages.length > 1) {
+                for (let i = 1; i < pages.length; i++) {
+                  try { await pages[i].close(); } catch (err) {}
+                }
+              }
+              this.page = pages[0];
+              
+              // INSTANT MIRROR: Show Jobright.ai immediately
+              this.mirrorToWebview(this.baseUrl);
+              
+              // Navigate back to job list
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+              console.log(`${this.platform}: ✅ Back on job list`);
+              
+              // REFRESH to ensure cards are loaded
+              console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
+              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Page refreshed`);
+              
+              // Smart wait: Wait for cards to actually appear (up to 10s)
+              console.log(`${this.platform}: ⏳ Waiting for cards to appear...`);
+              let cardsLoaded = false;
+              for (let attempt = 0; attempt < 10; attempt++) {
+                await new Promise(r => setTimeout(r, 1000));
+                const cardCount = await this.page.evaluate(() => {
+                  return document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length;
+                });
+                
+                if (cardCount > 0) {
+                  console.log(`${this.platform}: ✅ ${cardCount} cards loaded after ${attempt + 1}s`);
+                  cardsLoaded = true;
+                  break;
+                }
+              }
+              
+              if (!cardsLoaded) {
+                console.log(`${this.platform}: ⚠️ No cards appeared after 10s`);
+              }
+              
+              this.mirrorToWebview(this.baseUrl);
+              console.log(`${this.platform}: 📺 Job list visible, looking for card to remove...`);
+              
+              // Click "Not Interested" button on the matching card
+              try {
+                // Debug: Check what cards are available
+                const debugInfo = await this.page.evaluate(() => {
+                  const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                  return {
+                    count: cards.length,
+                    firstCard: cards[0] ? {
+                      company: cards[0].querySelector('div.index_company-name__gKiOY')?.textContent?.trim(),
+                      title: cards[0].querySelector('h2.index_job-title__UjuEY')?.textContent?.trim()
+                    } : null
+                  };
+                });
+                
+                console.log(`${this.platform}: Found ${debugInfo.count} cards on page`);
+                if (debugInfo.firstCard) {
+                  console.log(`${this.platform}: First card: ${debugInfo.firstCard.company} - ${debugInfo.firstCard.title}`);
+                }
+                console.log(`${this.platform}: Looking for: ${jobCard.company} - ${jobCard.title}`);
+                
+                const clicked = await this.page.evaluate((company, title) => {
+                  const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                  
+                  for (const card of cards) {
+                    const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                    const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                    
+                    const cardCompany = companyEl?.textContent?.trim();
+                    const cardTitle = titleEl?.textContent?.trim();
+                    
+                    if (cardCompany === company && cardTitle === title) {
+                      const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                      if (dislikeBtn) {
+                        dislikeBtn.click();
+                        return true;
+                      }
+                    }
+                  }
+                  return false;
+                }, jobCard.company, jobCard.title);
+                
+                if (clicked) {
+                  console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+                  
+                  // Wait for modal and submit reason
+                  console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
+                  await new Promise(r => setTimeout(r, 1000));
+                  
+                  const submitted = await this.page.evaluate(() => {
+                    const radio = document.querySelector('input.ant-radio-input[value="2"]');
+                    if (radio) radio.click();
+                    return new Promise(resolve => {
+                      setTimeout(() => {
+                        const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+                        if (submitBtn && !submitBtn.disabled) {
+                          submitBtn.click();
+                          resolve(true);
+                        } else {
+                          resolve(false);
+                        }
+                      }, 500);
+                    });
+                  });
+                  
+                  if (submitted) {
+                    console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
+                    await this.randomDelay(3000, 4000);
+                  } else {
+                    await new Promise(r => setTimeout(r, 3000));
+                  }
+                } else {
+                  console.log(`${this.platform}: ⚠️ Not Interested button not found - card may have been auto-removed`);
+                }
+              } catch (err) {
+                console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
+              }
+              
+              continue; // Skip to next job
+            } else {
+              // Save job - Use Jobright card data for company/title, ChatGPT for other fields
+              const saved = this.saveJob({
+                company: jobCard.company,  // Always use card data
+                title: jobCard.title,      // Always use card data
+                url: finalJobUrl,
+                is_remote: gptResult.isRemote,
+                is_startup: gptResult.isStartup,
+                location: gptResult.location || 'United States',
+                salary: gptResult.salary,
+                tech_stack: gptResult.techStack
+              });
+
+              if (saved) {
+                newJobsCount++;
+                console.log(`${this.platform}: ✅ Saved job - ${jobCard.company} - ${jobCard.title}`);
+                
+                // Send toast notification and update job count
+                const path = require('path');
+                const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
+                const mainWindow = getMainWindow();
+                if (mainWindow) {
+                  mainWindow.webContents.send('new-job-found', {
+                    company: jobCard.company,
+                    title: jobCard.title,
+                    platform: this.platform
+                  });
+                  
+                  // Update today's count
+                  const todayJobs = this.db.getJobsToday();
+                  mainWindow.webContents.send('update-today-count', todayJobs.length);
+                }
+              } else {
+                console.log(`${this.platform}: ℹ️ DUPLICATE - Already in database: ${jobCard.company} - ${jobCard.title}`);
+              }
+              
+              // For BOTH saved and duplicate: Close tab and click "Not Interested"
+              console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
+              
+              // Close the job tab and ensure cleanup
+              try {
+                await newPage.close();
+                console.log(`${this.platform}: ✅ Tab closed successfully`);
+              } catch (closeErr) {
+                console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+              }
+              
+              // Get all pages and close any extra ones (memory cleanup)
+              const pages = await this.browser.pages();
+              console.log(`${this.platform}: 📊 Total open pages: ${pages.length}`);
+              
+              // Close any extra pages (should only have 1 - the main Jobright page)
+              if (pages.length > 1) {
+                for (let i = 1; i < pages.length; i++) {
+                  try {
+                    await pages[i].close();
+                    console.log(`${this.platform}: 🧹 Closed extra page ${i}`);
+                  } catch (err) {
+                    // Ignore
+                  }
+                }
+              }
+              
+              this.page = pages[0];
+              
+              // INSTANT MIRROR: Show Jobright.ai immediately
+              this.mirrorToWebview(this.baseUrl);
+              
+              // Navigate back to job list
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+              console.log(`${this.platform}: ✅ Back on job list`);
+              
+              // REFRESH to ensure cards are loaded
+              console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
+              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Page refreshed`);
+              
+              // Smart wait: Wait for cards to actually appear (up to 10s)
+              console.log(`${this.platform}: ⏳ Waiting for cards to appear...`);
+              let cardsLoaded = false;
+              for (let attempt = 0; attempt < 10; attempt++) {
+                await new Promise(r => setTimeout(r, 1000));
+                const cardCount = await this.page.evaluate(() => {
+                  return document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length;
+                });
+                
+                if (cardCount > 0) {
+                  console.log(`${this.platform}: ✅ ${cardCount} cards loaded after ${attempt + 1}s`);
+                  cardsLoaded = true;
+                  break;
+                }
+              }
+              
+              if (!cardsLoaded) {
+                console.log(`${this.platform}: ⚠️ No cards appeared after 10s`);
+              }
+              
+              this.mirrorToWebview(this.baseUrl);
+              console.log(`${this.platform}: 📺 Job list visible, looking for card to remove...`);
+              
+              // Use helper method to click "Not Interested" and handle modal
+              await this.clickNotInterestedButton(jobCard);
+              
+              continue; // Skip to next job
+            }
+          }
+
+        } catch (error) {
+          console.error(`${this.platform}: ❌ Error processing job:`, error.message);
+          
+          // Try to close any open tabs and clean memory
+          try {
+            const pages = await this.browser.pages();
+            console.log(`${this.platform}: 🧹 Memory cleanup - Found ${pages.length} open pages`);
+            
+            if (pages.length > 1) {
+              console.log(`${this.platform}: ⚠️ Closing ${pages.length - 1} orphaned page(s)...`);
+              for (let i = 1; i < pages.length; i++) {
+                try {
+                  await pages[i].close();
+                  console.log(`${this.platform}: ✅ Closed orphaned page ${i}`);
+                } catch (closeErr) {
+                  // Ignore
+                }
+              }
+            }
+            
+            // Force garbage collection if available
+            if (global.gc) {
+              global.gc();
+              console.log(`${this.platform}: 🧹 Forced garbage collection`);
+            }
+          } catch (err) {
+            console.log(`${this.platform}: ⚠️ Error during cleanup:`, err.message);
+          }
+          
+          // Make sure we're back on job list - use fresh navigation
+          try {
+            console.log(`${this.platform}: Recovering - navigating back to job list...`);
+            
+            // Get a fresh page if current one is broken
+            if (!this.page || this.page.isClosed()) {
+              const pages = await this.browser.pages();
+              this.page = pages[0];
+              console.log(`${this.platform}: Using fresh page`);
+            }
+            
+            await this.page.goto(this.baseUrl, { 
+              waitUntil: 'domcontentloaded', 
+              timeout: 15000 
+            });
+            await this.randomDelay(1500, 2000); // ⚡ Fast recovery
+            console.log(`${this.platform}: ✅ Recovered - back on job list`);
+          } catch (err) {
+            console.error(`${this.platform}: ❌ Failed to recover:`, err.message);
+            // Break out of loop if we can't recover
+            break;
+          }
+        }
+        }
+
+        // After processing batch: Check if we should continue or stop
+        console.log(`\n${this.platform}: ═══════════════════════════════════════════`);
+        console.log(`${this.platform}: 📊 BATCH ${batchNumber} COMPLETE`);
+        console.log(`${this.platform}: ═══════════════════════════════════════════`);
+        
+        // Memory cleanup: Check for orphaned pages
+        try {
+          const pages = await this.browser.pages();
+          console.log(`${this.platform}: 🧹 Memory check - Total pages: ${pages.length}`);
+          
+          if (pages.length > 1) {
+            console.log(`${this.platform}: ⚠️ Found ${pages.length - 1} extra page(s), cleaning up...`);
+            for (let i = 1; i < pages.length; i++) {
+              try {
+                await pages[i].close();
+                console.log(`${this.platform}: ✅ Closed orphaned page ${i}`);
+              } catch (err) {
+                // Ignore
+              }
+            }
+          }
+          
+          // Trigger garbage collection hint
+          if (global.gc) {
+            global.gc();
+            console.log(`${this.platform}: 🧹 Garbage collection triggered`);
+          }
+        } catch (cleanupErr) {
+          console.log(`${this.platform}: ⚠️ Memory cleanup warning: ${cleanupErr.message}`);
+        }
+        
+        if (foundOldJob) {
+          console.log(`${this.platform}: ✅ STOPPING - Found jobs older than 7 days`);
+          console.log(`${this.platform}: Total new jobs found: ${newJobsCount}`);
+          continueScraping = false;
+          break;
+        }
+        
+        // No old job found - KEEP SCROLLING AND LOADING MORE
+        console.log(`${this.platform}: ℹ️ All jobs in this batch are fresh (≤ 7 days)`);
+        console.log(`${this.platform}: 🔄 Continuous scraping - scrolling for more jobs...`);
+        
+        // Scroll multiple times to ensure we load more jobs
+        for (let scrollAttempt = 1; scrollAttempt <= 3; scrollAttempt++) {
+          console.log(`${this.platform}: 📜 Scroll attempt ${scrollAttempt}/3...`);
+          
+          await this.page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+          });
+          
+          await this.randomDelay(2000, 3000);
+        }
+        
+        console.log(`${this.platform}: ✅ Scrolled 3 times - Processing next batch...`);
+        
+        // DON'T CHECK CARD COUNT - just continue to next batch!
+        // We only stop when we find a job older than 7 days
+      } // End of while loop
+
+    } catch (error) {
+      console.error(`${this.platform}: Scraping error:`, error.message);
+    } finally {
+      await this.closeBrowser();
+      this.isRunning = false;
+    }
+
+    return newJobsCount;
+  }
+
+  // Send job content to ChatGPT and extract detailed info
+  async sendToGPTAndExtract(jobContent, company, title) {
+    try {
+      const path = require('path');
+      const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
+      const mainWindow = getMainWindow();
+      
+      if (!mainWindow) {
+        console.log(`${this.platform}: Main window not available for GPT`);
+        return null;
+      }
+
+      console.log(`${this.platform}: 🤖 Preparing ChatGPT extraction...`);
+      console.log(`${this.platform}: Job URL: ${jobContent.url}`);
+      console.log(`${this.platform}: Page title: ${jobContent.title}`);
+
+      // Create detailed prompt for GPT
+      const prompt = `Analyze this job posting and extract detailed information:
+
+Job Title: ${title}
+Company: ${company}
+URL: ${jobContent.url}
+
+Page Content:
+${jobContent.bodyText.substring(0, 3000)}
+
+Please extract and provide in JSON format:
+1. Company name (verify/correct if needed)
+2. Job title (verify/correct if needed)
+3. Salary range (if mentioned, or "Not specified")
+4. Tech stack/technologies (comma-separated list)
+5. Location (city, state, or "Remote")
+6. Work type: Is it "Fully Remote", "Hybrid", or "Onsite"?
+7. Is it a startup? (yes/no)
+8. Platform source (check if job redirects to Indeed, LinkedIn, or Dice)
+9. Any other relevant details
+
+IMPORTANT: 
+- If work type is Hybrid or Onsite, mark as "skip"
+- If platform source is Indeed, LinkedIn, or Dice, mark as "skip"
+- For tech stack, list all mentioned technologies
+- Google the company name if needed to verify startup status
+
+Format response as JSON.`;
+
+      // Step 1: Click "New chat" button in ChatGPT
+      console.log(`${this.platform}: Starting new ChatGPT conversation...`);
+      const newChatClicked = await mainWindow.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const iframe = document.querySelector('webview#chatgptView');
+          if (!iframe) {
+            resolve(false);
+            return;
+          }
+          
+          iframe.executeJavaScript(\`
+            (function() {
+              const newChatBtn = document.querySelector('[data-testid="create-new-chat-button"]');
+              if (newChatBtn) {
+                newChatBtn.click();
+                return true;
+              }
+              return false;
+            })();
+          \`).then(result => resolve(result));
+        });
+      `);
+
+      if (!newChatClicked) {
+        console.log(`${this.platform}: ⚠️ ChatGPT new chat button not found, may need refresh`);
+        return null;
+      }
+
+      await this.randomDelay(2000, 3000); // Duration: 2-3 seconds - Wait for new chat form
+
+      // Step 2: Input prompt into ChatGPT
+      console.log(`${this.platform}: Typing prompt into ChatGPT...`);
+      await mainWindow.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const iframe = document.querySelector('webview#chatgptView');
+          if (!iframe) {
+            resolve(false);
+            return;
+          }
+          
+          iframe.executeJavaScript(\`
+            (function() {
+              const inputArea = document.querySelector('div#prompt-textarea[contenteditable="true"]');
+              if (inputArea) {
+                const p = inputArea.querySelector('p');
+                if (p) {
+                  p.textContent = ${JSON.stringify(prompt)};
+                  return true;
+                }
+              }
+              return false;
+            })();
+          \`).then(result => resolve(result));
+        });
+      `);
+
+      await this.randomDelay(2000, 3000); // Duration: 2-3 seconds - Let text appear
+
+      // Step 3: Click send button
+      console.log(`${this.platform}: Clicking send button...`);
+      await mainWindow.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const iframe = document.querySelector('webview#chatgptView');
+          if (!iframe) {
+            resolve(false);
+            return;
+          }
+          
+          iframe.executeJavaScript(\`
+            (function() {
+              const sendBtn = document.querySelector('#composer-submit-button');
+              if (sendBtn) {
+                sendBtn.click();
+                return true;
+              }
+              return false;
+            })();
+          \`).then(result => resolve(result));
+        });
+      `);
+
+      // Step 4: Wait for GPT response
+      console.log(`${this.platform}: ⏳ Waiting for ChatGPT response...`);
+      await this.randomDelay(10000, 15000); // Duration: 10-15 seconds - Wait for GPT to respond
+
+      // Step 5: Extract GPT response
+      console.log(`${this.platform}: Extracting GPT response...`);
+      const gptResponse = await mainWindow.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const iframe = document.querySelector('webview#chatgptView');
+          if (!iframe) {
+            resolve(null);
+            return;
+          }
+          
+          iframe.executeJavaScript(\`
+            (function() {
+              const messages = document.querySelectorAll('div[data-message-author-role="assistant"]');
+              if (messages.length > 0) {
+                const lastMessage = messages[messages.length - 1];
+                const markdown = lastMessage.querySelector('.markdown');
+                return markdown ? markdown.innerText : null;
+              }
+              return null;
+            })();
+          \`).then(result => resolve(result));
+        });
+      `);
+
+      if (gptResponse) {
+        console.log(`${this.platform}: ✅ Got ChatGPT response (${gptResponse.length} chars)`);
+        
+        // Parse GPT response
+        try {
+          // Try to extract JSON from response
+          const jsonMatch = gptResponse.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const data = JSON.parse(jsonMatch[0]);
+            
+            return {
+              company: data.company || company,
+              title: data.title || title,
+              salary: data.salary || null,
+              techStack: data.tech_stack || data.techStack || null,
+              location: data.location || 'Remote',
+              isRemote: data.work_type?.toLowerCase().includes('fully remote') || data.isRemote,
+              isOnsite: data.work_type?.toLowerCase().includes('onsite'),
+              isHybrid: data.work_type?.toLowerCase().includes('hybrid'),
+              isStartup: data.is_startup === 'yes' || data.isStartup === true,
+              platform: data.platform || data.source || null
+            };
+          } else {
+            console.log(`${this.platform}: ⚠️ GPT response not in JSON format, parsing text...`);
+            
+            // Fallback: Extract from text response
+            return {
+              company: company,
+              title: title,
+              isRemote: gptResponse.toLowerCase().includes('remote') && !gptResponse.toLowerCase().includes('hybrid'),
+              isOnsite: gptResponse.toLowerCase().includes('onsite'),
+              isHybrid: gptResponse.toLowerCase().includes('hybrid'),
+              location: 'Remote',
+              salary: null,
+              techStack: null,
+              isStartup: false,
+              platform: null
+            };
+          }
+        } catch (parseError) {
+          console.error(`${this.platform}: Error parsing GPT response:`, parseError.message);
+          return null;
+        }
+      } else {
+        console.log(`${this.platform}: ⚠️ No ChatGPT response, ChatGPT may need refresh`);
+        
+        // Try to refresh ChatGPT
+        console.log(`${this.platform}: Refreshing ChatGPT...`);
+        mainWindow.webContents.send('refresh-chatgpt-view');
+        await this.randomDelay(5000, 7000); // Duration: 5-7 seconds - Wait for refresh
+        
+        return null;
+      }
+
+    } catch (error) {
+      console.error(`${this.platform}: Scraping error:`, error.message);
+    } finally {
+      await this.closeBrowser();
+      this.isRunning = false;
+    }
+
+    return newJobsCount;
+  }
+}
+
+module.exports = JobrightScraper;

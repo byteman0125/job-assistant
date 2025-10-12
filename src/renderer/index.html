@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Searcher</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Custom Title Bar -->
+    <div class="custom-titlebar">
+      <div class="titlebar-drag-region">
+        <span class="titlebar-title">🔍 Job Searcher</span>
+      </div>
+      <div class="titlebar-controls">
+        <button class="titlebar-btn minimize-btn" id="minimizeBtn">–</button>
+        <button class="titlebar-btn maximize-btn" id="maximizeBtn">□</button>
+        <button class="titlebar-btn close-btn" id="closeBtn">×</button>
+      </div>
+    </div>
+    
+    <!-- Content Wrapper (Main + Sidebar) -->
+    <div class="content-wrapper">
+      <!-- Main Content Area -->
+      <div class="main-content">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <h1>🔍 Job Searcher</h1>
+        <div class="controls">
+          <button id="startBtn" class="btn btn-primary">Start Scraping</button>
+          <button id="stopBtn" class="btn btn-danger" disabled>Stop Scraping</button>
+          <span id="status" class="status">● Idle</span>
+          <span id="todayCount" class="badge">0 jobs today</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="scraping">🔍 Scraping</button>
+        <button class="tab-btn" data-tab="jobs" id="jobsTabBtn">📋 Jobs <span id="jobsTabCount" class="tab-count">0</span></button>
+        <button class="tab-btn" data-tab="cookies">🍪 Cookies</button>
+        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content">
+        <!-- Scraping Tab - NOW FIRST/DEFAULT -->
+        <div id="scraping-tab" class="tab-pane active">
+          <div class="scraping-viewer">
+            <div class="scraping-header">
+              <h2>🔍 Live Scraping View</h2>
+            </div>
+            
+            <!-- Live Status Display -->
+            <div class="live-status">
+              <div class="status-row">
+                <span class="status-label">Platform:</span>
+                <span id="statusPlatform" class="status-value">-</span>
+              </div>
+              <div class="status-row">
+                <span class="status-label">Current Step:</span>
+                <span id="statusStep" class="status-value">Idle</span>
+              </div>
+              <div class="status-row">
+                <span class="status-label"></span>
+                <span id="statusProgress" class="status-value">0</span>
+              </div>
+            </div>
+            
+            <div class="webview-container-full">
+              <webview id="scrapingView" partition="persist:scraping" src="about:blank" allowpopups style="width: 100%; height: 100%; border: 2px solid #4CAF50; border-radius: 4px; background: #1e1e1e;"></webview>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Jobs Tab -->
+        <div id="jobs-tab" class="tab-pane">
+          <div class="filters">
+            <input type="text" id="searchInput" placeholder="Search jobs..." class="search-input">
+            <select id="platformFilter" class="filter-select">
+              <option value="">All Platforms</option>
+              <option value="Himalayas">Himalayas</option>
+              <option value="Jobgether">Jobgether</option>
+              <option value="BuiltIn">BuiltIn</option>
+              <option value="ZipRecruiter">ZipRecruiter</option>
+              <option value="Jobright">Jobright</option>
+              <option value="RemoteOK">RemoteOK</option>
+              <option value="WeWorkRemotely">WeWorkRemotely</option>
+            </select>
+            <select id="appliedFilter" class="filter-select">
+              <option value="not-applied">Not Applied</option>
+              <option value="all">All Jobs</option>
+              <option value="applied">Applied Only</option>
+            </select>
+            <button id="refreshBtn" class="btn btn-secondary">🔄 Refresh</button>
+          </div>
+          
+          <div class="bulk-actions">
+            <button id="copySelectedBtn" class="btn btn-success" disabled>📋 Copy Selected</button>
+            <button id="deleteSelectedBtn" class="btn btn-danger" disabled>🗑️ Delete Selected</button>
+            <button id="markAppliedBtn" class="btn btn-primary" disabled>✓ Mark as Applied</button>
+            <button id="markNotAppliedBtn" class="btn btn-secondary" disabled>✗ Mark as Not Applied</button>
+            <span id="selectedCount" class="badge">0 selected</span>
+          </div>
+          
+          <div class="table-container">
+            <table id="jobsTable" class="jobs-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Company</th>
+                  <th>Title</th>
+                  <th>Applied</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="jobsTableBody">
+                <tr>
+                  <td colspan="5" class="no-data">No jobs found. Start scraping to find jobs!</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="pagination">
+            <button id="prevPageBtn" class="btn btn-secondary" disabled>← Previous</button>
+            <span id="pageInfo" class="page-info">Page 1 of 1</span>
+            <select id="pageSize" class="page-size-select">
+              <option value="20">20 per page</option>
+              <option value="50" selected>50 per page</option>
+              <option value="100">100 per page</option>
+              <option value="all">Show All</option>
+            </select>
+            <button id="nextPageBtn" class="btn btn-secondary" disabled>Next →</button>
+          </div>
+        </div>
+
+        <!-- Cookies Tab -->
+        <div id="cookies-tab" class="tab-pane">
+          <div class="cookies-manager">
+            <h2>Cookie Management</h2>
+            <p class="help-text">Paste cookies in JSON format: [{"name":"cookie_name","value":"cookie_value"}, ...]</p>
+            
+            <div class="form-group">
+              <label for="cookiePlatform">Platform:</label>
+              <select id="cookiePlatform" class="form-control">
+                <option value="chatgpt">ChatGPT</option>
+                <option value="Himalayas">Himalayas</option>
+                <option value="Jobgether">Jobgether</option>
+                <option value="BuiltIn">BuiltIn</option>
+                <option value="ZipRecruiter">ZipRecruiter</option>
+                <option value="Jobright">Jobright</option>
+                <option value="RemoteOK">RemoteOK</option>
+                <option value="WeWorkRemotely">WeWorkRemotely</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="cookieData">Cookie JSON:</label>
+              <textarea id="cookieData" class="form-textarea" rows="10" placeholder='[{"name":"session","value":"abc123"},...]'></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button id="saveCookiesBtn" class="btn btn-primary">💾 Save Cookies</button>
+              <button id="loadCookiesBtn" class="btn btn-secondary">📥 Load Cookies</button>
+              <button id="testCookiesBtn" class="btn btn-info">🧪 Test Cookies</button>
+            </div>
+
+            <div id="cookieStatus" class="status-message"></div>
+          </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-pane">
+          <div class="settings-manager">
+            <h2>⚙️ Scraper Settings</h2>
+            
+            <!-- Job Platforms -->
+            <div class="settings-section">
+              <h3>📍 Job Platforms</h3>
+              <p class="help-text">Select which platforms to scrape (Jobright is default)</p>
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="platform-Jobright" value="Jobright" checked>
+                  <span>Jobright (AI-powered)</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="platform-Himalayas" value="Himalayas">
+                  <span>Himalayas (remote + startup)</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="platform-Jobgether" value="Jobgether">
+                  <span>Jobgether (remote-first)</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="platform-BuiltIn" value="BuiltIn">
+                  <span>BuiltIn (tech/startup)</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="platform-ZipRecruiter" value="ZipRecruiter">
+                  <span>ZipRecruiter (volume + variety)</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="platform-RemoteOK" value="RemoteOK">
+                  <span>RemoteOK (pure remote tech)</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="platform-WeWorkRemotely" value="WeWorkRemotely">
+                  <span>We Work Remotely (quality remote)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Ignore Keywords -->
+            <div class="settings-section">
+              <h3>🚫 Ignore Keywords</h3>
+              <p class="help-text">Jobs with these keywords in the title will be auto-skipped and marked as "already applied"</p>
+              <div class="keyword-list" id="keywordList"></div>
+              <div class="input-group">
+                <input type="text" id="newKeyword" placeholder="e.g. Senior, Manager, Java..." class="form-control">
+                <button id="addKeywordBtn" class="btn btn-primary">+ Add Keyword</button>
+              </div>
+            </div>
+
+            <!-- Ignore Domains -->
+            <div class="settings-section">
+              <h3>🌐 Ignore Domains</h3>
+              <p class="help-text">Jobs redirecting to these domains will be auto-skipped (defaults: indeed.com, linkedin.com, dice.com)</p>
+              <div class="domain-list" id="domainList"></div>
+              <div class="input-group">
+                <input type="text" id="newDomain" placeholder="e.g. example.com..." class="form-control">
+                <button id="addDomainBtn" class="btn btn-primary">+ Add Domain</button>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button id="saveSettingsBtn" class="btn btn-success">💾 Save All Settings</button>
+            </div>
+
+            <div id="settingsStatus" class="status-message"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ChatGPT Sidebar -->
+    <div class="chatgpt-sidebar">
+      <div class="sidebar-header">
+        <h3>💬 ChatGPT Assistant</h3>
+        <button id="refreshChatGPT" class="btn-icon" title="Refresh ChatGPT">🔄</button>
+      </div>
+      <webview id="chatgptView" src="https://chatgpt.com" partition="persist:chatgpt" style="width: 100%; height: calc(100% - 50px);"></webview>
+    </div>
+    </div> <!-- End content-wrapper -->
+  </div> <!-- End app-container -->
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ChatGPT Prompt Modal -->
+  <div id="gptPromptModal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; border: 2px solid #4CAF50; border-radius: 8px; padding: 20px; max-width: 600px; max-height: 80vh; overflow-y: auto; z-index: 10000; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3 style="margin: 0; color: #4CAF50;">📋 ChatGPT Prompt Ready</h3>
+      <button id="closePromptModal" style="background: #f44336; border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer;">✕</button>
+    </div>
+    <p id="gptPromptInstructions" style="color: #ccc; margin-bottom: 10px; font-size: 13px;">📤 Auto-sending to ChatGPT sidebar...</p>
+    <p id="gptWaitingStatus" style="display: none; color: #FFA500; margin-bottom: 10px; font-size: 13px; font-weight: bold;">⏳ Waiting for ChatGPT response (up to 90s)...</p>
+    <p id="gptSendingStatus" style="display: none; color: #4CAF50; margin-bottom: 10px; font-size: 13px; font-weight: bold;">🤖 Sending to ChatGPT automatically...</p>
+    <textarea id="gptPromptText" readonly style="width: 100%; height: 300px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+    <div style="margin-top: 15px; display: flex; gap: 10px;">
+      <button id="copyPromptBtn" style="flex: 1; background: #4CAF50; border: none; color: white; padding: 10px; border-radius: 4px; cursor: pointer; font-size: 14px;">📋 Copy to Clipboard</button>
+      <button id="closePromptBtn" style="flex: 1; background: #555; border: none; color: white; padding: 10px; border-radius: 4px; cursor: pointer; font-size: 14px;">Skip (Use Basic)</button>
+    </div>
+  </div>
+  <div id="gptPromptOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999;"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
+
