@@ -397,6 +397,9 @@ class BaseScraper {
   // Update UI status
   updateStatus(step, progress) {
     try {
+      // Log to console for progress bar parsing
+      console.log(`${this.platform}: ${step}`);
+      
       const { getMainWindow } = require('../windowManager');
       const mainWindow = getMainWindow();
       

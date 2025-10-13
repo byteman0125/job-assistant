@@ -1,9 +1,11 @@
 const BaseScraper = require('../baseScraper');
+const path = require('path');
 
 class JobrightScraper extends BaseScraper {
   constructor(database, gptExtractor) {
     super(database, 'Jobright', gptExtractor);
     this.baseUrl = 'https://jobright.ai/jobs/recommend';
+    this.currentSalarySettings = null; // Cache salary settings per batch
   }
   
   getBaseDomain() {
@@ -251,6 +253,14 @@ class JobrightScraper extends BaseScraper {
         console.log(`${this.platform}: 📦 BATCH ${batchNumber} - Loading job cards...`);
         console.log(`${this.platform}: ═══════════════════════════════════════════\n`);
         
+        // Reload salary settings at the start of each batch
+        this.currentSalarySettings = {
+          annual: this.db.getSetting('min_salary_annual'),
+          monthly: this.db.getSetting('min_salary_monthly'),
+          hourly: this.db.getSetting('min_salary_hourly')
+        };
+        console.log(`${this.platform}: 💰 Loaded salary settings: Annual=$${this.currentSalarySettings.annual || 'N/A'}`);
+        
         this.updateStatus(`Loading batch ${batchNumber}...`, `Processed: ${totalProcessedCount}`);
         
         // Get job cards from the list
@@ -334,9 +344,41 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: Title: "${jobCard.title}"`);
           console.log(`${this.platform}: Marking as "already applied" and skipping...`);
           
-          // Mark as already applied on Jobright (no tab opening needed)
+          // Ensure we're on Jobright page with cards loaded
           try {
-            await this.clickNotInterestedButton(jobCard);
+            // Navigate to Jobright if not already there
+            const currentUrl = this.page.url();
+            if (!currentUrl.includes('jobright.ai/jobs/recommend')) {
+              console.log(`${this.platform}: 🔄 Navigating to Jobright page...`);
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+            }
+            
+            // Reload to ensure fresh cards
+            console.log(`${this.platform}: 🔄 Refreshing to load cards...`);
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+            
+            // Wait for cards to appear
+            console.log(`${this.platform}: ⏳ Waiting for cards...`);
+            let cardsLoaded = false;
+            for (let attempt = 0; attempt < 10; attempt++) {
+              await new Promise(r => setTimeout(r, 1000));
+              const cardCount = await this.page.evaluate(() => {
+                return document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length;
+              });
+              
+              if (cardCount > 0) {
+                console.log(`${this.platform}: ✅ ${cardCount} cards loaded`);
+                cardsLoaded = true;
+                break;
+              }
+            }
+            
+            if (cardsLoaded) {
+              // Now try to click "Not Interested"
+              await this.clickNotInterestedButton(jobCard);
+            } else {
+              console.log(`${this.platform}: ⚠️ No cards appeared - skipping click`);
+            }
           } catch (err) {
             console.log(`${this.platform}: ⚠️ Error marking as applied: ${err.message}`);
           }
@@ -348,7 +390,7 @@ class JobrightScraper extends BaseScraper {
           totalProcessedCount++; // Increment total processed count
           
           // Step 1: Click APPLY NOW button with retry (up to 3 attempts)
-          this.updateStatus(`Clicking APPLY NOW for: ${jobCard.company}`, `Processed: ${totalProcessedCount}`);
+          this.updateStatus(`[1/5] 🖱️ Opening job tab...`, `Processed: ${totalProcessedCount}`);
           
           let newPage = null;
           
@@ -361,11 +403,14 @@ class JobrightScraper extends BaseScraper {
             
             console.log(`${this.platform}: 🖱️ Click attempt ${clickAttempt}/3...`);
             
-            // Set up promise to wait for new tab
+            // Set up promise to wait for new tab with countdown
             const newTabPromise = new Promise((resolve) => {
+              let tabOpened = false;
+              
               this.browser.once('targetcreated', async (target) => {
                 try {
                   if (target.type() === 'page') {
+                    tabOpened = true;
                     console.log(`${this.platform}: 🆕 New tab detected, getting page object...`);
                     const newPage = await target.page();
                     console.log(`${this.platform}: ✅ Page object obtained successfully`);
@@ -383,11 +428,36 @@ class JobrightScraper extends BaseScraper {
                 }
               });
               
-              // Timeout after 20 seconds per attempt
+              // Countdown with status updates and isRunning checks
+              const countdownInterval = setInterval(() => {
+                if (!this.isRunning) {
+                  clearInterval(countdownInterval);
+                  console.log(`${this.platform}: 🛑 Stopped by user during wait`);
+                  resolve(null);
+                }
+              }, 500);
+              
+              // Show countdown every 2 seconds
+              let timeLeft = 8;
+              const countdownDisplay = setInterval(() => {
+                if (tabOpened) {
+                  clearInterval(countdownDisplay);
+                  clearInterval(countdownInterval);
+                } else if (timeLeft > 0) {
+                  console.log(`${this.platform}: ⏳ Waiting for tab... ${timeLeft}s`);
+                  timeLeft -= 2;
+                }
+              }, 2000);
+              
+              // Timeout after 8 seconds (reduced from 20s)
               setTimeout(() => {
-                console.log(`${this.platform}: ⏰ No tab after 20s`);
-                resolve(null);
-              }, 20000);
+                clearInterval(countdownDisplay);
+                clearInterval(countdownInterval);
+                if (!tabOpened) {
+                  console.log(`${this.platform}: ⏰ No tab after 8s`);
+                  resolve(null);
+                }
+              }, 8000);
             });
           
             // Click the button (try to match by company/title, fallback to first card)
@@ -488,6 +558,99 @@ class JobrightScraper extends BaseScraper {
           }
           
           console.log(`${this.platform}: 🆕 New tab opened!`);
+          
+          // Step 2: Click "Not Interested"
+          this.updateStatus(`[2/5] ⚡ Removing from feed...`, `Processed: ${totalProcessedCount}`);
+          
+          // ⚡ IMMEDIATELY click "Not Interested" while card still exists!
+          console.log(`${this.platform}: ⚡ QUICK ACTION: Clicking "Not Interested" immediately...`);
+          try {
+            const quickClicked = await this.page.evaluate((company, title) => {
+              const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+              for (const card of cards) {
+                const companyEl = card.querySelector('div.index_company-name__gKiOY');
+                const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+                
+                const cardCompany = companyEl?.textContent?.trim();
+                const cardTitle = titleEl?.textContent?.trim();
+                
+                if (cardCompany === company && cardTitle === title) {
+                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                  if (dislikeBtn) {
+                    dislikeBtn.click();
+                    return true;
+                  }
+                }
+              }
+              return false;
+            }, jobCard.company, jobCard.title);
+            
+            if (quickClicked) {
+              console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+              
+              // Wait for modal and submit reason
+              console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
+              await new Promise(r => setTimeout(r, 1500));
+              
+              const modalInfo = await this.page.evaluate(() => {
+                const modal = document.querySelector('div.ant-modal[role="dialog"]');
+                if (!modal) return { modalVisible: false };
+                
+                const radioInputs = modal.querySelectorAll('input.ant-radio-input');
+                const submitBtn = modal.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+                
+                return {
+                  modalVisible: true,
+                  radioCount: radioInputs.length,
+                  radioOptions: Array.from(radioInputs).map(input => ({
+                    value: input.value,
+                    text: input.parentElement?.parentElement?.textContent?.trim(),
+                    visible: true
+                  })),
+                  submitButtonExists: !!submitBtn,
+                  submitButtonDisabled: submitBtn?.disabled
+                };
+              });
+              
+              console.log(`${this.platform}: 📋 Modal Info:`, JSON.stringify(modalInfo, null, 2));
+              
+              if (modalInfo.modalVisible) {
+                console.log(`${this.platform}: ✅ Modal detected with ${modalInfo.radioCount} options`);
+                
+                const submitted = await this.page.evaluate(() => {
+                  const radio = document.querySelector('input.ant-radio-input[value="5"]'); // "I already applied"
+                  if (radio) radio.click();
+                  return new Promise(resolve => {
+                    setTimeout(() => {
+                      const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+                      if (submitBtn && !submitBtn.disabled) {
+                        submitBtn.click();
+                        resolve({ success: true, reason: 'Submitted' });
+                      } else {
+                        resolve({ success: false, reason: 'Button disabled or not found' });
+                      }
+                    }, 500);
+                  });
+                });
+                
+                console.log(`${this.platform}: 📤 Modal submit result:`, JSON.stringify(submitted));
+                
+                if (submitted.success) {
+                  console.log(`${this.platform}: ✅ Submitted "I already applied" - card will disappear`);
+                } else {
+                  console.log(`${this.platform}: ⚠️ Submit may have failed: ${submitted.reason}`);
+                }
+              } else {
+                console.log(`${this.platform}: ⚠️ Modal not visible - card may have disappeared already`);
+              }
+            } else {
+              console.log(`${this.platform}: ⚠️ "Not Interested" button not found - card may have disappeared`);
+            }
+          } catch (quickErr) {
+            console.log(`${this.platform}: ⚠️ Error clicking "Not Interested": ${quickErr.message}`);
+          }
+          
+          console.log(`${this.platform}: ✅ Card removed from feed, now processing job...`);
           
           // Page already mirrored instantly - user can see it!
           let finalJobUrl = newPage.url();
@@ -796,69 +959,19 @@ class JobrightScraper extends BaseScraper {
               // Mirror to webview
               this.mirrorToWebview(this.baseUrl);
               
-              // FAST METHOD: Click "Not Interested" button
-              console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
-              
-              try {
-                const clicked = await this.page.evaluate((company, title) => {
-                  const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-                  
-                  for (const card of cards) {
-                    const companyEl = card.querySelector('div.index_company-name__gKiOY');
-                    const titleEl = card.querySelector('h2.index_job-title__UjuEY');
-                    
-                    const cardCompany = companyEl?.textContent?.trim();
-                    const cardTitle = titleEl?.textContent?.trim();
-                    
-                    if (cardCompany === company && cardTitle === title) {
-                      const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
-                      if (dislikeBtn) {
-                        dislikeBtn.click();
-                        return true;
-                      }
-                    }
-                  }
-                  return false;
-                }, jobCard.company, jobCard.title);
-                
-                if (clicked) {
-                  console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
-                  
-                  // Wait for modal and submit reason
-                  console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
-                  await new Promise(r => setTimeout(r, 1000));
-                  
-                  const submitted = await this.page.evaluate(() => {
-                    const radio = document.querySelector('input.ant-radio-input[value="2"]');
-                    if (radio) radio.click();
-                    return new Promise(resolve => {
-                      setTimeout(() => {
-                        const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
-                        if (submitBtn && !submitBtn.disabled) {
-                          submitBtn.click();
-                          resolve(true);
-                        } else {
-                          resolve(false);
-                        }
-                      }, 500);
-                    });
-                  });
-                  
-                  if (submitted) {
-                    console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
-                    await this.randomDelay(3000, 4000);
-                  } else {
-                    await new Promise(r => setTimeout(r, 3000));
-                  }
-                } else {
-                  console.log(`${this.platform}: ℹ️ Card not found or already removed`);
-                }
-              } catch (err) {
-                console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
-              }
+              // Card was already removed at the beginning (quick action)
+              console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
               
             } catch (navError) {
               console.log(`${this.platform}: ⚠️ Navigation error: ${navError.message}`);
+            }
+            
+            // ⚡ Navigate back to Jobright job list for next iteration
+            try {
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Back on job list`);
+            } catch (navErr) {
+              console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
             }
             
             // Skip to next job
@@ -867,8 +980,8 @@ class JobrightScraper extends BaseScraper {
           
           console.log(`${this.platform}: ✅ ✅ ✅ URL is safe (not Indeed/LinkedIn/Dice)`);
           
-          // Extract page content (page has already waited 5s to render)
-          this.updateStatus(`Extracting page content...`, `Processed: ${totalProcessedCount}`);
+          // Step 3: Extract page content
+          this.updateStatus(`[3/5] 📄 Extracting content...`, `Processed: ${totalProcessedCount}`);
           
           const quickContent = await newPage.evaluate(() => {
             return {
@@ -944,70 +1057,22 @@ class JobrightScraper extends BaseScraper {
             
             this.mirrorToWebview(this.baseUrl);
             
-            // FAST METHOD: Click "Not Interested" button (content didn't load)
-            console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
+            // Card was already removed at the beginning (quick action)
+            console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
             
+            // ⚡ Navigate back to Jobright job list for next iteration
             try {
-              const clicked = await this.page.evaluate((company, title) => {
-                const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-                
-                for (const card of cards) {
-                  const companyEl = card.querySelector('div.index_company-name__gKiOY');
-                  const titleEl = card.querySelector('h2.index_job-title__UjuEY');
-                  
-                  const cardCompany = companyEl?.textContent?.trim();
-                  const cardTitle = titleEl?.textContent?.trim();
-                  
-                  if (cardCompany === company && cardTitle === title) {
-                    const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
-                    if (dislikeBtn) {
-                      dislikeBtn.click();
-                      return true;
-                    }
-                  }
-                }
-                return false;
-              }, jobCard.company, jobCard.title);
-              
-              if (clicked) {
-                console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
-                
-                // Wait for modal and submit reason
-                console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
-                await new Promise(r => setTimeout(r, 1000));
-                
-                const submitted = await this.page.evaluate(() => {
-                  const radio = document.querySelector('input.ant-radio-input[value="2"]');
-                  if (radio) radio.click();
-                  return new Promise(resolve => {
-                    setTimeout(() => {
-                      const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
-                      if (submitBtn && !submitBtn.disabled) {
-                        submitBtn.click();
-                        resolve(true);
-                      } else {
-                        resolve(false);
-                      }
-                    }, 500);
-                  });
-                });
-                
-                if (submitted) {
-                  console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
-                  await this.randomDelay(3000, 4000);
-                } else {
-                  await new Promise(r => setTimeout(r, 3000));
-                }
-              }
-            } catch (err) {
-              console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Back on job list`);
+            } catch (navErr) {
+              console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
             }
             
             continue; // Skip to next job
           }
           
-          // Send to ChatGPT for COMBINED verification + extraction (ONE call!)
-          this.updateStatus(`📤 Sending to ChatGPT for analysis...`, `Processed: ${totalProcessedCount}`);
+          // Step 4: Send to ChatGPT for analysis
+          this.updateStatus(`[4/5] 🤖 Analyzing with ChatGPT...`, `Processed: ${totalProcessedCount}`);
           console.log(`${this.platform}: 📤 Sending to ChatGPT for COMBINED analysis...`);
           
           let gptResult = null;
@@ -1023,7 +1088,36 @@ class JobrightScraper extends BaseScraper {
               if (gptResult) {
                 console.log(`${this.platform}: ✅ ChatGPT analysis complete`);
               } else {
-                console.log(`${this.platform}: ⚠️ ChatGPT returned null, using fallback`);
+                console.log(`${this.platform}: ⚠️ ChatGPT returned null - Refreshing ChatGPT and retrying...`);
+                
+                // Refresh ChatGPT webview
+                try {
+                  const { BrowserWindow } = require('electron');
+                  const mainWindow = BrowserWindow.getAllWindows()[0];
+                  if (mainWindow) {
+                    mainWindow.webContents.send('refresh-chatgpt');
+                    console.log(`${this.platform}: 🔄 Sent ChatGPT refresh command`);
+                    
+                    // Wait 3 seconds for ChatGPT to reload
+                    await new Promise(r => setTimeout(r, 3000));
+                    
+                    // Retry once
+                    console.log(`${this.platform}: 🔄 Retrying ChatGPT analysis...`);
+                    gptResult = await this.gptExtractor.extractJobData(
+                      quickContent,
+                      this.platform,
+                      finalJobUrl
+                    );
+                    
+                    if (gptResult) {
+                      console.log(`${this.platform}: ✅ ChatGPT analysis successful after refresh!`);
+                    } else {
+                      console.log(`${this.platform}: ⚠️ ChatGPT still failed - Using fallback`);
+                    }
+                  }
+                } catch (refreshErr) {
+                  console.log(`${this.platform}: ⚠️ Error refreshing ChatGPT: ${refreshErr.message}`);
+                }
               }
               
               // Check if scraper was stopped during ChatGPT analysis
@@ -1199,6 +1293,16 @@ class JobrightScraper extends BaseScraper {
             } else if (gptResult.platform && ['indeed', 'linkedin', 'dice'].includes(gptResult.platform.toLowerCase())) {
               console.log(`${this.platform}: ⚠️ Skipping - Job is from ${gptResult.platform} (blocked platform)`);
               shouldSkip = true;
+            } else {
+              // Check salary requirements (using cached settings from batch start)
+              const salaryComparator = require(path.join(__dirname, '../../utils/salaryComparator'));
+              const salaryCheck = salaryComparator.compareToMinimum(gptResult.salary, this.currentSalarySettings);
+              console.log(`${this.platform}: 💰 Salary check: ${salaryCheck.reason}`);
+              
+              if (!salaryCheck.meetsRequirement) {
+                console.log(`${this.platform}: ⚠️ Skipping - Salary below minimum requirement`);
+                shouldSkip = true;
+              }
             }
             
             if (shouldSkip) {
@@ -1255,87 +1359,23 @@ class JobrightScraper extends BaseScraper {
               }
               
               this.mirrorToWebview(this.baseUrl);
-              console.log(`${this.platform}: 📺 Job list visible, looking for card to remove...`);
               
-              // Click "Not Interested" button on the matching card
+              // Card was already removed at the beginning (quick action)
+              console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
+              
+              // ⚡ Navigate back to Jobright job list for next iteration
               try {
-                // Debug: Check what cards are available
-                const debugInfo = await this.page.evaluate(() => {
-                  const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-                  return {
-                    count: cards.length,
-                    firstCard: cards[0] ? {
-                      company: cards[0].querySelector('div.index_company-name__gKiOY')?.textContent?.trim(),
-                      title: cards[0].querySelector('h2.index_job-title__UjuEY')?.textContent?.trim()
-                    } : null
-                  };
-                });
-                
-                console.log(`${this.platform}: Found ${debugInfo.count} cards on page`);
-                if (debugInfo.firstCard) {
-                  console.log(`${this.platform}: First card: ${debugInfo.firstCard.company} - ${debugInfo.firstCard.title}`);
-                }
-                console.log(`${this.platform}: Looking for: ${jobCard.company} - ${jobCard.title}`);
-                
-                const clicked = await this.page.evaluate((company, title) => {
-                  const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-                  
-                  for (const card of cards) {
-                    const companyEl = card.querySelector('div.index_company-name__gKiOY');
-                    const titleEl = card.querySelector('h2.index_job-title__UjuEY');
-                    
-                    const cardCompany = companyEl?.textContent?.trim();
-                    const cardTitle = titleEl?.textContent?.trim();
-                    
-                    if (cardCompany === company && cardTitle === title) {
-                      const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
-                      if (dislikeBtn) {
-                        dislikeBtn.click();
-                        return true;
-                      }
-                    }
-                  }
-                  return false;
-                }, jobCard.company, jobCard.title);
-                
-                if (clicked) {
-                  console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
-                  
-                  // Wait for modal and submit reason
-                  console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
-                  await new Promise(r => setTimeout(r, 1000));
-                  
-                  const submitted = await this.page.evaluate(() => {
-                    const radio = document.querySelector('input.ant-radio-input[value="2"]');
-                    if (radio) radio.click();
-                    return new Promise(resolve => {
-                      setTimeout(() => {
-                        const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
-                        if (submitBtn && !submitBtn.disabled) {
-                          submitBtn.click();
-                          resolve(true);
-                        } else {
-                          resolve(false);
-                        }
-                      }, 500);
-                    });
-                  });
-                  
-                  if (submitted) {
-                    console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
-                    await this.randomDelay(3000, 4000);
-                  } else {
-                    await new Promise(r => setTimeout(r, 3000));
-                  }
-                } else {
-                  console.log(`${this.platform}: ⚠️ Not Interested button not found - card may have been auto-removed`);
-                }
-              } catch (err) {
-                console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
+                await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+                console.log(`${this.platform}: ✅ Back on job list`);
+              } catch (navErr) {
+                console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
               }
               
               continue; // Skip to next job
             } else {
+              // Step 5: Save job
+              this.updateStatus(`[5/5] 💾 Saving job to database...`, `Processed: ${totalProcessedCount}`);
+              
               // Save job - Use Jobright card data for company/title, ChatGPT for other fields
               const saved = this.saveJob({
                 company: jobCard.company,  // Always use card data
@@ -1371,8 +1411,8 @@ class JobrightScraper extends BaseScraper {
                 console.log(`${this.platform}: ℹ️ DUPLICATE - Already in database: ${jobCard.company} - ${jobCard.title}`);
               }
               
-              // For BOTH saved and duplicate: Close tab and click "Not Interested"
-              console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
+              // Card was already removed at the beginning (quick action)
+              console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
               
               // Close the job tab and ensure cleanup
               try {
@@ -1400,43 +1440,16 @@ class JobrightScraper extends BaseScraper {
               
               this.page = pages[0];
               
+              // ⚡ Navigate back to Jobright job list for next iteration
+              try {
+                await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+                console.log(`${this.platform}: ✅ Back on job list`);
+              } catch (navErr) {
+                console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
+              }
+              
               // INSTANT MIRROR: Show Jobright.ai immediately
               this.mirrorToWebview(this.baseUrl);
-              
-              // Navigate back to job list
-              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-              console.log(`${this.platform}: ✅ Back on job list`);
-              
-              // REFRESH to ensure cards are loaded
-              console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
-              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-              console.log(`${this.platform}: ✅ Page refreshed`);
-              
-              // Smart wait: Wait for cards to actually appear (up to 10s)
-              console.log(`${this.platform}: ⏳ Waiting for cards to appear...`);
-              let cardsLoaded = false;
-              for (let attempt = 0; attempt < 10; attempt++) {
-                await new Promise(r => setTimeout(r, 1000));
-                const cardCount = await this.page.evaluate(() => {
-                  return document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length;
-                });
-                
-                if (cardCount > 0) {
-                  console.log(`${this.platform}: ✅ ${cardCount} cards loaded after ${attempt + 1}s`);
-                  cardsLoaded = true;
-                  break;
-                }
-              }
-              
-              if (!cardsLoaded) {
-                console.log(`${this.platform}: ⚠️ No cards appeared after 10s`);
-              }
-              
-              this.mirrorToWebview(this.baseUrl);
-              console.log(`${this.platform}: 📺 Job list visible, looking for card to remove...`);
-              
-              // Use helper method to click "Not Interested" and handle modal
-              await this.clickNotInterestedButton(jobCard);
               
               continue; // Skip to next job
             }
@@ -1729,15 +1742,26 @@ Format response as JSON.`;
           if (jsonMatch) {
             const data = JSON.parse(jsonMatch[0]);
             
+            // Check work_type and location for remote keywords
+            const workType = data.work_type?.toLowerCase() || '';
+            const location = data.location?.toLowerCase() || '';
+            
+            const isRemoteFromWorkType = workType.includes('remote') && 
+                                        !workType.includes('hybrid') && 
+                                        !workType.includes('onsite');
+            const isRemoteFromLocation = location.includes('remote') && 
+                                        !location.includes('hybrid') && 
+                                        !location.includes('onsite');
+            
             return {
               company: data.company || company,
               title: data.title || title,
               salary: data.salary || null,
               techStack: data.tech_stack || data.techStack || null,
               location: data.location || 'Remote',
-              isRemote: data.work_type?.toLowerCase().includes('fully remote') || data.isRemote,
-              isOnsite: data.work_type?.toLowerCase().includes('onsite'),
-              isHybrid: data.work_type?.toLowerCase().includes('hybrid'),
+              isRemote: isRemoteFromWorkType || isRemoteFromLocation || data.isRemote,
+              isOnsite: workType.includes('onsite') || location.includes('onsite'),
+              isHybrid: workType.includes('hybrid') || location.includes('hybrid'),
               isStartup: data.is_startup === 'yes' || data.isStartup === true,
               platform: data.platform || data.source || null
             };

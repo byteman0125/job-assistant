@@ -8,7 +8,8 @@ class ActionRecorder {
     this.isRecording = false;
     this.currentPlatform = null;
     this.recordedActions = [];
-    this.actionsFilePath = path.join(app.getPath('userData'), 'recorded-actions.json');
+    // Store actions in project data folder
+    this.actionsFilePath = path.join(process.cwd(), 'data', 'recorded-actions.json');
     this.loadRecordedActions();
   }
 

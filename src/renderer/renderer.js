@@ -10,6 +10,7 @@ const searchInput = document.getElementById('searchInput');
 const platformFilter = document.getElementById('platformFilter');
 const appliedFilter = document.getElementById('appliedFilter');
 const jobsTableBody = document.getElementById('jobsTableBody');
+const selectAllBtn = document.getElementById('selectAllBtn');
 const copySelectedBtn = document.getElementById('copySelectedBtn');
 const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
 const markAppliedBtn = document.getElementById('markAppliedBtn');
@@ -33,6 +34,17 @@ const statusPlatform = document.getElementById('statusPlatform');
 const statusStep = document.getElementById('statusStep');
 const statusProgress = document.getElementById('statusProgress');
 
+// Progress Bar Elements
+const progressBarFill = document.getElementById('progressBarFill');
+const progressPercentage = document.getElementById('progressPercentage');
+const progressStats = document.getElementById('progressStats');
+const progressETA = document.getElementById('progressETA');
+
+// Progress tracking
+let progressStartTime = null;
+let totalJobsInBatch = 0;
+let processedJobsCount = 0;
+
 // Cookie Management
 const cookiePlatform = document.getElementById('cookiePlatform');
 const cookieData = document.getElementById('cookieData');
@@ -55,7 +67,10 @@ const settingsStatus = document.getElementById('settingsStatus');
 let currentSettings = {
   enabled_platforms: ['Jobright'],
   ignore_keywords: [],
-  ignore_domains: ['indeed.com', 'linkedin.com', 'dice.com']
+  ignore_domains: ['indeed.com', 'linkedin.com', 'dice.com'],
+  min_salary_annual: 120000,
+  min_salary_monthly: '',
+  min_salary_hourly: ''
 };
 
 // ChatGPT Sidebar
@@ -148,6 +163,61 @@ ipcRenderer.on('scraper-status-changed', (event, data) => {
   todayCount.textContent = `${data.todayCount} jobs today`;
 });
 
+// Function to update progress bar
+function updateProgressBar(currentStep, totalSteps) {
+  if (!progressBarFill || !progressPercentage || !progressStats || !progressETA) return;
+  
+  // Calculate percentage based on current step
+  const percentage = totalSteps > 0 ? Math.round((currentStep / totalSteps) * 100) : 0;
+  
+  // Update progress bar fill
+  progressBarFill.style.width = `${percentage}%`;
+  progressPercentage.textContent = `${percentage}%`;
+  
+  // Update stats text - show step progress
+  if (totalSteps === 5) {
+    // Per-job steps
+    const stepNames = ['Opening', 'Removing', 'Extracting', 'Analyzing', 'Saving'];
+    const currentStepName = stepNames[currentStep - 1] || 'Processing';
+    progressStats.textContent = `Step ${currentStep} of ${totalSteps}: ${currentStepName}`;
+  } else {
+    progressStats.textContent = `Step ${currentStep} of ${totalSteps}`;
+  }
+  
+  // Simple ETA based on step progress
+  if (progressStartTime && currentStep > 0 && totalSteps > 0) {
+    const elapsed = (Date.now() - progressStartTime) / 1000; // seconds
+    const avgTimePerStep = elapsed / currentStep;
+    const remaining = totalSteps - currentStep;
+    const etaSeconds = remaining * avgTimePerStep;
+    
+    if (etaSeconds > 0 && etaSeconds < 120) { // Less than 2 minutes
+      const seconds = Math.floor(etaSeconds);
+      progressETA.textContent = `~${seconds}s remaining`;
+    } else if (etaSeconds >= 120) {
+      const minutes = Math.floor(etaSeconds / 60);
+      progressETA.textContent = `~${minutes}m remaining`;
+    } else {
+      progressETA.textContent = 'Almost done';
+    }
+  } else {
+    progressETA.textContent = '--';
+  }
+}
+
+// Reset progress bar
+function resetProgressBar() {
+  if (!progressBarFill || !progressPercentage || !progressStats || !progressETA) return;
+  
+  progressBarFill.style.width = '0%';
+  progressPercentage.textContent = '0%';
+  progressStats.textContent = 'Ready to start';
+  progressETA.textContent = '--';
+  progressStartTime = null;
+  processedJobsCount = 0;
+  totalJobsInBatch = 0;
+}
+
 // Listen for console logs and display them in "Current Step"
 ipcRenderer.on('console-log', (event, data) => {
   if (!statusStep) return;
@@ -157,6 +227,31 @@ ipcRenderer.on('console-log', (event, data) => {
   
   // Update the Current Step field
   statusStep.textContent = cleanMsg;
+  
+  // Extract progress info from logs
+  // Look for [X/5] pattern for per-job steps
+  const stepMatch = cleanMsg.match(/\[(\d+)\/(\d+)\]/);
+  const batchMatch = cleanMsg.match(/BATCH (\d+) - Loading job cards/i);
+  const foundMatch = cleanMsg.match(/Found (\d+) job cards/i);
+  
+  if (batchMatch) {
+    // Starting a new batch - reset
+    progressStartTime = Date.now();
+    processedJobsCount = 0;
+    totalJobsInBatch = 0;
+  } else if (foundMatch) {
+    totalJobsInBatch = parseInt(foundMatch[1]);
+    updateProgressBar(0, 5); // 5 steps per job
+  } else if (stepMatch) {
+    // Per-job step progress (e.g., [3/5])
+    const currentStep = parseInt(stepMatch[1]);
+    const totalSteps = parseInt(stepMatch[2]);
+    if (!progressStartTime) progressStartTime = Date.now();
+    updateProgressBar(currentStep, totalSteps);
+  } else if (cleanMsg.includes('BATCH') && cleanMsg.includes('COMPLETE')) {
+    // Batch complete - show 100%
+    updateProgressBar(5, 5);
+  }
 });
 
 // Listen for new job found
@@ -239,6 +334,7 @@ function setupEventListeners() {
   searchInput.addEventListener('input', filterJobs);
   platformFilter.addEventListener('change', filterJobs);
   appliedFilter.addEventListener('change', () => { currentPage = 1; loadJobs(); });
+  selectAllBtn.addEventListener('click', toggleSelectAll);
   copySelectedBtn.addEventListener('click', copySelected);
   deleteSelectedBtn.addEventListener('click', deleteSelected);
   markAppliedBtn.addEventListener('click', markSelectedAsApplied);
@@ -299,6 +395,21 @@ function setupEventListeners() {
   ipcRenderer.on('refresh-chatgpt-view', () => {
     console.log('🔄 Refreshing ChatGPT as requested by scraper');
     chatgptView.reload();
+  });
+  
+  // Handle auto-refresh from scraper when ChatGPT fails
+  ipcRenderer.on('refresh-chatgpt', () => {
+    console.log('🔄 ChatGPT failed - Auto-refreshing...');
+    chatgptView.reload();
+    showNotification('🔄 ChatGPT refreshed automatically', 'info');
+  });
+  
+  // Handle ChatGPT verification needed
+  ipcRenderer.on('chatgpt-verification-needed', () => {
+    console.log('🚫 ChatGPT requires human verification!');
+    showNotification('⚠️ ChatGPT needs verification! Please complete it and click "Start Scraping" again.', 'error');
+    // Auto-stop scraping
+    ipcRenderer.send('stop-scraping');
   });
 
   // Listen for ChatGPT webview load
@@ -425,9 +536,13 @@ function setupTabs() {
   const tabBtns = document.querySelectorAll('.tab-btn');
   const tabPanes = document.querySelectorAll('.tab-pane');
 
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
+  console.log(`🔧 Setting up ${tabBtns.length} tab buttons`);
+  tabBtns.forEach((btn, index) => {
+    console.log(`  Tab ${index}: ${btn.dataset.tab}`);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const tabName = btn.dataset.tab;
+      console.log(`🔵 Tab clicked: ${tabName}`);
       
       // Update active tab
       tabBtns.forEach(b => b.classList.remove('active'));
@@ -436,6 +551,7 @@ function setupTabs() {
       // Show corresponding pane
       tabPanes.forEach(pane => {
         if (pane.id === `${tabName}-tab`) {
+          console.log(`✅ Showing tab pane: ${pane.id}`);
           pane.classList.add('active');
         } else {
           pane.classList.remove('active');
@@ -448,6 +564,10 @@ function setupTabs() {
 // Scraper Control
 async function startScraping() {
   try {
+    // Reset progress bar when starting
+    resetProgressBar();
+    progressStartTime = Date.now();
+    
     const result = await ipcRenderer.invoke('start-scraping');
     if (result.success) {
       startBtn.disabled = true;
@@ -486,6 +606,9 @@ async function stopScraping() {
     stopBtn.textContent = 'Stop Scraping';
     status.textContent = '● Stopped';
     status.style.color = '#f44336';
+    
+    // Reset progress bar when stopping
+    resetProgressBar();
     showNotification('✅ Scraper stopped successfully', 'success');
   } else {
     stopBtn.disabled = false;
@@ -649,14 +772,52 @@ window.toggleAppliedStatus = async (jobId, applied) => {
 
 function updateSelectedCount() {
   const selected = document.querySelectorAll('.job-row.selected').length;
+  const total = document.querySelectorAll('.job-row').length;
   selectedCount.textContent = `${selected} selected`;
   
   // Enable/disable all bulk action buttons
   const hasSelection = selected > 0;
+  const allSelected = selected > 0 && selected === total;
+  
   copySelectedBtn.disabled = !hasSelection;
   deleteSelectedBtn.disabled = !hasSelection;
   markAppliedBtn.disabled = !hasSelection;
   markNotAppliedBtn.disabled = !hasSelection;
+  
+  // Update select all button text and style based on state
+  if (total === 0) {
+    selectAllBtn.textContent = '☑️ Select All';
+    selectAllBtn.disabled = true;
+    selectAllBtn.classList.remove('btn-danger');
+    selectAllBtn.classList.add('btn-info');
+  } else if (allSelected) {
+    selectAllBtn.textContent = '☐ Deselect All';
+    selectAllBtn.disabled = false;
+    selectAllBtn.classList.remove('btn-info');
+    selectAllBtn.classList.add('btn-danger');
+  } else {
+    selectAllBtn.textContent = '☑️ Select All';
+    selectAllBtn.disabled = false;
+    selectAllBtn.classList.remove('btn-danger');
+    selectAllBtn.classList.add('btn-info');
+  }
+}
+
+// Toggle select/deselect all visible jobs on current page
+function toggleSelectAll() {
+  const rows = document.querySelectorAll('.job-row');
+  const selected = document.querySelectorAll('.job-row.selected').length;
+  const total = rows.length;
+  
+  if (selected === total) {
+    // All selected -> Deselect all
+    rows.forEach(row => row.classList.remove('selected'));
+  } else {
+    // Not all selected -> Select all
+    rows.forEach(row => row.classList.add('selected'));
+  }
+  
+  updateSelectedCount();
 }
 
 async function copySelected() {
@@ -817,6 +978,15 @@ async function loadSettings() {
       // Update ignore domains
       currentSettings.ignore_domains = settings.ignore_domains || ['indeed.com', 'linkedin.com', 'dice.com'];
       renderDomains();
+      
+      // Update salary fields
+      const minSalaryAnnual = document.getElementById('minSalaryAnnual');
+      const minSalaryMonthly = document.getElementById('minSalaryMonthly');
+      const minSalaryHourly = document.getElementById('minSalaryHourly');
+      
+      if (minSalaryAnnual) minSalaryAnnual.value = settings.min_salary_annual || 120000;
+      if (minSalaryMonthly) minSalaryMonthly.value = settings.min_salary_monthly || '';
+      if (minSalaryHourly) minSalaryHourly.value = settings.min_salary_hourly || '';
     }
   } catch (error) {
     console.error('Error loading settings:', error);
@@ -839,6 +1009,15 @@ async function saveSettings() {
     }
     
     currentSettings.enabled_platforms = selectedPlatforms;
+    
+    // Get salary values
+    const minSalaryAnnual = document.getElementById('minSalaryAnnual');
+    const minSalaryMonthly = document.getElementById('minSalaryMonthly');
+    const minSalaryHourly = document.getElementById('minSalaryHourly');
+    
+    currentSettings.min_salary_annual = minSalaryAnnual ? minSalaryAnnual.value : 120000;
+    currentSettings.min_salary_monthly = minSalaryMonthly ? minSalaryMonthly.value : '';
+    currentSettings.min_salary_hourly = minSalaryHourly ? minSalaryHourly.value : '';
     
     await ipcRenderer.invoke('save-settings', currentSettings);
     showMessage(settingsStatus, '✅ Settings saved successfully!', 'success');

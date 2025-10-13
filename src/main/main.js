@@ -54,10 +54,63 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    
+    // Refresh ChatGPT when main window opens to ensure fresh start
+    setTimeout(() => {
+      console.log('🔄 Refreshing ChatGPT on startup...');
+      mainWindow.webContents.send('refresh-chatgpt');
+    }, 6000); // Wait 6 seconds for ChatGPT to fully load first
   });
   
   // Register main window globally
   setMainWindow(mainWindow);
+
+  // Handle webview attachments to hide Electron/automation indicators
+  mainWindow.webContents.on('did-attach-webview', (event, webContents) => {
+    console.log('🔧 Webview attached - Setting up anti-detection...');
+    
+    // Set realistic Chrome user agent (Windows Chrome 120)
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    webContents.setUserAgent(userAgent);
+    console.log(`✅ User agent set: Chrome (not Electron)`);
+    
+    // Refresh ChatGPT webview after attachment to ensure clean state
+    setTimeout(() => {
+      console.log('🔄 Refreshing ChatGPT webview after attachment...');
+      webContents.reload();
+    }, 5000); // Wait 5 seconds for webview to fully initialize
+    
+    // Hide webdriver and automation flags
+    webContents.executeJavaScript(`
+      // Remove webdriver property
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      
+      // Hide automation indicators
+      window.chrome = window.chrome || {};
+      window.chrome.runtime = window.chrome.runtime || {};
+      
+      // Make navigator.plugins look realistic
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+          { name: 'Chrome PDF Plugin' },
+          { name: 'Chrome PDF Viewer' },
+          { name: 'Native Client' }
+        ]
+      });
+      
+      // Hide automation flags
+      delete navigator.__proto__.webdriver;
+      
+      console.log('✅ Anti-detection measures applied');
+    `).catch(err => {
+      console.log('⚠️ Could not inject anti-detection:', err.message);
+    });
+    
+    // Log when webview navigation occurs
+    webContents.on('did-navigate', (event, url) => {
+      console.log(`🔗 Webview navigated to: ${url}`);
+    });
+  });
 
   // Hide to tray instead of closing
   mainWindow.on('close', (event) => {

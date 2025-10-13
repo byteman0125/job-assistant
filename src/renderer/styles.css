@@ -184,12 +184,12 @@ body {
 }
 
 .btn-info {
-  background: #FF9800;
+  background: #2196F3;
   color: white;
 }
 
 .btn-info:hover {
-  background: #e68900;
+  background: #0b7dda;
 }
 
 .btn:disabled {
@@ -215,14 +215,17 @@ body {
   background: #2d2d2d;
   border-bottom: 1px solid #3d3d3d;
   padding: 0 20px;
+  position: relative;
+  z-index: 100;
 }
 
 .tab-btn {
   background: none;
   border: none;
   color: #888;
-  padding: 15px 20px;
+  pointer-events: auto;
   cursor: pointer;
+  padding: 15px 20px;
   font-size: 14px;
   border-bottom: 3px solid transparent;
   transition: all 0.3s;
@@ -243,14 +246,25 @@ body {
 }
 
 .tab-pane {
-  display: none;
+  display: none !important;
   height: 100%;
   padding: 20px;
   overflow-y: auto;
 }
 
 .tab-pane.active {
-  display: block;
+  display: block !important;
+}
+
+#jobs-tab.active {
+  display: flex !important;
+}
+
+/* Jobs tab specific layout */
+#jobs-tab {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Filters */
@@ -258,6 +272,7 @@ body {
   display: flex;
   gap: 10px;
   margin-bottom: 20px;
+  flex-shrink: 0; /* Keep filters fixed at top */
 }
 
 .search-input {
@@ -283,7 +298,11 @@ body {
 .table-container {
   background: #2d2d2d;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-y: auto; /* Make table body scrollable */
+  overflow-x: hidden;
+  flex: 1; /* Take remaining space */
+  margin-bottom: 15px;
+  max-height: calc(100vh - 350px); /* Adjust based on header/filters/pagination */
 }
 
 .jobs-table {
@@ -293,6 +312,9 @@ body {
 
 .jobs-table thead {
   background: #3d3d3d;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .jobs-table th {
@@ -301,6 +323,7 @@ body {
   font-weight: 600;
   color: #4CAF50;
   border-bottom: 2px solid #4d4d4d;
+  background: #3d3d3d; /* Ensure background color for sticky header */
 }
 
 .jobs-table td {
@@ -394,7 +417,8 @@ body {
   padding: 15px 20px;
   border-bottom: 1px solid #3d3d3d;
   display: flex;
-  gap: 30px;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .status-row {
@@ -412,6 +436,98 @@ body {
 .status-value {
   color: #4CAF50;
   font-size: 14px;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+}
+
+/* Progress Bar Container */
+.progress-container {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 12px;
+}
+
+.progress-current-step {
+  flex: 1;
+  color: #4CAF50;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #1e1e1e;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #3d3d3d;
+  position: relative;
+  margin-bottom: 6px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #45a049);
+  border-radius: 3px;
+  transition: width 0.5s ease-in-out;
+  width: 0%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated shine effect */
+.progress-bar-fill::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+  animation: shine 2s infinite;
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.progress-percentage {
+  color: #4CAF50;
+  font-size: 14px;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  min-width: 45px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.progress-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.progress-stats-text {
+  color: #888;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.progress-eta {
+  color: #4CAF50;
+  font-size: 12px;
   font-weight: bold;
   font-family: 'Courier New', monospace;
 }
@@ -583,6 +699,36 @@ body {
   flex: 1;
 }
 
+/* Salary Inputs */
+.salary-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.salary-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.salary-input-group label {
+  font-weight: 600;
+  color: #4CAF50;
+  font-size: 14px;
+}
+
+.salary-input-group .form-control {
+  width: 100%;
+  max-width: 300px;
+}
+
+.help-text-inline {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+}
+
 .status-message.info {
   background: #2196F3;
   color: white;
@@ -596,6 +742,7 @@ body {
   padding: 10px 20px;
   background: #2d2d2d;
   border-bottom: 1px solid #444;
+  flex-shrink: 0; /* Keep bulk actions fixed */
 }
 
 .bulk-actions .btn {
@@ -605,6 +752,13 @@ body {
 
 .bulk-actions .badge {
   margin-left: auto;
+}
+
+.bulk-divider {
+  width: 1px;
+  height: 24px;
+  background: #555;
+  margin: 0 5px;
 }
 
 /* Table Improvements */
@@ -663,6 +817,7 @@ td[title]:hover {
   padding: 20px;
   background: #2d2d2d;
   border-top: 1px solid #444;
+  flex-shrink: 0; /* Keep pagination fixed at bottom */
 }
 
 .page-info {

@@ -5,7 +5,9 @@ const { app } = require('electron');
 
 class JobDatabase {
   constructor() {
-    const dbPath = path.join(app.getPath('userData'), 'jobs.db');
+    // Store database in project data folder
+    const dataDir = path.join(process.cwd(), 'data');
+    const dbPath = path.join(dataDir, 'jobs.db');
     this.db = new Database(dbPath);
     this.initTables();
     console.log('Database opened at:', dbPath);
@@ -274,7 +276,10 @@ class JobDatabase {
     const defaults = {
       'enabled_platforms': JSON.stringify(['Jobright']),
       'ignore_keywords': JSON.stringify([]),
-      'ignore_domains': JSON.stringify(['indeed.com', 'linkedin.com', 'dice.com'])
+      'ignore_domains': JSON.stringify(['indeed.com', 'linkedin.com', 'dice.com']),
+      'min_salary_annual': '120000',
+      'min_salary_monthly': '',
+      'min_salary_hourly': ''
     };
     
     for (const [key, value] of Object.entries(defaults)) {

@@ -4,11 +4,56 @@ const { getMainWindow } = require('./windowManager');
 class GPTExtractor {
   constructor() {
     this.isReady = false;
+    this.lastRequestTime = 0;
+    this.minDelayBetweenRequests = 2000; // 4 seconds between ChatGPT requests
+    this.verificationCheckInterval = null;
+    this.lastRefreshTime = 0;
+    this.refreshCooldown = 30000; // 30 seconds cooldown between refreshes
   }
 
   async initialize() {
     console.log('🤖 GPT Extractor: Initializing with ProseMirror support');
     this.isReady = true;
+    
+    // Start periodic verification check
+    this.startVerificationMonitoring();
+  }
+  
+  startVerificationMonitoring() {
+    // Check for verification every 15 seconds (more frequent to catch readiness issues)
+    this.verificationCheckInterval = setInterval(async () => {
+      try {
+        const mainWindow = getMainWindow();
+        if (mainWindow && this.isReady) {
+          const needsVerification = await this.checkChatGPTVerification(mainWindow);
+          if (needsVerification) {
+            console.log('🔄 ChatGPT issue detected - Auto-refreshed');
+          }
+        }
+      } catch (error) {
+        // Ignore errors in monitoring
+      }
+    }, 15000); // Check every 15 seconds
+  }
+  
+  stopVerificationMonitoring() {
+    if (this.verificationCheckInterval) {
+      clearInterval(this.verificationCheckInterval);
+      this.verificationCheckInterval = null;
+    }
+  }
+  
+  async waitForRateLimit() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    const remainingWait = this.minDelayBetweenRequests - timeSinceLastRequest;
+    
+    if (remainingWait > 0) {
+      console.log(`⏱️ Rate limit: Waiting ${Math.round(remainingWait/1000)}s before next ChatGPT request...`);
+      await new Promise(r => setTimeout(r, remainingWait));
+    }
+    
+    this.lastRequestTime = Date.now();
   }
 
   // Ask ChatGPT if page is a verification/bot check page
@@ -21,6 +66,9 @@ class GPTExtractor {
         console.log(`⚠️ Content too small (${contentLength} chars) - likely verification page`);
         return true;  // Skip without asking ChatGPT
       }
+      
+      // Wait for rate limit before asking ChatGPT
+      await this.waitForRateLimit();
       
       console.log(`🤔 Asking ChatGPT: Is this a verification page? (${contentLength} chars)`);
       
@@ -77,6 +125,9 @@ Answer with ONLY one word: yes or no`;
     }
 
     try {
+      // Wait for rate limit before sending to ChatGPT
+      await this.waitForRateLimit();
+      
       console.log(`📤 Sending to ChatGPT: ${platform} job at ${jobUrl}`);
       
       const mainWindow = getMainWindow();
@@ -126,6 +177,14 @@ Return ONLY valid JSON:
 
       console.log(`🤖 Sending to ChatGPT silently...`);
       
+      // Check if ChatGPT is showing verification before sending
+      const needsVerification = await this.checkChatGPTVerification(mainWindow);
+      if (needsVerification) {
+        console.log(`🚫 ChatGPT requires human verification! Pausing...`);
+        mainWindow.webContents.send('chatgpt-verification-needed');
+        return null;
+      }
+      
       // Start new chat + send prompt
       const sent = await this.sendToChatGPT(mainWindow, prompt);
       
@@ -134,10 +193,10 @@ Return ONLY valid JSON:
         return null;
       }
       
-      console.log(`✅ Sent! Waiting for response (120s)...`);
+      console.log(`✅ Sent! Waiting for response (20s)...`);
       
       // Wait for response
-      const response = await this.waitForResponse(mainWindow, 120000);
+      const response = await this.waitForResponse(mainWindow, 20000);
       
       if (!response) {
         console.log(`⏱️ Timeout`);
@@ -156,6 +215,113 @@ Return ONLY valid JSON:
     }
   }
 
+  async checkChatGPTVerification(mainWindow) {
+    try {
+      const result = await mainWindow.webContents.executeJavaScript(`
+        (function() {
+          const chatgptView = document.getElementById('chatgptView');
+          if (!chatgptView) return { needsVerification: false, isReady: false };
+          
+          return chatgptView.executeJavaScript(\`
+            (function() {
+              const bodyText = document.body.innerText.toLowerCase();
+              const title = document.title.toLowerCase();
+              
+              // Check for verification indicators (ONLY real verification pages)
+              const verificationKeywords = [
+                'verify you are human',
+                'verification required',
+                'captcha',
+                'just a moment',
+                'checking your browser',
+                'security check',
+                'unusual activity',
+                'blocked by your administrator',
+                'access denied',
+                'human verification',
+                'please verify',
+                'verify your identity'
+              ];
+              
+              // ONLY detect verification if it has specific verification keywords
+              const hasVerification = verificationKeywords.some(keyword => {
+                return bodyText.includes(keyword) || title.includes(keyword);
+              });
+              
+              // Check if ChatGPT has a working message input (means it's ready)
+              const hasWorkingInput = document.querySelector('textarea[placeholder*="message"]') || 
+                                     document.querySelector('textarea[data-testid*="input"]') ||
+                                     document.querySelector('div[contenteditable="true"]') ||
+                                     document.querySelector('textarea');
+              
+              // Only consider it verification if:
+              // 1. It has verification keywords AND
+              // 2. It does NOT have a working message input
+              const realVerification = hasVerification && !hasWorkingInput;
+              
+              // Also check for Cloudflare-specific elements
+              const hasCloudflare = document.querySelector('[data-ray]') || 
+                                   document.querySelector('.cf-browser-verification') ||
+                                   document.querySelector('#challenge-form');
+              
+              // Check if ChatGPT is ready (has message input area)
+              const messageInput = document.querySelector('textarea[placeholder*="message"]') || 
+                                   document.querySelector('textarea[placeholder*="Message"]') ||
+                                   document.querySelector('textarea[data-testid*="input"]') ||
+                                   document.querySelector('textarea[id*="prompt"]') ||
+                                   document.querySelector('div[contenteditable="true"]') ||
+                                   document.querySelector('textarea');
+              
+              const isReady = messageInput && messageInput.offsetParent !== null;
+              
+              return { 
+                needsVerification: realVerification || hasCloudflare,
+                isReady: isReady,
+                hasMessageInput: !!messageInput,
+                bodyPreview: bodyText.substring(0, 200)
+              };
+            })()
+          \`);
+        })()
+      `);
+      
+      // Check cooldown to prevent excessive refreshing
+      const now = Date.now();
+      const timeSinceLastRefresh = now - this.lastRefreshTime;
+      
+      if (result && result.needsVerification && timeSinceLastRefresh > this.refreshCooldown) {
+        console.log(`🚫 ChatGPT verification detected: ${result.bodyPreview}`);
+        
+        // Auto-refresh ChatGPT when verification detected
+        console.log(`🔄 Auto-refreshing ChatGPT to bypass verification...`);
+        mainWindow.webContents.send('refresh-chatgpt');
+        this.lastRefreshTime = now;
+        
+        // Wait a bit for refresh to start
+        await new Promise(r => setTimeout(r, 3000));
+        
+        return true;
+      }
+      
+      if (result && !result.hasMessageInput && timeSinceLastRefresh > this.refreshCooldown) {
+        console.log(`⚠️ ChatGPT not ready (no message input found) - Refreshing...`);
+        mainWindow.webContents.send('refresh-chatgpt');
+        this.lastRefreshTime = now;
+        await new Promise(r => setTimeout(r, 3000));
+        return true;
+      }
+      
+      if (timeSinceLastRefresh <= this.refreshCooldown) {
+        console.log(`⏳ Refresh cooldown active (${Math.round((this.refreshCooldown - timeSinceLastRefresh)/1000)}s remaining)`);
+      }
+      
+      return false;
+    } catch (error) {
+      console.log(`⚠️ Error checking ChatGPT verification: ${error.message}`);
+      return false;
+    }
+  }
+  
   async sendToChatGPT(mainWindow, prompt) {
     try {
       // Encode prompt as base64 to safely pass through executeJavaScript
@@ -310,6 +476,18 @@ Return ONLY valid JSON:
       
       const data = JSON.parse(jsonMatch[0]);
       
+      // Check work_type for remote keywords
+      const workType = data.work_type?.toLowerCase() || '';
+      const location = data.location?.toLowerCase() || '';
+      
+      // Check if remote based on work_type OR location
+      const isRemoteFromWorkType = workType.includes('remote') && 
+                                    !workType.includes('hybrid') && 
+                                    !workType.includes('onsite');
+      const isRemoteFromLocation = location.includes('remote') && 
+                                    !location.includes('hybrid') && 
+                                    !location.includes('onsite');
+      
       return {
         isVerificationPage: data.is_verification_page === true || data.is_verification_page === 'true',
         company: data.company || 'Unknown',
@@ -317,9 +495,9 @@ Return ONLY valid JSON:
         salary: data.salary,
         techStack: data.tech_stack,
         location: data.location,
-        isRemote: data.work_type?.toLowerCase().includes('fully remote') || false,
-        isHybrid: data.work_type?.toLowerCase().includes('hybrid') || false,
-        isOnsite: data.work_type?.toLowerCase().includes('onsite') || false,
+        isRemote: isRemoteFromWorkType || isRemoteFromLocation,
+        isHybrid: workType.includes('hybrid') || location.includes('hybrid'),
+        isOnsite: workType.includes('onsite') || location.includes('onsite'),
         isStartup: data.is_startup === 'yes' || data.is_startup === true,
         details: data.details
       };

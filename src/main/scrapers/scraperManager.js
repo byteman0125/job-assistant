@@ -108,7 +108,7 @@ class ScraperManager {
       // Wait before next round
       if (this.isRunning) {
         console.log('Waiting 30 minutes before next scraping cycle...');
-        await this.delay(30 * 60 * 1000); // 30 minutes
+        await this.delay(5 * 60 * 1000); // 30 minutes
       }
     }
   }
