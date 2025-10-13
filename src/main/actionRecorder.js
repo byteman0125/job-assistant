@@ -9,7 +9,15 @@ class ActionRecorder {
     this.currentPlatform = null;
     this.recordedActions = [];
     // Store actions in project data folder
-    this.actionsFilePath = path.join(process.cwd(), 'data', 'recorded-actions.json');
+    const dataDir = path.join(process.cwd(), 'data');
+    
+    // Create data directory if it doesn't exist
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log('Created data directory:', dataDir);
+    }
+    
+    this.actionsFilePath = path.join(dataDir, 'recorded-actions.json');
     this.loadRecordedActions();
   }
 

@@ -1,12 +1,20 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 const { app } = require('electron');
 
 class JobDatabase {
   constructor() {
     // Store database in project data folder
     const dataDir = path.join(process.cwd(), 'data');
+    
+    // Create data directory if it doesn't exist
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log('Created data directory:', dataDir);
+    }
+    
     const dbPath = path.join(dataDir, 'jobs.db');
     this.db = new Database(dbPath);
     this.initTables();
