@@ -880,21 +880,15 @@ window.copyJobInfo = async (jobId) => {
   const job = allJobs.find(j => j.id === jobId);
   if (!job) return;
   
-  // Enhanced format with tab-separated values for easy pasting into spreadsheets
-  const jobInfo = `Company:\t${job.company}
-Title:\t${job.title}
-Job Type:\t${job.job_type || 'N/A'}
-Industry:\t${job.industry || 'N/A'}
-Salary:\t${job.salary || 'Not specified'}
-Tech Stack:\t${job.tech_stack || 'Not specified'}
-Location:\t${job.location || 'Not specified'}
-Remote:\t${job.is_remote ? 'Yes' : 'No'}
-Startup:\t${job.is_startup ? 'Yes' : 'No'}
-Platform:\t${job.platform}
-URL:\t${job.url}`;
+  // Copy essential job info: Company, Title, URL, Job Type, Tech Stack
+  const jobInfo = `Company: ${job.company}
+Title: ${job.title}
+URL: ${job.url}
+Job Type: ${job.job_type || 'N/A'}
+Tech Stack: ${job.tech_stack || 'Not specified'}`;
   
   await ipcRenderer.invoke('copy-to-clipboard', jobInfo);
-  showNotification('✅ Copied job details with tab spacing to clipboard!', 'success');
+  showNotification('✅ Copied job info to clipboard!', 'success');
 };
 
 window.toggleAppliedStatus = async (jobId, applied) => {
