@@ -1771,7 +1771,7 @@ function showProfileMessage(message, type) {
 // ========================================
 
 let currentWizardPage = 1;
-const totalWizardPages = 6;
+const totalWizardPages = 5;
 
 function goToWizardPage(pageNum) {
   if (pageNum < 1 || pageNum > totalWizardPages) return;
