@@ -687,16 +687,6 @@ ipcMain.handle('apply-navigate', async (event, url) => {
   }
 });
 
-// Get profile data for auto-fill
-ipcMain.handle('get-profile', async () => {
-  try {
-    return db.getProfile();
-  } catch (err) {
-    console.error('Error getting profile:', err);
-    return null;
-  }
-});
-
 // Get ChatGPT cookies
 ipcMain.handle('get-gpt-cookies', async () => {
   try {
