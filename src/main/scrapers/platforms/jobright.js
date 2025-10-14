@@ -246,6 +246,7 @@ class JobrightScraper extends BaseScraper {
       let continueScraping = true;
       let totalProcessedCount = 0; // Track total jobs processed
       let consecutiveEmptyCount = 0; // Track how many times we found no cards
+      let consecutiveOldJobs = 0; // Track consecutive old jobs (stop after 10)
       let scrollAttempts = 0; // Track scroll attempts to trigger periodic scrolling
       
       // Reload salary settings once at start
@@ -336,9 +337,19 @@ class JobrightScraper extends BaseScraper {
       // CHECK: Is this job older than 7 days?
       const isOld = this.isJobOlderThanOneDay(jobCard.postedTime);
       if (isOld) {
-        console.log(`${this.platform}: ⏭️ SKIPPING OLD JOB (> 7 days old)`);
+        consecutiveOldJobs++;
+        console.log(`${this.platform}: ⏭️ SKIPPING OLD JOB (> 7 days old) [${consecutiveOldJobs}/10]`);
         console.log(`${this.platform}: Job: "${jobCard.title}"`);
         console.log(`${this.platform}: Posted: ${jobCard.postedTime}`);
+        
+        // Stop if we've seen 10 consecutive old jobs
+        if (consecutiveOldJobs >= 10) {
+          console.log(`\n${this.platform}: ═══════════════════════════════════════════`);
+          console.log(`${this.platform}: 🛑 STOPPING - Found 10 consecutive old jobs`);
+          console.log(`${this.platform}: All remaining jobs are likely older than 7 days`);
+          console.log(`${this.platform}: ═══════════════════════════════════════════\n`);
+          break; // Exit the while loop
+        }
         
         // Click "Not Interested" to remove it and reveal next card
         try {
@@ -351,6 +362,9 @@ class JobrightScraper extends BaseScraper {
         await this.randomDelay(1000, 1500);
         continue; // Get next card from refreshed list
       }
+      
+      // Reset consecutive old jobs counter when we find a fresh job
+      consecutiveOldJobs = 0;
       
       console.log(`${this.platform}: ✅ Job is fresh (≤ 7 days old) - Processing...`);
       
