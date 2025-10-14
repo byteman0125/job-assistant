@@ -3107,22 +3107,30 @@ async function loadApplyGpt() {
     applyGptWebview.setAttribute('partition', 'persist:chatgpt');
     applyGptWebview.setAttribute('nodeintegration', 'false');
     
+    let cookiesApplied = false;
+    
     // Wait for webview to be ready
     applyGptWebview.addEventListener('dom-ready', async () => {
-      try {
-        // Set cookies
-        for (const cookie of cookies) {
-          await applyGptWebview.executeJavaScript(`
-            document.cookie = '${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=/; secure; samesite=lax';
-          `);
+      // Only set cookies once to avoid infinite reload loop
+      if (!cookiesApplied) {
+        cookiesApplied = true;
+        try {
+          // Set cookies
+          for (const cookie of cookies) {
+            await applyGptWebview.executeJavaScript(`
+              document.cookie = '${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=/; secure; samesite=lax';
+            `);
+          }
+          
+          // Reload to apply cookies
+          applyGptWebview.reload();
+        } catch (err) {
+          console.error('Error setting ChatGPT cookies:', err);
+          showNotification('❌ Failed to set ChatGPT cookies', 'error');
         }
-        
-        // Reload to apply cookies
-        applyGptWebview.reload();
+      } else {
+        // Cookies already applied, just show success
         showNotification('✅ ChatGPT loaded successfully', 'success');
-      } catch (err) {
-        console.error('Error setting ChatGPT cookies:', err);
-        showNotification('❌ Failed to set ChatGPT cookies', 'error');
       }
     });
     
