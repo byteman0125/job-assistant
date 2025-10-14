@@ -2286,17 +2286,11 @@ window.removeTempExp = function(index) {
 // Add new resume
 document.getElementById('addResumeBtn').addEventListener('click', async () => {
   const label = document.getElementById('newResumeLabel').value.trim();
-  const techStack = document.getElementById('newResumeTechStack').value.trim();
   const isPrimary = document.getElementById('newResumeIsPrimary').checked;
   
   // Validation
   if (!label) {
     showNotification('⚠️ Please enter a resume label', 'warning');
-    return;
-  }
-  
-  if (!techStack) {
-    showNotification('⚠️ Please enter tech stack', 'warning');
     return;
   }
   
@@ -2308,22 +2302,48 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
   try {
     const fileName = selectedNewResumeFile.split(/[\\/]/).pop();
     
+    // Auto-extract tech stack from label and work experiences
+    let autoTechStack = '';
+    
+    // Extract from label (common tech keywords)
+    const labelLower = label.toLowerCase();
+    const commonTechs = [
+      'react', 'vue', 'angular', 'node', 'nodejs', 'python', 'java', 'javascript', 
+      'typescript', 'go', 'rust', 'php', 'ruby', 'django', 'flask', 'express',
+      'mongodb', 'postgresql', 'mysql', 'redis', 'aws', 'azure', 'gcp', 'docker',
+      'kubernetes', 'react native', 'flutter', 'ios', 'android', 'swift', 'kotlin',
+      'c++', 'c#', '.net', 'spring', 'laravel', 'rails'
+    ];
+    
+    const foundTechs = commonTechs.filter(tech => labelLower.includes(tech));
+    
+    // Add techs from work experience fields and descriptions
+    tempResumeExperiences.forEach(exp => {
+      const expText = `${exp.role} ${exp.field} ${exp.description}`.toLowerCase();
+      commonTechs.forEach(tech => {
+        if (expText.includes(tech) && !foundTechs.includes(tech)) {
+          foundTechs.push(tech);
+        }
+      });
+    });
+    
+    autoTechStack = foundTechs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ');
+    
     const result = await ipcRenderer.invoke('add-resume', {
       label,
       file_name: fileName,
       file_path: selectedNewResumeFile,
-      tech_stack: techStack,
+      tech_stack: autoTechStack || label, // Use auto-detected or label as fallback
       description: null,
-      work_experiences_json: JSON.stringify(tempResumeExperiences), // Save temp experiences
+      work_experiences_json: JSON.stringify(tempResumeExperiences),
       is_primary: isPrimary ? 1 : 0
     });
     
     if (result.success) {
-      showNotification('✅ Resume added successfully!', 'success');
+      showNotification('✅ Resume added successfully! Tech stack auto-detected: ' + (autoTechStack || label), 'success');
       
       // Clear form and temp experiences
       document.getElementById('newResumeLabel').value = '';
-      document.getElementById('newResumeTechStack').value = '';
       document.getElementById('newResumeFilePath').value = '';
       document.getElementById('newResumeIsPrimary').checked = false;
       selectedNewResumeFile = null;
