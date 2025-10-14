@@ -881,7 +881,7 @@ window.copyJobInfo = async (jobId) => {
   if (!job) return;
   
   // Copy essential job info with tab-separated format
-  const jobInfo = `${job.company}\t${job.title}\t${job.url}\t${job.job_type || 'N/A'}\t${job.tech_stack || 'Not specified'}`;
+  const jobInfo = `${job.company}\t${job.title}\t${job.url}\t${job.job_type || 'N/A'}`;
   
   await ipcRenderer.invoke('copy-to-clipboard', jobInfo);
   showNotification('✅ Copied job info to clipboard!', 'success');
@@ -960,7 +960,7 @@ async function copySelected() {
   
   // Format as tab-separated, one job per line
   const copyText = selectedJobs.map(job => 
-    `${job.company}\t${job.title}\t${job.url}`
+    `${job.company}\t${job.title}\t${job.url}\t${job.job_type || 'N/A'}`
   ).join('\n');
   
   await ipcRenderer.invoke('copy-to-clipboard', copyText);
