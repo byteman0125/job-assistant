@@ -2962,7 +2962,7 @@ function initApplyTab() {
 // Navigate to URL
 async function navigateToUrl(url) {
   if (!url) {
-    showNotification('⚠️ Please enter a URL', 'warning');
+    setApplyStatus('Please enter a URL', false);
     return;
   }
   
@@ -2990,14 +2990,12 @@ async function navigateToUrl(url) {
       applyWebviewElement.src = url;
       
       setApplyStatus(`Loaded: ${url}`, false);
-      showNotification('✅ Page loaded successfully', 'success');
     } else {
       throw new Error(result.error || 'Failed to navigate');
     }
   } catch (err) {
     console.error('Navigation error:', err);
     setApplyStatus('Error loading page', false);
-    showNotification(`❌ Failed to load page: ${err.message}`, 'error');
   }
 }
 
@@ -3086,7 +3084,7 @@ async function loadApplyGpt() {
     
     // Check if webview already exists
     if (applyGptWebview) {
-      showNotification('✅ ChatGPT already loaded', 'info');
+      setApplyStatus('ChatGPT already loaded', false);
       return;
     }
     
@@ -3094,7 +3092,7 @@ async function loadApplyGpt() {
     const cookies = await ipcRenderer.invoke('get-gpt-cookies');
     
     if (!cookies || cookies.length === 0) {
-      showNotification('⚠️ No ChatGPT cookies found. Please add them in Cookies tab.', 'warning');
+      setApplyStatus('No ChatGPT cookies found. Please add them in Cookies tab.', false);
       return;
     }
     
@@ -3126,18 +3124,18 @@ async function loadApplyGpt() {
           applyGptWebview.reload();
         } catch (err) {
           console.error('Error setting ChatGPT cookies:', err);
-          showNotification('❌ Failed to set ChatGPT cookies', 'error');
+          setApplyStatus('Failed to set ChatGPT cookies', false);
         }
       } else {
         // Cookies already applied, just show success
-        showNotification('✅ ChatGPT loaded successfully', 'success');
+        setApplyStatus('ChatGPT loaded successfully', false);
       }
     });
     
     container.appendChild(applyGptWebview);
   } catch (err) {
     console.error('Error loading ChatGPT:', err);
-    showNotification('❌ Failed to load ChatGPT', 'error');
+    setApplyStatus('Failed to load ChatGPT', false);
   }
 }
 
@@ -3145,9 +3143,9 @@ async function loadApplyGpt() {
 function refreshApplyGpt() {
   if (applyGptWebview) {
     applyGptWebview.reload();
-    showNotification('🔄 ChatGPT refreshed', 'info');
+    setApplyStatus('ChatGPT refreshed', false);
   } else {
-    showNotification('⚠️ ChatGPT not loaded yet', 'warning');
+    setApplyStatus('ChatGPT not loaded yet', false);
   }
 }
 
@@ -3155,21 +3153,21 @@ function refreshApplyGpt() {
 function clearApplyGptChat() {
   if (applyGptWebview) {
     applyGptWebview.loadURL('https://chatgpt.com');
-    showNotification('🗑️ Started new ChatGPT chat', 'info');
+    setApplyStatus('Started new ChatGPT chat', false);
   } else {
-    showNotification('⚠️ ChatGPT not loaded yet', 'warning');
+    setApplyStatus('ChatGPT not loaded yet', false);
   }
 }
 
 // Extract job info using ChatGPT
 async function extractJobInfo() {
   if (!applyWebviewElement) {
-    showNotification('⚠️ No page loaded', 'warning');
+    setApplyStatus('No page loaded', false);
     return;
   }
   
   if (!applyGptWebview) {
-    showNotification('⚠️ Please load ChatGPT first', 'warning');
+    setApplyStatus('Please load ChatGPT first', false);
     return;
   }
   
@@ -3180,7 +3178,7 @@ async function extractJobInfo() {
     `);
     
     if (!content || content.length < 100) {
-      showNotification('⚠️ Page content is too short', 'warning');
+      setApplyStatus('Page content is too short', false);
       return;
     }
     
@@ -3218,22 +3216,22 @@ Format as JSON.`;
       }
     `);
     
-    showNotification('📋 Sent job info extraction request to ChatGPT', 'success');
+    setApplyStatus('Sent job info extraction request to ChatGPT', false);
   } catch (err) {
     console.error('Error extracting job info:', err);
-    showNotification('❌ Failed to extract job info', 'error');
+    setApplyStatus('Failed to extract job info', false);
   }
 }
 
 // Send current page content to ChatGPT
 async function sendPageToGpt() {
   if (!applyWebviewElement) {
-    showNotification('⚠️ No page loaded', 'warning');
+    setApplyStatus('No page loaded', false);
     return;
   }
   
   if (!applyGptWebview) {
-    showNotification('⚠️ Please load ChatGPT first', 'warning');
+    setApplyStatus('Please load ChatGPT first', false);
     return;
   }
   
@@ -3254,17 +3252,17 @@ async function sendPageToGpt() {
       }
     `);
     
-    showNotification('📤 Sent page content to ChatGPT', 'success');
+    setApplyStatus('Sent page content to ChatGPT', false);
   } catch (err) {
     console.error('Error sending page to GPT:', err);
-    showNotification('❌ Failed to send page content', 'error');
+    setApplyStatus('Failed to send page content', false);
   }
 }
 
 // Auto-fill form with profile data
 async function autoFillForm() {
   if (!applyWebviewElement) {
-    showNotification('⚠️ No page loaded', 'warning');
+    setApplyStatus('No page loaded', false);
     return;
   }
   
@@ -3273,7 +3271,7 @@ async function autoFillForm() {
     const profile = await ipcRenderer.invoke('get-profile');
     
     if (!profile) {
-      showNotification('⚠️ No profile data found. Please complete your profile first.', 'warning');
+      setApplyStatus('No profile data found. Please complete your profile first.', false);
       return;
     }
     
@@ -3315,10 +3313,10 @@ async function autoFillForm() {
       })();
     `);
     
-    showNotification('✍️ Auto-filled form fields', 'success');
+    setApplyStatus('Auto-filled form fields', false);
   } catch (err) {
     console.error('Error auto-filling form:', err);
-    showNotification('❌ Failed to auto-fill form', 'error');
+    setApplyStatus('Failed to auto-fill form', false);
   }
 }
 
