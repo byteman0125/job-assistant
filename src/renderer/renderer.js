@@ -3321,8 +3321,27 @@ async function autoFillForm() {
 }
 
 // Initialize when apply tab is opened
-document.querySelector('[data-tab="apply"]').addEventListener('click', () => {
-  // Initialize on first click
+document.querySelector('[data-tab="apply"]').addEventListener('click', async (e) => {
+  // Check if profile is completed first
+  const profile = await ipcRenderer.invoke('get-profile');
+  
+  if (!profile || !profile.full_name || !profile.email) {
+    // Profile is incomplete - redirect to profile tab
+    e.preventDefault();
+    e.stopPropagation();
+    
+    showNotification('⚠️ Please complete your profile first before using Job Apply', 'warning');
+    
+    // Switch to profile tab
+    const profileTab = document.querySelector('[data-tab="profile"]');
+    if (profileTab) {
+      profileTab.click();
+    }
+    
+    return;
+  }
+  
+  // Profile is complete - initialize on first click
   if (!document.getElementById('applyTabInitialized')) {
     initApplyTab();
     document.getElementById('apply-tab').setAttribute('data-initialized', 'true');
