@@ -415,6 +415,25 @@ ipcMain.handle('add-resume', async (event, resumeData) => {
   }
 });
 
+// File dialog handler
+ipcMain.handle('dialog:openFile', async (event, options) => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, options);
+  
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return { canceled: true };
+  }
+  
+  const filePath = result.filePaths[0];
+  const fileName = filePath.split(/[\\/]/).pop();
+  
+  return {
+    canceled: false,
+    filePath,
+    fileName
+  };
+});
+
 ipcMain.handle('get-all-resumes', async () => {
   return db.getAllResumes();
 });
