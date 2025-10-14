@@ -55,6 +55,10 @@
             <span class="tab-icon">📊</span>
             <span class="tab-label">Metrics</span>
           </button>
+          <button class="tab-btn-vertical" data-tab="apply">
+            <span class="tab-icon">📝</span>
+            <span class="tab-label">Job Apply</span>
+          </button>
         </div>
       </div>
 
@@ -814,6 +818,90 @@
             <div class="metrics-actions">
               <button id="refreshMetricsBtn" class="btn btn-primary">🔄 Refresh Metrics</button>
               <button id="exportMetricsBtn" class="btn btn-secondary">📥 Export Report</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Job Apply Tab -->
+        <div id="apply-tab" class="tab-pane">
+          <div class="apply-viewer">
+            <!-- URL Navigation Bar -->
+            <div class="apply-header">
+              <div class="apply-url-bar">
+                <button id="applyBackBtn" class="url-nav-btn" title="Back">←</button>
+                <button id="applyForwardBtn" class="url-nav-btn" title="Forward">→</button>
+                <button id="applyRefreshBtn" class="url-nav-btn" title="Refresh">⟳</button>
+                <input 
+                  type="text" 
+                  id="applyUrlInput" 
+                  class="apply-url-input" 
+                  placeholder="Enter job application URL and press Enter..."
+                />
+                <button id="applyGoBtn" class="btn btn-primary btn-sm">Go</button>
+              </div>
+            </div>
+
+            <!-- Split View: Web Content + ChatGPT -->
+            <div class="apply-split-view">
+              <!-- Left: Web Content View -->
+              <div class="apply-web-section">
+                <div class="apply-web-header">
+                  <h3>🌐 Application Page</h3>
+                  <div class="apply-web-controls">
+                    <button id="applyZoomOutBtn" class="btn btn-icon" title="Zoom Out">−</button>
+                    <span id="applyZoomLevel" class="zoom-level">100%</span>
+                    <button id="applyZoomInBtn" class="btn btn-icon" title="Zoom In">+</button>
+                    <button id="applyResetZoomBtn" class="btn btn-icon" title="Reset Zoom">↺</button>
+                  </div>
+                </div>
+                <div id="applyWebviewContainer" class="apply-webview-container">
+                  <div class="apply-placeholder">
+                    <div class="apply-placeholder-icon">📝</div>
+                    <h3>Enter a URL to start</h3>
+                    <p>Type a job application URL in the address bar above</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right: ChatGPT Panel -->
+              <div class="apply-gpt-section">
+                <div class="apply-gpt-header">
+                  <h3>💬 ChatGPT Assistant</h3>
+                  <div class="apply-gpt-controls">
+                    <button id="applyGptRefreshBtn" class="btn btn-icon" title="Refresh ChatGPT">⟳</button>
+                    <button id="applyGptClearBtn" class="btn btn-icon" title="New Chat">🗑️</button>
+                  </div>
+                </div>
+                <div id="applyGptContainer" class="apply-gpt-container">
+                  <div class="apply-gpt-placeholder">
+                    <div class="gpt-placeholder-icon">🤖</div>
+                    <h3>ChatGPT Ready</h3>
+                    <p>Use ChatGPT to help with your job application</p>
+                    <button id="loadApplyGptBtn" class="btn btn-primary">Load ChatGPT</button>
+                  </div>
+                </div>
+                
+                <!-- Quick Actions Panel -->
+                <div class="apply-quick-actions">
+                  <button id="extractJobInfoBtn" class="btn btn-secondary btn-sm" title="Extract job details using ChatGPT">
+                    📋 Extract Job Info
+                  </button>
+                  <button id="sendPageToGptBtn" class="btn btn-secondary btn-sm" title="Send current page content to ChatGPT">
+                    📤 Send to GPT
+                  </button>
+                  <button id="fillFormBtn" class="btn btn-secondary btn-sm" title="Auto-fill form with profile data">
+                    ✍️ Auto-Fill
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Status Bar -->
+            <div class="apply-status-bar">
+              <span id="applyStatus" class="apply-status-text">Ready</span>
+              <span id="applyLoadingIndicator" class="apply-loading-indicator" style="display: none;">
+                <span class="spinner"></span> Loading...
+              </span>
             </div>
           </div>
         </div>

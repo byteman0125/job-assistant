@@ -674,6 +674,39 @@ ipcMain.handle('execute-in-scraping-view', async (event, script) => {
   });
 });
 
+// Job Apply Tab - Navigate to URL with Puppeteer
+ipcMain.handle('apply-navigate', async (event, url) => {
+  try {
+    console.log(`Apply Tab: Navigating to ${url}`);
+    // For now, just return success - actual Puppeteer integration can be added later
+    // The webview will handle the navigation directly
+    return { success: true };
+  } catch (err) {
+    console.error('Apply navigation error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Get profile data for auto-fill
+ipcMain.handle('get-profile', async () => {
+  try {
+    return db.getProfile();
+  } catch (err) {
+    console.error('Error getting profile:', err);
+    return null;
+  }
+});
+
+// Get ChatGPT cookies
+ipcMain.handle('get-gpt-cookies', async () => {
+  try {
+    return db.getCookies('chatgpt');
+  } catch (err) {
+    console.error('Error getting GPT cookies:', err);
+    return [];
+  }
+});
+
 // App lifecycle
 app.whenReady().then(async () => {
   initDatabase();

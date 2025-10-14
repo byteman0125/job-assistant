@@ -2874,3 +2874,452 @@ setTimeout(() => {
   loadMetrics();
 }, 1000);
 
+/* ========================================
+   Job Apply Tab Functionality
+   ======================================== */
+
+let applyPage = null;
+let applyGptWebview = null;
+let applyWebviewElement = null;
+let applyZoomLevel = 1.0;
+
+// Initialize Job Apply Tab
+function initApplyTab() {
+  const urlInput = document.getElementById('applyUrlInput');
+  const goBtn = document.getElementById('applyGoBtn');
+  const backBtn = document.getElementById('applyBackBtn');
+  const forwardBtn = document.getElementById('applyForwardBtn');
+  const refreshBtn = document.getElementById('applyRefreshBtn');
+  
+  const zoomInBtn = document.getElementById('applyZoomInBtn');
+  const zoomOutBtn = document.getElementById('applyZoomOutBtn');
+  const resetZoomBtn = document.getElementById('applyResetZoomBtn');
+  
+  const loadGptBtn = document.getElementById('loadApplyGptBtn');
+  const gptRefreshBtn = document.getElementById('applyGptRefreshBtn');
+  const gptClearBtn = document.getElementById('applyGptClearBtn');
+  
+  const extractJobInfoBtn = document.getElementById('extractJobInfoBtn');
+  const sendPageToGptBtn = document.getElementById('sendPageToGptBtn');
+  const fillFormBtn = document.getElementById('fillFormBtn');
+  
+  // URL Navigation
+  urlInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      navigateToUrl(urlInput.value.trim());
+    }
+  });
+  
+  goBtn.addEventListener('click', () => {
+    navigateToUrl(urlInput.value.trim());
+  });
+  
+  backBtn.addEventListener('click', () => {
+    if (applyWebviewElement) {
+      applyWebviewElement.goBack();
+    }
+  });
+  
+  forwardBtn.addEventListener('click', () => {
+    if (applyWebviewElement) {
+      applyWebviewElement.goForward();
+    }
+  });
+  
+  refreshBtn.addEventListener('click', () => {
+    if (applyWebviewElement) {
+      applyWebviewElement.reload();
+    }
+  });
+  
+  // Zoom Controls
+  zoomInBtn.addEventListener('click', () => {
+    applyZoomLevel = Math.min(applyZoomLevel + 0.1, 2.0);
+    updateZoom();
+  });
+  
+  zoomOutBtn.addEventListener('click', () => {
+    applyZoomLevel = Math.max(applyZoomLevel - 0.1, 0.5);
+    updateZoom();
+  });
+  
+  resetZoomBtn.addEventListener('click', () => {
+    applyZoomLevel = 1.0;
+    updateZoom();
+  });
+  
+  // ChatGPT Controls
+  loadGptBtn.addEventListener('click', loadApplyGpt);
+  gptRefreshBtn.addEventListener('click', refreshApplyGpt);
+  gptClearBtn.addEventListener('click', clearApplyGptChat);
+  
+  // Quick Actions
+  extractJobInfoBtn.addEventListener('click', extractJobInfo);
+  sendPageToGptBtn.addEventListener('click', sendPageToGpt);
+  fillFormBtn.addEventListener('click', autoFillForm);
+}
+
+// Navigate to URL
+async function navigateToUrl(url) {
+  if (!url) {
+    showNotification('⚠️ Please enter a URL', 'warning');
+    return;
+  }
+  
+  // Add https:// if no protocol
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  
+  try {
+    setApplyStatus('Loading...', true);
+    
+    // Request to create Puppeteer page and connect to webview
+    const result = await ipcRenderer.invoke('apply-navigate', url);
+    
+    if (result.success) {
+      // Update URL input
+      document.getElementById('applyUrlInput').value = url;
+      
+      // Create or update webview
+      if (!applyWebviewElement) {
+        createApplyWebview();
+      }
+      
+      // Update webview src to match Puppeteer page
+      applyWebviewElement.src = url;
+      
+      setApplyStatus(`Loaded: ${url}`, false);
+      showNotification('✅ Page loaded successfully', 'success');
+    } else {
+      throw new Error(result.error || 'Failed to navigate');
+    }
+  } catch (err) {
+    console.error('Navigation error:', err);
+    setApplyStatus('Error loading page', false);
+    showNotification(`❌ Failed to load page: ${err.message}`, 'error');
+  }
+}
+
+// Create webview element
+function createApplyWebview() {
+  const container = document.getElementById('applyWebviewContainer');
+  
+  // Remove placeholder
+  const placeholder = container.querySelector('.apply-placeholder');
+  if (placeholder) {
+    placeholder.remove();
+  }
+  
+  // Create webview
+  applyWebviewElement = document.createElement('webview');
+  applyWebviewElement.id = 'applyWebview';
+  applyWebviewElement.style.width = '100%';
+  applyWebviewElement.style.height = '100%';
+  applyWebviewElement.setAttribute('partition', 'persist:apply');
+  applyWebviewElement.setAttribute('nodeintegration', 'false');
+  applyWebviewElement.setAttribute('disablewebsecurity', 'false');
+  
+  // Add event listeners
+  applyWebviewElement.addEventListener('did-start-loading', () => {
+    setApplyStatus('Loading...', true);
+  });
+  
+  applyWebviewElement.addEventListener('did-stop-loading', () => {
+    setApplyStatus('Ready', false);
+    updateNavigationButtons();
+  });
+  
+  applyWebviewElement.addEventListener('did-navigate', (e) => {
+    document.getElementById('applyUrlInput').value = e.url;
+    updateNavigationButtons();
+  });
+  
+  applyWebviewElement.addEventListener('did-navigate-in-page', (e) => {
+    document.getElementById('applyUrlInput').value = e.url;
+  });
+  
+  applyWebviewElement.addEventListener('page-title-updated', (e) => {
+    setApplyStatus(`${e.title}`, false);
+  });
+  
+  container.appendChild(applyWebviewElement);
+}
+
+// Update navigation buttons state
+function updateNavigationButtons() {
+  if (!applyWebviewElement) return;
+  
+  const backBtn = document.getElementById('applyBackBtn');
+  const forwardBtn = document.getElementById('applyForwardBtn');
+  
+  backBtn.disabled = !applyWebviewElement.canGoBack();
+  forwardBtn.disabled = !applyWebviewElement.canGoForward();
+}
+
+// Update zoom level
+function updateZoom() {
+  if (applyWebviewElement) {
+    applyWebviewElement.setZoomFactor(applyZoomLevel);
+    document.getElementById('applyZoomLevel').textContent = 
+      Math.round(applyZoomLevel * 100) + '%';
+  }
+}
+
+// Set status
+function setApplyStatus(text, loading) {
+  document.getElementById('applyStatus').textContent = text;
+  const loadingIndicator = document.getElementById('applyLoadingIndicator');
+  loadingIndicator.style.display = loading ? 'flex' : 'none';
+}
+
+// Load ChatGPT
+async function loadApplyGpt() {
+  try {
+    const container = document.getElementById('applyGptContainer');
+    
+    // Remove placeholder
+    const placeholder = container.querySelector('.apply-gpt-placeholder');
+    if (placeholder) {
+      placeholder.remove();
+    }
+    
+    // Check if webview already exists
+    if (applyGptWebview) {
+      showNotification('✅ ChatGPT already loaded', 'info');
+      return;
+    }
+    
+    // Get ChatGPT cookies
+    const cookies = await ipcRenderer.invoke('get-gpt-cookies');
+    
+    if (!cookies || cookies.length === 0) {
+      showNotification('⚠️ No ChatGPT cookies found. Please add them in Cookies tab.', 'warning');
+      return;
+    }
+    
+    // Create ChatGPT webview
+    applyGptWebview = document.createElement('webview');
+    applyGptWebview.id = 'applyGptWebview';
+    applyGptWebview.src = 'https://chatgpt.com';
+    applyGptWebview.style.width = '100%';
+    applyGptWebview.style.height = '100%';
+    applyGptWebview.setAttribute('partition', 'persist:chatgpt');
+    applyGptWebview.setAttribute('nodeintegration', 'false');
+    
+    // Wait for webview to be ready
+    applyGptWebview.addEventListener('dom-ready', async () => {
+      try {
+        // Set cookies
+        for (const cookie of cookies) {
+          await applyGptWebview.executeJavaScript(`
+            document.cookie = '${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=/; secure; samesite=lax';
+          `);
+        }
+        
+        // Reload to apply cookies
+        applyGptWebview.reload();
+        showNotification('✅ ChatGPT loaded successfully', 'success');
+      } catch (err) {
+        console.error('Error setting ChatGPT cookies:', err);
+        showNotification('❌ Failed to set ChatGPT cookies', 'error');
+      }
+    });
+    
+    container.appendChild(applyGptWebview);
+  } catch (err) {
+    console.error('Error loading ChatGPT:', err);
+    showNotification('❌ Failed to load ChatGPT', 'error');
+  }
+}
+
+// Refresh ChatGPT
+function refreshApplyGpt() {
+  if (applyGptWebview) {
+    applyGptWebview.reload();
+    showNotification('🔄 ChatGPT refreshed', 'info');
+  } else {
+    showNotification('⚠️ ChatGPT not loaded yet', 'warning');
+  }
+}
+
+// Clear ChatGPT chat (start new)
+function clearApplyGptChat() {
+  if (applyGptWebview) {
+    applyGptWebview.loadURL('https://chatgpt.com');
+    showNotification('🗑️ Started new ChatGPT chat', 'info');
+  } else {
+    showNotification('⚠️ ChatGPT not loaded yet', 'warning');
+  }
+}
+
+// Extract job info using ChatGPT
+async function extractJobInfo() {
+  if (!applyWebviewElement) {
+    showNotification('⚠️ No page loaded', 'warning');
+    return;
+  }
+  
+  if (!applyGptWebview) {
+    showNotification('⚠️ Please load ChatGPT first', 'warning');
+    return;
+  }
+  
+  try {
+    // Get page content
+    const content = await applyWebviewElement.executeJavaScript(`
+      document.body.innerText
+    `);
+    
+    if (!content || content.length < 100) {
+      showNotification('⚠️ Page content is too short', 'warning');
+      return;
+    }
+    
+    // Prepare prompt
+    const prompt = `Extract job information from this page and format as JSON:
+    
+${content.substring(0, 10000)}
+
+Please extract:
+- Company name
+- Job title  
+- Location
+- Job type (Full-time, Part-time, Contract, etc.)
+- Remote status (Remote, Hybrid, On-site)
+- Salary/compensation
+- Required skills/tech stack
+- Job description summary
+
+Format as JSON.`;
+    
+    // Send to ChatGPT
+    await applyGptWebview.executeJavaScript(`
+      const textarea = document.querySelector('[data-id="root"] textarea');
+      if (textarea) {
+        textarea.value = ${JSON.stringify(prompt)};
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // Find and click send button
+        setTimeout(() => {
+          const sendBtn = document.querySelector('[data-testid="send-button"]');
+          if (sendBtn && !sendBtn.disabled) {
+            sendBtn.click();
+          }
+        }, 500);
+      }
+    `);
+    
+    showNotification('📋 Sent job info extraction request to ChatGPT', 'success');
+  } catch (err) {
+    console.error('Error extracting job info:', err);
+    showNotification('❌ Failed to extract job info', 'error');
+  }
+}
+
+// Send current page content to ChatGPT
+async function sendPageToGpt() {
+  if (!applyWebviewElement) {
+    showNotification('⚠️ No page loaded', 'warning');
+    return;
+  }
+  
+  if (!applyGptWebview) {
+    showNotification('⚠️ Please load ChatGPT first', 'warning');
+    return;
+  }
+  
+  try {
+    // Get page content
+    const content = await applyWebviewElement.executeJavaScript(`
+      document.body.innerText
+    `);
+    
+    const url = applyWebviewElement.getURL();
+    
+    // Send to ChatGPT
+    await applyGptWebview.executeJavaScript(`
+      const textarea = document.querySelector('[data-id="root"] textarea');
+      if (textarea) {
+        textarea.value = 'Here is content from ${url}:\\n\\n' + ${JSON.stringify(content.substring(0, 8000))};
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    `);
+    
+    showNotification('📤 Sent page content to ChatGPT', 'success');
+  } catch (err) {
+    console.error('Error sending page to GPT:', err);
+    showNotification('❌ Failed to send page content', 'error');
+  }
+}
+
+// Auto-fill form with profile data
+async function autoFillForm() {
+  if (!applyWebviewElement) {
+    showNotification('⚠️ No page loaded', 'warning');
+    return;
+  }
+  
+  try {
+    // Get profile data
+    const profile = await ipcRenderer.invoke('get-profile');
+    
+    if (!profile) {
+      showNotification('⚠️ No profile data found. Please complete your profile first.', 'warning');
+      return;
+    }
+    
+    // Auto-fill common fields
+    await applyWebviewElement.executeJavaScript(`
+      (function() {
+        const profile = ${JSON.stringify(profile)};
+        
+        // Helper function to fill field
+        function fillField(selectors, value) {
+          if (!value) return;
+          for (const selector of selectors) {
+            const field = document.querySelector(selector);
+            if (field) {
+              field.value = value;
+              field.dispatchEvent(new Event('input', { bubbles: true }));
+              field.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }
+        }
+        
+        // Fill common fields
+        fillField(['input[name="name"]', 'input[id*="name"]', 'input[placeholder*="name" i]'], 
+                  profile.full_name);
+        fillField(['input[name="email"]', 'input[type="email"]', 'input[id*="email"]'], 
+                  profile.email);
+        fillField(['input[name="phone"]', 'input[type="tel"]', 'input[id*="phone"]'], 
+                  profile.phone);
+        fillField(['input[name="linkedin"]', 'input[id*="linkedin"]'], 
+                  profile.linkedin_url);
+        fillField(['input[name="github"]', 'input[id*="github"]'], 
+                  profile.github_url);
+        fillField(['input[name="portfolio"]', 'input[id*="portfolio"]', 'input[id*="website"]'], 
+                  profile.portfolio_url);
+        fillField(['input[name="location"]', 'input[id*="location"]', 'input[id*="city"]'], 
+                  profile.location);
+        
+        return 'Auto-fill attempted';
+      })();
+    `);
+    
+    showNotification('✍️ Auto-filled form fields', 'success');
+  } catch (err) {
+    console.error('Error auto-filling form:', err);
+    showNotification('❌ Failed to auto-fill form', 'error');
+  }
+}
+
+// Initialize when apply tab is opened
+document.querySelector('[data-tab="apply"]').addEventListener('click', () => {
+  // Initialize on first click
+  if (!document.getElementById('applyTabInitialized')) {
+    initApplyTab();
+    document.getElementById('apply-tab').setAttribute('data-initialized', 'true');
+  }
+});
+
