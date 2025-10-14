@@ -200,16 +200,16 @@ class JobDatabase {
         file_path TEXT NOT NULL,
         tech_stack TEXT,
         description TEXT,
-        work_experience TEXT,
+        work_experiences_json TEXT,
         is_primary BOOLEAN DEFAULT 0,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
         updated_at INTEGER DEFAULT (strftime('%s', 'now'))
       )
     `);
     
-    // Add work_experience column to existing resumes table
+    // Add work_experiences_json column to existing resumes table
     try {
-      this.db.exec(`ALTER TABLE resumes ADD COLUMN work_experience TEXT`);
+      this.db.exec(`ALTER TABLE resumes ADD COLUMN work_experiences_json TEXT`);
     } catch (err) {
       // Column already exists, ignore
     }
@@ -846,7 +846,7 @@ class JobDatabase {
   
   addResume(resumeData) {
     const stmt = this.db.prepare(`
-      INSERT INTO resumes (label, file_name, file_path, tech_stack, description, work_experience, is_primary)
+      INSERT INTO resumes (label, file_name, file_path, tech_stack, description, work_experiences_json, is_primary)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
@@ -855,7 +855,7 @@ class JobDatabase {
       resumeData.file_path,
       resumeData.tech_stack || null,
       resumeData.description || null,
-      resumeData.work_experience || null,
+      resumeData.work_experiences_json || null,
       resumeData.is_primary || 0
     );
     
@@ -887,7 +887,7 @@ class JobDatabase {
         label = ?,
         tech_stack = ?,
         description = ?,
-        work_experience = ?,
+        work_experiences_json = ?,
         is_primary = ?,
         updated_at = strftime('%s', 'now')
       WHERE id = ?
@@ -896,7 +896,7 @@ class JobDatabase {
       resumeData.label,
       resumeData.tech_stack || null,
       resumeData.description || null,
-      resumeData.work_experience || null,
+      resumeData.work_experiences_json || null,
       resumeData.is_primary || 0,
       id
     );

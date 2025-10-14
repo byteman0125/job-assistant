@@ -2217,7 +2217,6 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
   const label = document.getElementById('newResumeLabel').value.trim();
   const techStack = document.getElementById('newResumeTechStack').value.trim();
   const description = document.getElementById('newResumeDescription').value.trim();
-  const workExperience = document.getElementById('newResumeWorkExperience').value.trim();
   const isPrimary = document.getElementById('newResumeIsPrimary').checked;
   
   // Validation
@@ -2245,7 +2244,7 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
       file_path: selectedNewResumeFile,
       tech_stack: techStack,
       description: description || null,
-      work_experience: workExperience || null,
+      work_experiences_json: JSON.stringify([]), // Empty array initially
       is_primary: isPrimary ? 1 : 0
     });
     
@@ -2257,7 +2256,6 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
       document.getElementById('newResumeTechStack').value = '';
       document.getElementById('newResumeFilePath').value = '';
       document.getElementById('newResumeDescription').value = '';
-      document.getElementById('newResumeWorkExperience').value = '';
       document.getElementById('newResumeIsPrimary').checked = false;
       selectedNewResumeFile = null;
       
@@ -2291,6 +2289,7 @@ async function loadResumes() {
             ${resume.is_primary ? '<span class="primary-badge">★ Primary</span>' : ''}
           </div>
           <div class="resume-card-actions">
+            <button class="btn btn-secondary btn-sm" onclick="manageResumeExperiences(${resume.id}, '${resume.label.replace(/'/g, "\\'")}')">💼 Work Experience</button>
             ${!resume.is_primary ? `<button class="btn btn-secondary btn-sm" onclick="setPrimaryResume(${resume.id})">Set as Primary</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteResume(${resume.id})">🗑️ Delete</button>
           </div>
@@ -2309,19 +2308,40 @@ async function loadResumes() {
             </div>
           </div>
           ${resume.description ? `<div class="resume-description">"${resume.description}"</div>` : ''}
-          ${resume.work_experience ? `
-            <div class="resume-work-experience">
-              <strong>💼 Work Experience:</strong>
-              <pre>${resume.work_experience}</pre>
-            </div>
-          ` : ''}
+          <div id="resume-exp-preview-${resume.id}" class="resume-exp-preview"></div>
         </div>
       </div>
     `).join('');
     
+    // Load work experience preview for each resume
+    for (const resume of resumes) {
+      loadResumeExpPreview(resume.id, resume.work_experiences_json);
+    }
+    
   } catch (error) {
     console.error('Error loading resumes:', error);
     showNotification('❌ Failed to load resumes', 'error');
+  }
+}
+
+// Load work experience preview
+function loadResumeExpPreview(resumeId, expJson) {
+  const previewEl = document.getElementById(`resume-exp-preview-${resumeId}`);
+  if (!previewEl) return;
+  
+  try {
+    const experiences = expJson ? JSON.parse(expJson) : [];
+    
+    if (experiences.length > 0) {
+      previewEl.innerHTML = `
+        <div class="resume-info-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #3d3d3d;">
+          <strong>💼 Experience:</strong>
+          <span>${experiences.length} position${experiences.length !== 1 ? 's' : ''}</span>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Error parsing resume experiences:', error);
   }
 }
 
@@ -2368,6 +2388,148 @@ window.deleteResume = async function(resumeId) {
     showNotification('❌ Failed to delete resume', 'error');
   }
 };
+
+// Manage resume experiences modal
+let currentEditingResumeId = null;
+let currentResumeExperiences = [];
+
+window.manageResumeExperiences = async function(resumeId, resumeLabel) {
+  currentEditingResumeId = resumeId;
+  
+  // Get resume data
+  const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
+  if (!resume) return;
+  
+  // Parse experiences
+  try {
+    currentResumeExperiences = resume.work_experiences_json ? JSON.parse(resume.work_experiences_json) : [];
+  } catch (e) {
+    currentResumeExperiences = [];
+  }
+  
+  // Show modal
+  document.getElementById('resumeExpModalTitle').textContent = resumeLabel;
+  document.getElementById('resumeExpModal').style.display = 'flex';
+  
+  // Clear form
+  clearExpForm();
+  
+  // Render experiences
+  renderResumeExperiences();
+};
+
+window.closeResumeExpModal = function() {
+  document.getElementById('resumeExpModal').style.display = 'none';
+  currentEditingResumeId = null;
+  currentResumeExperiences = [];
+  
+  // Reload resumes to show updated count
+  loadResumes();
+};
+
+function clearExpForm() {
+  document.getElementById('expCompany').value = '';
+  document.getElementById('expPosition').value = '';
+  document.getElementById('expStartDate').value = '';
+  document.getElementById('expEndDate').value = '';
+  document.getElementById('expDescription').value = '';
+  document.getElementById('expIsCurrent').checked = false;
+}
+
+// Render resume experiences in modal
+function renderResumeExperiences() {
+  const listEl = document.getElementById('resumeExpList');
+  
+  if (currentResumeExperiences.length === 0) {
+    listEl.innerHTML = '<p class="empty-state">No work experiences added yet.</p>';
+    return;
+  }
+  
+  listEl.innerHTML = currentResumeExperiences.map((exp, index) => `
+    <div class="exp-card" style="background: #2d2d2d; border: 1px solid #3d3d3d; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+        <div>
+          <strong style="color: #4CAF50; font-size: 15px;">${exp.position}</strong>
+          <div style="color: #aaa; font-size: 13px;">${exp.company}</div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="deleteResumeExp(${index})">🗑️</button>
+      </div>
+      <div style="color: #999; font-size: 12px; margin-bottom: 6px;">
+        📅 ${exp.start_date} - ${exp.is_current ? 'Present' : exp.end_date}
+      </div>
+      ${exp.description ? `<div style="color: #ccc; font-size: 13px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #3d3d3d;">${exp.description}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// Add experience to resume
+document.getElementById('addExpToResumeBtn').addEventListener('click', async () => {
+  const company = document.getElementById('expCompany').value.trim();
+  const position = document.getElementById('expPosition').value.trim();
+  const startDate = document.getElementById('expStartDate').value;
+  const endDate = document.getElementById('expEndDate').value;
+  const isCurrent = document.getElementById('expIsCurrent').checked;
+  const description = document.getElementById('expDescription').value.trim();
+  
+  if (!company || !position || !startDate) {
+    showNotification('⚠️ Please fill in company, position, and start date', 'warning');
+    return;
+  }
+  
+  // Add to array
+  currentResumeExperiences.push({
+    company,
+    position,
+    start_date: startDate,
+    end_date: isCurrent ? null : endDate,
+    is_current: isCurrent,
+    description
+  });
+  
+  // Save to database
+  await saveResumeExperiences();
+  
+  // Clear form and re-render
+  clearExpForm();
+  renderResumeExperiences();
+  
+  showNotification('✅ Experience added!', 'success');
+});
+
+// Delete experience from resume
+window.deleteResumeExp = async function(index) {
+  if (!confirm('Delete this experience?')) return;
+  
+  currentResumeExperiences.splice(index, 1);
+  await saveResumeExperiences();
+  renderResumeExperiences();
+  
+  showNotification('✅ Experience deleted', 'success');
+};
+
+// Save resume experiences to database
+async function saveResumeExperiences() {
+  if (!currentEditingResumeId) return;
+  
+  const resume = await ipcRenderer.invoke('get-resume-by-id', currentEditingResumeId);
+  if (!resume) return;
+  
+  await ipcRenderer.invoke('update-resume', currentEditingResumeId, {
+    label: resume.label,
+    tech_stack: resume.tech_stack,
+    description: resume.description,
+    work_experiences_json: JSON.stringify(currentResumeExperiences),
+    is_primary: resume.is_primary
+  });
+}
+
+// Handle "Currently working" checkbox
+document.getElementById('expIsCurrent').addEventListener('change', (e) => {
+  document.getElementById('expEndDate').disabled = e.target.checked;
+  if (e.target.checked) {
+    document.getElementById('expEndDate').value = '';
+  }
+});
 
 // Load resumes when profile tab is opened
 document.querySelector('[data-tab="profile"]').addEventListener('click', () => {

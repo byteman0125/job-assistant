@@ -303,11 +303,6 @@
               <textarea id="newResumeDescription" class="form-control" rows="2" placeholder="Brief description of this resume's focus..."></textarea>
             </div>
             
-            <div class="form-group full-width">
-              <label for="newResumeWorkExperience">Work Experience Summary (Optional)</label>
-              <textarea id="newResumeWorkExperience" class="form-control" rows="4" placeholder="List key positions and achievements highlighted in this resume...&#10;Example:&#10;• Senior Developer at ABC Corp (2020-2023) - Led React migration&#10;• Backend Engineer at XYZ Inc (2018-2020) - Built microservices"></textarea>
-              <span class="help-text">Summarize the work experience highlighted in this resume version</span>
-            </div>
             
             <div class="form-group full-width">
               <label class="checkbox-label">
@@ -1043,6 +1038,57 @@
     </div>
   </div>
   <div id="gptPromptOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999;"></div>
+
+  <!-- Resume Work Experience Modal -->
+  <div id="resumeExpModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3>💼 Work Experience for <span id="resumeExpModalTitle"></span></h3>
+        <button class="modal-close" onclick="closeResumeExpModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Add Work Experience Form -->
+        <div class="work-exp-form">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Company *</label>
+              <input type="text" id="expCompany" class="form-control" placeholder="e.g., ABC Corp">
+            </div>
+            <div class="form-group">
+              <label>Position *</label>
+              <input type="text" id="expPosition" class="form-control" placeholder="e.g., Senior Developer">
+            </div>
+            <div class="form-group">
+              <label>Start Date *</label>
+              <input type="month" id="expStartDate" class="form-control">
+            </div>
+            <div class="form-group">
+              <label>End Date</label>
+              <input type="month" id="expEndDate" class="form-control">
+              <label class="checkbox-label" style="margin-top: 5px;">
+                <input type="checkbox" id="expIsCurrent">
+                <span>Currently working here</span>
+              </label>
+            </div>
+            <div class="form-group full-width">
+              <label>Description/Achievements</label>
+              <textarea id="expDescription" class="form-control" rows="3" placeholder="Key responsibilities and achievements..."></textarea>
+            </div>
+          </div>
+          <button id="addExpToResumeBtn" class="btn btn-success" style="margin-top: 10px;">➕ Add Experience</button>
+        </div>
+
+        <!-- Experiences List -->
+        <div class="resume-experiences-list" style="margin-top: 20px;">
+          <h4>Experiences for this Resume</h4>
+          <div id="resumeExpList"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeResumeExpModal()">Done</button>
+      </div>
+    </div>
+  </div>
 
   <script src="renderer.js"></script>
 </body>
