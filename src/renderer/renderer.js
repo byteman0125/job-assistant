@@ -2186,8 +2186,184 @@ window.deleteEducation = deleteEducation;
 // Setup profile event listeners
 document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
 document.getElementById('clearProfileBtn').addEventListener('click', clearProfile);
-document.getElementById('browseResumeBtn').addEventListener('click', browseResume);
-document.getElementById('browseCoverLetterBtn').addEventListener('click', browseCoverLetter);
+
+/* ========================================
+   Resume Management Functions
+   ======================================== */
+
+let selectedNewResumeFile = null;
+
+// Browse for new resume file
+document.getElementById('browseNewResumeBtn').addEventListener('click', async () => {
+  try {
+    const result = await ipcRenderer.invoke('dialog:openFile', {
+      filters: [
+        { name: 'Documents', extensions: ['pdf', 'doc', 'docx'] }
+      ],
+      properties: ['openFile']
+    });
+    
+    if (result && !result.canceled && result.filePath) {
+      selectedNewResumeFile = result.filePath;
+      document.getElementById('newResumeFilePath').value = result.fileName || result.filePath;
+    }
+  } catch (error) {
+    console.error('Error browsing for resume:', error);
+  }
+});
+
+// Add new resume
+document.getElementById('addResumeBtn').addEventListener('click', async () => {
+  const label = document.getElementById('newResumeLabel').value.trim();
+  const techStack = document.getElementById('newResumeTechStack').value.trim();
+  const description = document.getElementById('newResumeDescription').value.trim();
+  const isPrimary = document.getElementById('newResumeIsPrimary').checked;
+  
+  // Validation
+  if (!label) {
+    showNotification('⚠️ Please enter a resume label', 'warning');
+    return;
+  }
+  
+  if (!techStack) {
+    showNotification('⚠️ Please enter tech stack', 'warning');
+    return;
+  }
+  
+  if (!selectedNewResumeFile) {
+    showNotification('⚠️ Please select a resume file', 'warning');
+    return;
+  }
+  
+  try {
+    const fileName = selectedNewResumeFile.split(/[\\/]/).pop();
+    
+    const result = await ipcRenderer.invoke('add-resume', {
+      label,
+      file_name: fileName,
+      file_path: selectedNewResumeFile,
+      tech_stack: techStack,
+      description: description || null,
+      is_primary: isPrimary ? 1 : 0
+    });
+    
+    if (result.success) {
+      showNotification('✅ Resume added successfully!', 'success');
+      
+      // Clear form
+      document.getElementById('newResumeLabel').value = '';
+      document.getElementById('newResumeTechStack').value = '';
+      document.getElementById('newResumeFilePath').value = '';
+      document.getElementById('newResumeDescription').value = '';
+      document.getElementById('newResumeIsPrimary').checked = false;
+      selectedNewResumeFile = null;
+      
+      // Reload resumes list
+      await loadResumes();
+    } else {
+      showNotification('❌ Failed to add resume: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error adding resume:', error);
+    showNotification('❌ Failed to add resume', 'error');
+  }
+});
+
+// Load and display resumes
+async function loadResumes() {
+  try {
+    const resumes = await ipcRenderer.invoke('get-all-resumes');
+    const container = document.getElementById('resumesList');
+    
+    if (!resumes || resumes.length === 0) {
+      container.innerHTML = '<p class="empty-state">No resumes added yet. Add your first resume above.</p>';
+      return;
+    }
+    
+    container.innerHTML = resumes.map(resume => `
+      <div class="resume-card ${resume.is_primary ? 'primary' : ''}" data-resume-id="${resume.id}">
+        <div class="resume-card-header">
+          <div class="resume-card-title">
+            <h5>📄 ${resume.label}</h5>
+            ${resume.is_primary ? '<span class="primary-badge">★ Primary</span>' : ''}
+          </div>
+          <div class="resume-card-actions">
+            ${!resume.is_primary ? `<button class="btn btn-secondary btn-sm" onclick="setPrimaryResume(${resume.id})">Set as Primary</button>` : ''}
+            <button class="btn btn-danger btn-sm" onclick="deleteResume(${resume.id})">🗑️ Delete</button>
+          </div>
+        </div>
+        <div class="resume-card-body">
+          <div class="resume-info-row">
+            <strong>File:</strong>
+            <span>${resume.file_name}</span>
+          </div>
+          <div class="resume-info-row">
+            <strong>Tech Stack:</strong>
+            <div class="resume-tech-stack">
+              ${resume.tech_stack ? resume.tech_stack.split(',').map(tech => 
+                `<span class="tech-tag">${tech.trim()}</span>`
+              ).join('') : '<span class="tech-tag">No stack specified</span>'}
+            </div>
+          </div>
+          ${resume.description ? `<div class="resume-description">"${resume.description}"</div>` : ''}
+        </div>
+      </div>
+    `).join('');
+    
+  } catch (error) {
+    console.error('Error loading resumes:', error);
+    showNotification('❌ Failed to load resumes', 'error');
+  }
+}
+
+// Set resume as primary
+window.setPrimaryResume = async function(resumeId) {
+  try {
+    const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
+    if (!resume) return;
+    
+    const result = await ipcRenderer.invoke('update-resume', resumeId, {
+      label: resume.label,
+      tech_stack: resume.tech_stack,
+      description: resume.description,
+      is_primary: 1
+    });
+    
+    if (result.success) {
+      showNotification('✅ Primary resume updated!', 'success');
+      await loadResumes();
+    } else {
+      showNotification('❌ Failed to update resume', 'error');
+    }
+  } catch (error) {
+    console.error('Error setting primary resume:', error);
+    showNotification('❌ Failed to set primary resume', 'error');
+  }
+};
+
+// Delete resume
+window.deleteResume = async function(resumeId) {
+  if (!confirm('Are you sure you want to delete this resume?')) return;
+  
+  try {
+    const result = await ipcRenderer.invoke('delete-resume', resumeId);
+    
+    if (result.success) {
+      showNotification('✅ Resume deleted successfully!', 'success');
+      await loadResumes();
+    } else {
+      showNotification('❌ Failed to delete resume', 'error');
+    }
+  } catch (error) {
+    console.error('Error deleting resume:', error);
+    showNotification('❌ Failed to delete resume', 'error');
+  }
+};
+
+// Load resumes when profile tab is opened
+document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
+  loadResumes();
+});
 
 // Load profile on startup
 loadProfile();

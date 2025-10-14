@@ -267,33 +267,60 @@
       </div>
     </div>
 
-    <!-- Step 1: Resume Upload & Parse -->
+    <!-- Step 1: Multiple Resumes Management -->
     <div class="wizard-page active" data-page="1">
       <div class="profile-section">
-        <h3>📄 Resume Upload & Parsing</h3>
-        <p class="help-text">Upload your resume and we'll help fill in your profile automatically.</p>
+        <h3>📄 Resume Management</h3>
+        <p class="help-text">Add multiple resumes with tech stack labels. AI will automatically select the best resume for each job.</p>
         
-        <div class="form-grid">
-          <div class="form-group full-width">
-            <label for="profileResumePath">Resume File</label>
-            <div class="file-input-group">
-              <input type="text" id="profileResumePath" class="form-control" placeholder="Click Browse to select your resume..." readonly>
-              <button id="browseResumeBtn" class="btn btn-secondary">📁 Browse</button>
+        <!-- Add New Resume Form -->
+        <div class="resume-add-form">
+          <h4>➕ Add New Resume</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="newResumeLabel">Resume Label *</label>
+              <input type="text" id="newResumeLabel" class="form-control" placeholder="e.g., Full Stack Resume">
+              <span class="help-text">Descriptive name for this resume</span>
             </div>
-            <span class="help-text">Accepted formats: PDF, DOC, DOCX</span>
-          </div>
-          
-          <div class="form-group full-width">
-            <button id="parseResumeBtn" class="btn btn-success" style="margin-top: 10px" disabled>🤖 Parse Resume with AI</button>
-            <div id="parseResumeStatus" class="parse-status" style="margin-top: 10px"></div>
-          </div>
-          
-          <div class="form-group full-width">
-            <label for="profileCoverLetterPath">Cover Letter Template (Optional)</label>
-            <div class="file-input-group">
-              <input type="text" id="profileCoverLetterPath" class="form-control" placeholder="Optional cover letter template" readonly>
-              <button id="browseCoverLetterBtn" class="btn btn-secondary">📁 Browse</button>
+            
+            <div class="form-group">
+              <label for="newResumeTechStack">Tech Stack *</label>
+              <input type="text" id="newResumeTechStack" class="form-control" placeholder="e.g., React, Node.js, TypeScript">
+              <span class="help-text">Comma-separated technologies (for AI matching)</span>
             </div>
+            
+            <div class="form-group full-width">
+              <label for="newResumeFile">Resume File *</label>
+              <div class="file-input-group">
+                <input type="text" id="newResumeFilePath" class="form-control" placeholder="Click Browse to select resume..." readonly>
+                <button id="browseNewResumeBtn" class="btn btn-secondary">📁 Browse</button>
+              </div>
+              <span class="help-text">PDF, DOC, DOCX</span>
+            </div>
+            
+            <div class="form-group full-width">
+              <label for="newResumeDescription">Description (Optional)</label>
+              <textarea id="newResumeDescription" class="form-control" rows="2" placeholder="Brief description of this resume's focus..."></textarea>
+            </div>
+            
+            <div class="form-group full-width">
+              <label class="checkbox-label">
+                <input type="checkbox" id="newResumeIsPrimary">
+                <span>Set as primary resume (default for all jobs)</span>
+              </label>
+            </div>
+            
+            <div class="form-group full-width">
+              <button id="addResumeBtn" class="btn btn-success">➕ Add Resume</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resumes List -->
+        <div class="resumes-list">
+          <h4>📚 Your Resumes</h4>
+          <div id="resumesList" class="resumes-container">
+            <p class="empty-state">No resumes added yet. Add your first resume above.</p>
           </div>
         </div>
       </div>
