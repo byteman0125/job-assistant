@@ -2192,6 +2192,7 @@ document.getElementById('clearProfileBtn').addEventListener('click', clearProfil
    ======================================== */
 
 let selectedNewResumeFile = null;
+let tempResumeExperiences = []; // Temporary storage for experiences before saving resume
 
 // Browse for new resume file
 document.getElementById('browseNewResumeBtn').addEventListener('click', async () => {
@@ -2211,6 +2212,76 @@ document.getElementById('browseNewResumeBtn').addEventListener('click', async ()
     console.error('Error browsing for resume:', error);
   }
 });
+
+// Add experience to temporary list (before saving resume)
+document.getElementById('addExpToNewResumeBtn').addEventListener('click', () => {
+  const company = document.getElementById('newExpCompany').value.trim();
+  const role = document.getElementById('newExpRole').value.trim();
+  const period = document.getElementById('newExpPeriod').value.trim();
+  const field = document.getElementById('newExpField').value.trim();
+  const description = document.getElementById('newExpDescription').value.trim();
+  
+  if (!company || !role) {
+    showNotification('⚠️ Please enter company and role', 'warning');
+    return;
+  }
+  
+  // Add to temporary array
+  tempResumeExperiences.push({
+    company,
+    role,
+    period: period || 'N/A',
+    field: field || 'N/A',
+    description
+  });
+  
+  // Clear form
+  document.getElementById('newExpCompany').value = '';
+  document.getElementById('newExpRole').value = '';
+  document.getElementById('newExpPeriod').value = '';
+  document.getElementById('newExpField').value = '';
+  document.getElementById('newExpDescription').value = '';
+  
+  // Render temporary list
+  renderTempExperiences();
+  
+  showNotification('✅ Experience added! (will be saved with resume)', 'success');
+});
+
+// Render temporary experiences
+function renderTempExperiences() {
+  const listEl = document.getElementById('newResumeExpList');
+  
+  if (tempResumeExperiences.length === 0) {
+    listEl.innerHTML = '';
+    return;
+  }
+  
+  listEl.innerHTML = `
+    <div style="margin-bottom: 10px; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 6px;">
+      <strong style="color: #4CAF50; font-size: 13px;">📋 ${tempResumeExperiences.length} Experience${tempResumeExperiences.length !== 1 ? 's' : ''} Added</strong>
+    </div>
+  ` + tempResumeExperiences.map((exp, index) => `
+    <div class="temp-exp-card">
+      <div class="temp-exp-header">
+        <div>
+          <div class="temp-exp-title">${exp.role}</div>
+          <div class="temp-exp-company">${exp.company}</div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="removeTempExp(${index})">🗑️</button>
+      </div>
+      <div class="temp-exp-period">📅 ${exp.period}</div>
+      <div class="temp-exp-field">🏢 ${exp.field}</div>
+      ${exp.description ? `<div class="temp-exp-description">${exp.description}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// Remove temporary experience
+window.removeTempExp = function(index) {
+  tempResumeExperiences.splice(index, 1);
+  renderTempExperiences();
+};
 
 // Add new resume
 document.getElementById('addResumeBtn').addEventListener('click', async () => {
@@ -2244,20 +2315,22 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
       file_path: selectedNewResumeFile,
       tech_stack: techStack,
       description: description || null,
-      work_experiences_json: JSON.stringify([]), // Empty array initially
+      work_experiences_json: JSON.stringify(tempResumeExperiences), // Save temp experiences
       is_primary: isPrimary ? 1 : 0
     });
     
     if (result.success) {
       showNotification('✅ Resume added successfully!', 'success');
       
-      // Clear form
+      // Clear form and temp experiences
       document.getElementById('newResumeLabel').value = '';
       document.getElementById('newResumeTechStack').value = '';
       document.getElementById('newResumeFilePath').value = '';
       document.getElementById('newResumeDescription').value = '';
       document.getElementById('newResumeIsPrimary').checked = false;
       selectedNewResumeFile = null;
+      tempResumeExperiences = [];
+      renderTempExperiences();
       
       // Reload resumes list
       await loadResumes();
@@ -2334,9 +2407,15 @@ function loadResumeExpPreview(resumeId, expJson) {
     
     if (experiences.length > 0) {
       previewEl.innerHTML = `
-        <div class="resume-info-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #3d3d3d;">
-          <strong>💼 Experience:</strong>
-          <span>${experiences.length} position${experiences.length !== 1 ? 's' : ''}</span>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #3d3d3d;">
+          <strong style="color: #4CAF50; font-size: 13px; display: block; margin-bottom: 8px;">💼 Work Experience (${experiences.length})</strong>
+          ${experiences.map(exp => `
+            <div style="margin-bottom: 8px; padding: 8px; background: #252525; border-radius: 4px;">
+              <div style="font-size: 13px; font-weight: 600; color: #e0e0e0;">${exp.role}</div>
+              <div style="font-size: 12px; color: #aaa;">${exp.company} • ${exp.period}</div>
+              ${exp.field !== 'N/A' ? `<div style="font-size: 11px; color: #66BB6A; margin-top: 3px;">🏢 ${exp.field}</div>` : ''}
+            </div>
+          `).join('')}
         </div>
       `;
     }

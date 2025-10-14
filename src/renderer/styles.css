@@ -1199,6 +1199,70 @@ body {
   margin-bottom: 20px;
 }
 
+.new-resume-exp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.temp-exp-card {
+  background: #252525;
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  padding: 12px;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.temp-exp-card:hover {
+  border-color: #4CAF50;
+  transform: translateX(2px);
+}
+
+.temp-exp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.temp-exp-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4CAF50;
+}
+
+.temp-exp-company {
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+
+.temp-exp-period {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.temp-exp-field {
+  font-size: 12px;
+  color: #66BB6A;
+  background: rgba(76, 175, 80, 0.1);
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.temp-exp-description {
+  font-size: 13px;
+  color: #ccc;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #3d3d3d;
+}
+
 .resume-experiences-list h4 {
   color: #4CAF50;
   font-size: 15px;
