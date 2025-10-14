@@ -455,7 +455,7 @@ function setupEventListeners() {
   // ChatGPT
   refreshChatGPT.addEventListener('click', () => {
     chatgptView.reload();
-    showNotification('ChatGPT refreshed', 'success');
+    // Removed toast - less intrusive
   });
 
   // Listen for refresh requests from main process
@@ -468,7 +468,7 @@ function setupEventListeners() {
   ipcRenderer.on('refresh-chatgpt', () => {
     console.log('🔄 ChatGPT failed - Auto-refreshing...');
     chatgptView.reload();
-    showNotification('🔄 ChatGPT refreshed automatically', 'info');
+    // Removed toast - auto-refresh is transparent
   });
   
   // Handle ChatGPT verification needed
