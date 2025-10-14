@@ -2196,7 +2196,9 @@ let tempResumeExperiences = []; // Temporary storage for experiences before savi
 
 // Browse for new resume file
 document.getElementById('browseNewResumeBtn').addEventListener('click', async () => {
+  console.log('Browse button clicked');
   try {
+    console.log('Calling dialog:openFile...');
     const result = await ipcRenderer.invoke('dialog:openFile', {
       filters: [
         { name: 'Documents', extensions: ['pdf', 'doc', 'docx'] }
@@ -2204,12 +2206,19 @@ document.getElementById('browseNewResumeBtn').addEventListener('click', async ()
       properties: ['openFile']
     });
     
+    console.log('Dialog result:', result);
+    
     if (result && !result.canceled && result.filePath) {
       selectedNewResumeFile = result.filePath;
       document.getElementById('newResumeFilePath').value = result.fileName || result.filePath;
+      console.log('File selected:', selectedNewResumeFile);
+      showNotification('✅ Resume file selected: ' + result.fileName, 'success');
+    } else {
+      console.log('File selection canceled or failed');
     }
   } catch (error) {
     console.error('Error browsing for resume:', error);
+    showNotification('❌ Error opening file dialog: ' + error.message, 'error');
   }
 });
 
