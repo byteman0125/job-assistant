@@ -67,14 +67,40 @@ class HimalayasScraper extends BaseScraper {
           const finalUrl = this.window.webContents.getURL();
 
           // ALWAYS try GPT extraction first
+          let gptData = null;
           
           if (this.gptExtractor) {
             console.log(`${this.platform}: 🤖 Using ChatGPT to extract job data...`);
-            const gptData = await this.extractWithGPT(finalUrl);
+            gptData = await this.extractWithGPT(finalUrl);
             if (gptData) {
               company = gptData.company;
               title = gptData.title;
               console.log(`${this.platform}: ✅ GPT extracted: ${company} - ${title}`);
+              
+              // Check if it's a software job
+              if (gptData.isSoftwareJob === false) {
+                console.log(`${this.platform}: ⚠️ Skipping - Not a software/tech job`);
+                
+                // Save skipped job to database for audit trail
+                this.saveJob({
+                  company,
+                  title,
+                  url: finalUrl,
+                  is_remote: true,
+                  is_startup: true,
+                  salary: 'Skipped: Not software/tech job',
+                  location: 'United States'
+                });
+                
+                // Mark as applied by bot
+                const jobs = this.db.getAllJobs();
+                const savedJob = jobs.find(j => j.url === finalUrl);
+                if (savedJob) {
+                  this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
+                }
+                
+                continue; // Skip to next job
+              }
             }
           }
           
@@ -85,15 +111,25 @@ class HimalayasScraper extends BaseScraper {
             title = await this.extractText(actions.titleSelector) || 'Unknown Title';
           }
 
-          // Save job
-          const saved = this.saveJob({
+          // Save job (only if it passed the software check)
+          const jobData = {
             company,
             title,
             url: finalUrl,
             is_remote: true,
             is_startup: true, // Himalayas is startup-focused
             location: 'United States'
-          });
+          };
+          
+          // Include GPT data if available
+          if (gptData) {
+            jobData.salary = gptData.salary;
+            jobData.tech_stack = gptData.techStack;
+            jobData.job_type = gptData.jobType;
+            jobData.industry = gptData.industry;
+          }
+          
+          const saved = this.saveJob(jobData);
 
           if (saved) {
             newJobsCount++;

@@ -148,7 +148,14 @@ STEP 1: Check if this is a verification/bot check page
 - If YES → Set is_verification_page: true and skip other fields
 - If NO → Continue to step 2
 
-STEP 2: Extract job information (ONLY if not verification page)
+STEP 2: Check if this is a SOFTWARE/TECH job
+- Is this a software development, programming, engineering, or technical position?
+- Software jobs include: Developer, Engineer, Programmer, Data Scientist, DevOps, QA, Designer (UI/UX), Product Manager (tech), etc.
+- NON-software jobs include: AI Trainer, Content Writer, Volunteer Coordinator, Civil Engineer (non-software), Customer Service, Sales, Marketing (non-tech), Administrative, HR, Finance, Operations, etc.
+- If NOT a software/tech job → Set is_software_job: false and skip to return
+- If YES → Set is_software_job: true and continue to step 3
+
+STEP 3: Extract job information (ONLY if software job)
 1. company - Company name
 2. title - Job title
 3. salary - Salary range or "Not specified"
@@ -187,6 +194,7 @@ STEP 2: Extract job information (ONLY if not verification page)
    - "Other" (if none match)
 
 CRITICAL:
+- Only mark is_software_job: true if it's a genuine software/tech position requiring programming/technical skills
 - Only mark as "Fully Remote" if explicitly stated
 - If mentions office/hybrid/on-site → work_type is NOT "Fully Remote"
 - Classify job_type based on PRIMARY responsibilities (not just requirements)
@@ -195,6 +203,7 @@ CRITICAL:
 Return ONLY valid JSON:
 {
   "is_verification_page": true/false,
+  "is_software_job": true/false,
   "company": "...",
   "title": "...",
   "salary": "...",
@@ -523,6 +532,7 @@ Return ONLY valid JSON:
       
       return {
         isVerificationPage: data.is_verification_page === true || data.is_verification_page === 'true',
+        isSoftwareJob: data.is_software_job === true || data.is_software_job === 'true',
         company: data.company || 'Unknown',
         title: data.title || 'Unknown',
         salary: data.salary,

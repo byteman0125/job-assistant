@@ -1313,7 +1313,10 @@ class JobrightScraper extends BaseScraper {
             // Check if job should be filtered out
             let shouldSkip = false;
             
-            if (gptResult.isOnsite || gptResult.isHybrid) {
+            if (gptResult.isSoftwareJob === false) {
+              console.log(`${this.platform}: ⚠️ Skipping - Not a software/tech job`);
+              shouldSkip = true;
+            } else if (gptResult.isOnsite || gptResult.isHybrid) {
               console.log(`${this.platform}: ⚠️ Skipping - Job is onsite/hybrid`);
               shouldSkip = true;
             } else if (gptResult.platform && ['indeed', 'linkedin', 'dice'].includes(gptResult.platform.toLowerCase())) {
@@ -1335,6 +1338,19 @@ class JobrightScraper extends BaseScraper {
               // FAST METHOD: Click "Not Interested" button to remove card
               console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
               
+              // Determine skip reason
+              let skipReason = 'Filtered';
+              if (gptResult.isSoftwareJob === false) {
+                skipReason = 'Not software/tech job';
+              } else if (gptResult.isOnsite || gptResult.isHybrid) {
+                skipReason = gptResult.isOnsite ? 'Onsite' : 'Hybrid';
+              } else if (gptResult.platform && ['indeed', 'linkedin', 'dice'].includes(gptResult.platform.toLowerCase())) {
+                skipReason = `Blocked: ${gptResult.platform}`;
+              } else {
+                // Must be salary-based skip
+                skipReason = 'Salary below minimum';
+              }
+              
               // Save job to database as "applied by Bot"
               try {
                 const skippedJob = {
@@ -1343,7 +1359,7 @@ class JobrightScraper extends BaseScraper {
                   url: finalJobUrl,
                   is_remote: gptResult.isRemote,
                   is_startup: gptResult.isStartup,
-                  salary: gptResult.salary,
+                  salary: `Skipped: ${skipReason}`,
                   tech_stack: gptResult.techStack,
                   location: gptResult.location
                 };
@@ -1355,7 +1371,7 @@ class JobrightScraper extends BaseScraper {
                   const savedJob = jobs.find(j => j.url === finalJobUrl);
                   if (savedJob) {
                     this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
-                    console.log(`${this.platform}: 💾 Saved and marked as applied by Bot`);
+                    console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (Reason: ${skipReason})`);
                   }
                 }
               } catch (saveErr) {
