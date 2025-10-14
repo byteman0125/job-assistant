@@ -307,8 +307,8 @@ class JobrightScraper extends BaseScraper {
         return newJobsCount;
       }
 
-      // Process each job card - STOP if we find a job older than 7 days
-      let foundOldJob = false;
+      // Process each job card - SKIP old jobs but keep checking all jobs in the list
+      let oldJobsCount = 0;
       
       for (let i = 0; i < jobCards.length; i++) {
         if (!this.isRunning) break;
@@ -322,12 +322,12 @@ class JobrightScraper extends BaseScraper {
         // CHECK: Is this job older than 7 days?
         const isOld = this.isJobOlderThanOneDay(jobCard.postedTime);
         if (isOld) {
-          console.log(`${this.platform}: 🛑 🛑 🛑 FOUND OLD JOB 🛑 🛑 🛑`);
+          console.log(`${this.platform}: ⏭️ SKIPPING OLD JOB (> 7 days old)`);
           console.log(`${this.platform}: Job: "${jobCard.title}"`);
           console.log(`${this.platform}: Posted: ${jobCard.postedTime}`);
-          console.log(`${this.platform}: ✅ STOPPING - Reached jobs older than 7 days`);
-          foundOldJob = true;
-          break;
+          console.log(`${this.platform}: ⏩ Continuing to check other jobs in the list...`);
+          oldJobsCount++;
+          continue; // Skip this old job but continue checking others
         }
         
         console.log(`${this.platform}: ✅ Job is fresh (≤ 7 days old) - Processing...`);
@@ -1580,10 +1580,13 @@ class JobrightScraper extends BaseScraper {
         }
         }
 
-        // After processing batch: Check if we should continue or stop
+        // After processing batch: Show statistics
         console.log(`\n${this.platform}: ═══════════════════════════════════════════`);
         console.log(`${this.platform}: 📊 BATCH ${batchNumber} COMPLETE`);
         console.log(`${this.platform}: ═══════════════════════════════════════════`);
+        console.log(`${this.platform}: ✅ Total jobs processed: ${jobCards.length}`);
+        console.log(`${this.platform}: ⏭️ Old jobs skipped (> 7 days): ${oldJobsCount}`);
+        console.log(`${this.platform}: 💼 New jobs found in batch: ${newJobsCount}`);
         
         // Memory cleanup: Check for orphaned pages
         try {
@@ -1611,15 +1614,7 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: ⚠️ Memory cleanup warning: ${cleanupErr.message}`);
         }
         
-        if (foundOldJob) {
-          console.log(`${this.platform}: ✅ STOPPING - Found jobs older than 7 days`);
-          console.log(`${this.platform}: Total new jobs found: ${newJobsCount}`);
-          continueScraping = false;
-          break;
-        }
-        
-        // No old job found - KEEP SCROLLING AND LOADING MORE
-        console.log(`${this.platform}: ℹ️ All jobs in this batch are fresh (≤ 7 days)`);
+        // KEEP SCROLLING AND LOADING MORE (now checking ALL jobs regardless of age)
         console.log(`${this.platform}: 🔄 Continuous scraping - scrolling for more jobs...`);
         
         // Scroll multiple times to ensure we load more jobs
