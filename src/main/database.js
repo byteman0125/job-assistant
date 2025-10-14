@@ -157,11 +157,10 @@ class JobDatabase {
       this.db.exec(`ALTER TABLE profile ADD COLUMN min_salary_hourly INTEGER`);
     } catch (e) { /* Column already exists */ }
 
-    // Work Experience table
+    // Work Experience table (kept for profile purposes, not linked to resumes)
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS work_experience (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        resume_id INTEGER,
         company TEXT NOT NULL,
         job_title TEXT NOT NULL,
         location TEXT,
@@ -170,17 +169,9 @@ class JobDatabase {
         is_current BOOLEAN DEFAULT 0,
         description TEXT,
         order_index INTEGER DEFAULT 0,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        FOREIGN KEY (resume_id) REFERENCES resumes(id) ON DELETE CASCADE
+        created_at INTEGER DEFAULT (strftime('%s', 'now'))
       )
     `);
-    
-    // Add resume_id column to existing work_experience table
-    try {
-      this.db.exec(`ALTER TABLE work_experience ADD COLUMN resume_id INTEGER`);
-    } catch (err) {
-      // Column already exists, ignore
-    }
 
     // Education table
     this.db.exec(`
@@ -627,24 +618,19 @@ class JobDatabase {
   }
 
   // ========================================
-  // Work Experience Methods
+  // Work Experience Methods (for profile only, not resume-specific)
   // ========================================
   
   getAllWorkExperience() {
     return this.db.prepare('SELECT * FROM work_experience ORDER BY order_index ASC, created_at DESC').all();
   }
-  
-  getWorkExperienceByResume(resumeId) {
-    return this.db.prepare('SELECT * FROM work_experience WHERE resume_id = ? ORDER BY order_index ASC, created_at DESC').all(resumeId);
-  }
 
   saveWorkExperience(expData) {
     const stmt = this.db.prepare(`
-      INSERT INTO work_experience (resume_id, company, job_title, location, start_date, end_date, is_current, description, order_index)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO work_experience (company, job_title, location, start_date, end_date, is_current, description, order_index)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
-      expData.resume_id || null,
       expData.company,
       expData.job_title,
       expData.location || null,
@@ -660,12 +646,11 @@ class JobDatabase {
   updateWorkExperience(id, expData) {
     const stmt = this.db.prepare(`
       UPDATE work_experience 
-      SET resume_id = ?, company = ?, job_title = ?, location = ?, start_date = ?, end_date = ?, 
+      SET company = ?, job_title = ?, location = ?, start_date = ?, end_date = ?, 
           is_current = ?, description = ?, order_index = ?
       WHERE id = ?
     `);
     stmt.run(
-      expData.resume_id || null,
       expData.company,
       expData.job_title,
       expData.location || null,

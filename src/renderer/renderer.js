@@ -1913,14 +1913,9 @@ function fillFormWithParsedData(data) {
 
 let workExperiences = [];
 
-async function loadWorkExperience(resumeId = null) {
+async function loadWorkExperience() {
   try {
-    let result;
-    if (resumeId) {
-      result = await ipcRenderer.invoke('get-work-experience-by-resume', resumeId);
-    } else {
-      result = await ipcRenderer.invoke('get-all-work-experience');
-    }
+    const result = await ipcRenderer.invoke('get-all-work-experience');
     if (result.success) {
       workExperiences = result.data || [];
       renderWorkExperience();
@@ -1978,22 +1973,9 @@ async function addWorkExperienceCard(data = null) {
   if (!expData) return;
   
   try {
-    // Add resume_id if we're filtering by resume
-    const addExpBtn = document.getElementById('addWorkExperienceBtn');
-    const resumeId = addExpBtn?.getAttribute('data-resume-id');
-    
-    if (resumeId) {
-      expData.resume_id = parseInt(resumeId);
-    }
-    
     const result = await ipcRenderer.invoke('save-work-experience', expData);
     if (result.success) {
-      // Reload filtered experiences if we have a resume filter
-      if (window.currentResumeFilter) {
-        await loadWorkExperience(window.currentResumeFilter);
-      } else {
-        await loadWorkExperience();
-      }
+      await loadWorkExperience();
     }
   } catch (error) {
     console.error('Error saving work experience:', error);
@@ -2306,7 +2288,6 @@ async function loadResumes() {
             ${resume.is_primary ? '<span class="primary-badge">★ Primary</span>' : ''}
           </div>
           <div class="resume-card-actions">
-            <button class="btn btn-secondary btn-sm" onclick="manageResumeExperiences(${resume.id}, '${resume.label.replace(/'/g, "\\'")}')">💼 Work Experience</button>
             ${!resume.is_primary ? `<button class="btn btn-secondary btn-sm" onclick="setPrimaryResume(${resume.id})">Set as Primary</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteResume(${resume.id})">🗑️ Delete</button>
           </div>
@@ -2325,15 +2306,9 @@ async function loadResumes() {
             </div>
           </div>
           ${resume.description ? `<div class="resume-description">"${resume.description}"</div>` : ''}
-          <div id="resume-experiences-${resume.id}" class="resume-experiences-preview"></div>
         </div>
       </div>
     `).join('');
-    
-    // Load work experience counts for each resume
-    for (const resume of resumes) {
-      loadResumeExperiencesPreview(resume.id);
-    }
     
   } catch (error) {
     console.error('Error loading resumes:', error);
@@ -2368,7 +2343,7 @@ window.setPrimaryResume = async function(resumeId) {
 
 // Delete resume
 window.deleteResume = async function(resumeId) {
-  if (!confirm('Are you sure you want to delete this resume? This will also delete all associated work experiences.')) return;
+  if (!confirm('Are you sure you want to delete this resume?')) return;
   
   try {
     const result = await ipcRenderer.invoke('delete-resume', resumeId);
@@ -2384,53 +2359,6 @@ window.deleteResume = async function(resumeId) {
     showNotification('❌ Failed to delete resume', 'error');
   }
 };
-
-// Load resume experiences preview (count only)
-async function loadResumeExperiencesPreview(resumeId) {
-  try {
-    const result = await ipcRenderer.invoke('get-work-experience-by-resume', resumeId);
-    const experiences = result.data || [];
-    
-    const previewEl = document.getElementById(`resume-experiences-${resumeId}`);
-    if (previewEl && experiences.length > 0) {
-      previewEl.innerHTML = `
-        <div class="resume-info-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #3d3d3d;">
-          <strong>Work Experience:</strong>
-          <span>${experiences.length} position${experiences.length !== 1 ? 's' : ''}</span>
-        </div>
-      `;
-    }
-  } catch (error) {
-    console.error('Error loading resume experiences preview:', error);
-  }
-}
-
-// Manage resume experiences - Switch to Step 4 with filter
-window.manageResumeExperiences = function(resumeId, resumeLabel) {
-  // Store the current resume context
-  window.currentResumeFilter = resumeId;
-  window.currentResumeLabel = resumeLabel;
-  
-  // Switch to Step 4 (Work Experience)
-  goToStep(4);
-  
-  // Show notification
-  showNotification(`💼 Managing work experiences for: ${resumeLabel}`, 'info');
-  
-  // Filter work experiences by resume
-  filterWorkExperienceByResume(resumeId);
-};
-
-// Filter work experience by resume
-async function filterWorkExperienceByResume(resumeId) {
-  await loadWorkExperience(resumeId);
-  
-  // Update the work experience form to include resume_id
-  const addExpBtn = document.getElementById('addWorkExperienceBtn');
-  if (addExpBtn) {
-    addExpBtn.setAttribute('data-resume-id', resumeId);
-  }
-}
 
 // Load resumes when profile tab is opened
 document.querySelector('[data-tab="profile"]').addEventListener('click', () => {

@@ -468,15 +468,6 @@ ipcMain.handle('get-all-work-experience', async () => {
     return { success: true, data: experiences };
   } catch (error) {
     console.error('Error getting work experience:', error);
-  }
-});
-
-ipcMain.handle('get-work-experience-by-resume', async (event, resumeId) => {
-  try {
-    const experiences = db.getWorkExperienceByResume(resumeId);
-    return { success: true, data: experiences };
-  } catch (error) {
-    console.error('Error getting work experience by resume:', error);
     return { success: false, error: error.message };
   }
 });
