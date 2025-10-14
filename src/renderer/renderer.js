@@ -2217,6 +2217,7 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
   const label = document.getElementById('newResumeLabel').value.trim();
   const techStack = document.getElementById('newResumeTechStack').value.trim();
   const description = document.getElementById('newResumeDescription').value.trim();
+  const workExperience = document.getElementById('newResumeWorkExperience').value.trim();
   const isPrimary = document.getElementById('newResumeIsPrimary').checked;
   
   // Validation
@@ -2244,6 +2245,7 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
       file_path: selectedNewResumeFile,
       tech_stack: techStack,
       description: description || null,
+      work_experience: workExperience || null,
       is_primary: isPrimary ? 1 : 0
     });
     
@@ -2255,6 +2257,7 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
       document.getElementById('newResumeTechStack').value = '';
       document.getElementById('newResumeFilePath').value = '';
       document.getElementById('newResumeDescription').value = '';
+      document.getElementById('newResumeWorkExperience').value = '';
       document.getElementById('newResumeIsPrimary').checked = false;
       selectedNewResumeFile = null;
       
@@ -2306,6 +2309,12 @@ async function loadResumes() {
             </div>
           </div>
           ${resume.description ? `<div class="resume-description">"${resume.description}"</div>` : ''}
+          ${resume.work_experience ? `
+            <div class="resume-work-experience">
+              <strong>💼 Work Experience:</strong>
+              <pre>${resume.work_experience}</pre>
+            </div>
+          ` : ''}
         </div>
       </div>
     `).join('');
