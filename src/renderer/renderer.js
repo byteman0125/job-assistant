@@ -2287,7 +2287,6 @@ window.removeTempExp = function(index) {
 document.getElementById('addResumeBtn').addEventListener('click', async () => {
   const label = document.getElementById('newResumeLabel').value.trim();
   const techStack = document.getElementById('newResumeTechStack').value.trim();
-  const description = document.getElementById('newResumeDescription').value.trim();
   const isPrimary = document.getElementById('newResumeIsPrimary').checked;
   
   // Validation
@@ -2314,7 +2313,7 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
       file_name: fileName,
       file_path: selectedNewResumeFile,
       tech_stack: techStack,
-      description: description || null,
+      description: null,
       work_experiences_json: JSON.stringify(tempResumeExperiences), // Save temp experiences
       is_primary: isPrimary ? 1 : 0
     });
@@ -2326,7 +2325,6 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
       document.getElementById('newResumeLabel').value = '';
       document.getElementById('newResumeTechStack').value = '';
       document.getElementById('newResumeFilePath').value = '';
-      document.getElementById('newResumeDescription').value = '';
       document.getElementById('newResumeIsPrimary').checked = false;
       selectedNewResumeFile = null;
       tempResumeExperiences = [];
