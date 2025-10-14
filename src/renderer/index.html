@@ -20,36 +20,48 @@
       </div>
     </div>
     
-    <!-- Content Wrapper (Main + Sidebar) -->
+    <!-- Content Wrapper (Sidebar + Main) -->
     <div class="content-wrapper">
-      <!-- Main Content Area -->
-      <div class="main-content">
-      <!-- Top Bar -->
-      <div class="top-bar">
-        <h1>🔍 Job Searcher</h1>
-        <div class="controls">
-          <button id="startBtn" class="btn btn-primary">Start Scraping</button>
-          <button id="stopBtn" class="btn btn-danger" disabled>Stop Scraping</button>
-          <span id="status" class="status">● Idle</span>
-          <span id="todayCount" class="badge">0 jobs today</span>
+      <!-- Left Navigation Sidebar -->
+      <div class="left-nav-sidebar">
+        <div class="nav-tabs-vertical">
+          <button class="tab-btn-vertical active" data-tab="scraping">
+            <span class="tab-icon">🔍</span>
+            <span class="tab-label">Scraping</span>
+          </button>
+          <button class="tab-btn-vertical" data-tab="jobs" id="jobsTabBtn">
+            <span class="tab-icon">📋</span>
+            <span class="tab-label">Jobs</span>
+            <span id="jobsTabCount" class="tab-count-vertical">0</span>
+          </button>
+          <button class="tab-btn-vertical" data-tab="cookies">
+            <span class="tab-icon">🍪</span>
+            <span class="tab-label">Cookies</span>
+          </button>
+          <button class="tab-btn-vertical" data-tab="settings">
+            <span class="tab-icon">⚙️</span>
+            <span class="tab-label">Settings</span>
+          </button>
         </div>
       </div>
 
-      <!-- Navigation Tabs -->
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="scraping">🔍 Scraping</button>
-        <button class="tab-btn" data-tab="jobs" id="jobsTabBtn">📋 Jobs <span id="jobsTabCount" class="tab-count">0</span></button>
-        <button class="tab-btn" data-tab="cookies">🍪 Cookies</button>
-        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
-      </div>
-
+      <!-- Main Content Area -->
+      <div class="main-content">
       <!-- Tab Content -->
       <div class="tab-content">
         <!-- Scraping Tab - NOW FIRST/DEFAULT -->
         <div id="scraping-tab" class="tab-pane active">
           <div class="scraping-viewer">
             <div class="scraping-header">
-              <h2>🔍 Live Scraping View</h2>
+              <div class="scraping-title-section">
+                <h2>🔍 Live Scraping View</h2>
+                <span id="status" class="status">● Idle</span>
+              </div>
+              <div class="scraping-controls">
+                <span id="todayCount" class="badge">0 jobs today</span>
+                <button id="startBtn" class="btn btn-primary">Start Scraping</button>
+                <button id="stopBtn" class="btn btn-danger" disabled>Stop Scraping</button>
+              </div>
             </div>
             
             <!-- Live Status Display -->
@@ -74,8 +86,21 @@
               </div>
             </div>
             
-            <div class="webview-container-full">
-              <webview id="scrapingView" partition="persist:scraping" src="about:blank" allowpopups useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" style="width: 100%; height: 100%; border: 2px solid #4CAF50; border-radius: 4px; background: #1e1e1e;"></webview>
+            <!-- Split View: Scraping + ChatGPT -->
+            <div class="scraping-split-view">
+              <!-- Left: Scraping Webview -->
+              <div class="webview-container-split">
+                <webview id="scrapingView" partition="persist:scraping" src="about:blank" allowpopups useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" style="width: 100%; height: 100%; border: 2px solid #4CAF50; border-radius: 4px; background: #1e1e1e;"></webview>
+              </div>
+              
+              <!-- Right: ChatGPT Assistant -->
+              <div class="chatgpt-panel">
+                <div class="chatgpt-panel-header">
+                  <h3>💬 ChatGPT Assistant</h3>
+                  <button id="refreshChatGPT" class="btn-icon" title="Refresh ChatGPT">🔄</button>
+                </div>
+                <webview id="chatgptView" src="https://chatgpt.com" partition="persist:chatgpt" useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" style="width: 100%; height: calc(100% - 50px);"></webview>
+              </div>
             </div>
           </div>
         </div>
@@ -99,6 +124,17 @@
               <option value="all">All Jobs</option>
               <option value="applied">Applied Only</option>
             </select>
+            <select id="appliedByFilter" class="filter-select" style="display: none;">
+              <option value="">Applied By: All</option>
+              <option value="User">User</option>
+              <option value="Bot">Bot</option>
+              <option value="None">None</option>
+            </select>
+            <div class="date-picker-button" id="datePickerContainer" style="display: none;">
+              <input type="date" id="appliedDate" class="date-input-hidden">
+              <button id="datePickerBtn" class="btn-date-picker" title="Filter by Applied Date">📅</button>
+              <button id="clearDateBtn" class="btn-clear-date-icon" title="Clear Date" style="display: none;">✕</button>
+            </div>
             <button id="refreshBtn" class="btn btn-secondary">🔄 Refresh</button>
           </div>
           
@@ -120,12 +156,13 @@
                   <th>Company</th>
                   <th>Title</th>
                   <th>Applied</th>
+                  <th>Applied By</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="jobsTableBody">
                 <tr>
-                  <td colspan="5" class="no-data">No jobs found. Start scraping to find jobs!</td>
+                  <td colspan="6" class="no-data">No jobs found. Start scraping to find jobs!</td>
                 </tr>
               </tbody>
             </table>
@@ -187,36 +224,9 @@
             <!-- Job Platforms -->
             <div class="settings-section">
               <h3>📍 Job Platforms</h3>
-              <p class="help-text">Select which platforms to scrape (Jobright is default)</p>
-              <div class="checkbox-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="platform-Jobright" value="Jobright" checked>
-                  <span>Jobright (AI-powered)</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="platform-Himalayas" value="Himalayas">
-                  <span>Himalayas (remote + startup)</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="platform-Jobgether" value="Jobgether">
-                  <span>Jobgether (remote-first)</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="platform-BuiltIn" value="BuiltIn">
-                  <span>BuiltIn (tech/startup)</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="platform-ZipRecruiter" value="ZipRecruiter">
-                  <span>ZipRecruiter (volume + variety)</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="platform-RemoteOK" value="RemoteOK">
-                  <span>RemoteOK (pure remote tech)</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="platform-WeWorkRemotely" value="WeWorkRemotely">
-                  <span>We Work Remotely (quality remote)</span>
-                </label>
+              <p class="help-text">Drag to reorder platforms. Scraper will follow this sequence.</p>
+              <div class="platform-list" id="platformList">
+                <!-- Platforms will be dynamically loaded here -->
               </div>
             </div>
 
@@ -272,16 +282,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- ChatGPT Sidebar -->
-    <div class="chatgpt-sidebar">
-      <div class="sidebar-header">
-        <h3>💬 ChatGPT Assistant</h3>
-        <button id="refreshChatGPT" class="btn-icon" title="Refresh ChatGPT">🔄</button>
-      </div>
-      <webview id="chatgptView" src="https://chatgpt.com" partition="persist:chatgpt" useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" style="width: 100%; height: calc(100% - 50px);"></webview>
-    </div>
     </div> <!-- End content-wrapper -->
   </div> <!-- End app-container -->
 

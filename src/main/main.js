@@ -211,10 +211,21 @@ function updateTrayBadge(count) {
 
 // Start scraping
 async function startScraping() {
-  if (isScraperRunning) return;
+  if (isScraperRunning) {
+    console.log('⚠️ Scraper is already running, ignoring duplicate start request');
+    return;
+  }
   
   isScraperRunning = true;
   updateTrayMenu();
+  
+  // Notify renderer to update UI
+  if (mainWindow) {
+    mainWindow.webContents.send('scraper-status-changed', { 
+      running: true,
+      todayCount: todayJobCount 
+    });
+  }
   
   // Load all platform cookies into scraping webview session BEFORE starting
   console.log('Loading platform cookies into scraping session...');
@@ -402,12 +413,12 @@ ipcMain.handle('delete-job', async (event, id) => {
   return db.deleteJob(id);
 });
 
-ipcMain.handle('update-job-applied-status', async (event, id, applied) => {
-  return db.updateJobAppliedStatus(id, applied);
+ipcMain.handle('update-job-applied-status', async (event, id, applied, appliedBy = 'User') => {
+  return db.updateJobAppliedStatus(id, applied, appliedBy);
 });
 
-ipcMain.handle('update-multiple-jobs-applied-status', async (event, ids, applied) => {
-  return db.updateMultipleJobsAppliedStatus(ids, applied);
+ipcMain.handle('update-multiple-jobs-applied-status', async (event, ids, applied, appliedBy = 'User') => {
+  return db.updateMultipleJobsAppliedStatus(ids, applied, appliedBy);
 });
 
 ipcMain.handle('get-jobs-by-applied-status', async (event, appliedStatus) => {

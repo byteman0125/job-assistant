@@ -37,6 +37,8 @@ class JobDatabase {
         is_startup BOOLEAN DEFAULT 0,
         location TEXT,
         applied BOOLEAN DEFAULT 0,
+        applied_by TEXT DEFAULT 'None',
+        applied_date INTEGER,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
         UNIQUE(company, title)
       )
@@ -45,6 +47,20 @@ class JobDatabase {
     // Add applied column if it doesn't exist (for existing databases)
     try {
       this.db.exec(`ALTER TABLE jobs ADD COLUMN applied BOOLEAN DEFAULT 0`);
+    } catch (err) {
+      // Column already exists, ignore
+    }
+    
+    // Add applied_by column if it doesn't exist (for existing databases)
+    try {
+      this.db.exec(`ALTER TABLE jobs ADD COLUMN applied_by TEXT DEFAULT 'None'`);
+    } catch (err) {
+      // Column already exists, ignore
+    }
+    
+    // Add applied_date column if it doesn't exist (for existing databases)
+    try {
+      this.db.exec(`ALTER TABLE jobs ADD COLUMN applied_date INTEGER`);
     } catch (err) {
       // Column already exists, ignore
     }
@@ -158,17 +174,21 @@ class JobDatabase {
     return result.changes > 0;
   }
 
-  updateJobAppliedStatus(id, applied) {
-    const stmt = this.db.prepare('UPDATE jobs SET applied = ? WHERE id = ?');
-    const result = stmt.run(applied ? 1 : 0, id);
+  updateJobAppliedStatus(id, applied, appliedBy = 'User') {
+    const appliedDate = applied ? Date.now() : null;
+    const appliedByValue = applied ? appliedBy : 'None';
+    const stmt = this.db.prepare('UPDATE jobs SET applied = ?, applied_by = ?, applied_date = ? WHERE id = ?');
+    const result = stmt.run(applied ? 1 : 0, appliedByValue, appliedDate, id);
     return result.changes > 0;
   }
 
-  updateMultipleJobsAppliedStatus(ids, applied) {
-    const stmt = this.db.prepare('UPDATE jobs SET applied = ? WHERE id = ?');
+  updateMultipleJobsAppliedStatus(ids, applied, appliedBy = 'User') {
+    const appliedDate = applied ? Date.now() : null;
+    const appliedByValue = applied ? appliedBy : 'None';
+    const stmt = this.db.prepare('UPDATE jobs SET applied = ?, applied_by = ?, applied_date = ? WHERE id = ?');
     const transaction = this.db.transaction((jobIds) => {
       for (const id of jobIds) {
-        stmt.run(applied ? 1 : 0, id);
+        stmt.run(applied ? 1 : 0, appliedByValue, appliedDate, id);
       }
     });
     transaction(ids);

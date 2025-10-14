@@ -92,6 +92,72 @@ body {
   font-size: 20px;
 }
 
+/* Left Navigation Sidebar */
+.left-nav-sidebar {
+  width: 200px;
+  background: #2d2d2d;
+  border-right: 2px solid #3d3d3d;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+}
+
+.nav-tabs-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+}
+
+.tab-btn-vertical {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 15px 15px;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  text-align: left;
+}
+
+.tab-btn-vertical:hover {
+  background: #3d3d3d;
+  color: #e0e0e0;
+}
+
+.tab-btn-vertical.active {
+  background: #3d3d3d;
+  color: #4CAF50;
+  border-left: 3px solid #4CAF50;
+}
+
+.tab-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.tab-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.tab-count-vertical {
+  display: inline-block;
+  background: #4CAF50;
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: bold;
+  min-width: 20px;
+  text-align: center;
+}
+
 .main-content {
   flex: 1;
   display: flex;
@@ -99,7 +165,7 @@ body {
   overflow: hidden;
 }
 
-/* Top Bar */
+/* OLD HORIZONTAL TABS CSS - Now using vertical sidebar
 .top-bar {
   background: #2d2d2d;
   padding: 15px 20px;
@@ -119,6 +185,7 @@ body {
   gap: 10px;
   align-items: center;
 }
+*/
 
 .status {
   padding: 6px 12px;
@@ -210,6 +277,7 @@ body {
 }
 
 /* Tabs */
+/* OLD HORIZONTAL TABS CSS - Now using vertical sidebar
 .tabs {
   display: flex;
   background: #2d2d2d;
@@ -239,6 +307,7 @@ body {
   color: #4CAF50;
   border-bottom-color: #4CAF50;
 }
+*/
 
 .tab-content {
   flex: 1;
@@ -292,6 +361,63 @@ body {
   color: #e0e0e0;
   border-radius: 4px;
   font-size: 14px;
+}
+
+/* Date Picker Button */
+.date-picker-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.date-input-hidden {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.btn-date-picker {
+  padding: 8px 12px;
+  background: #2d2d2d;
+  border: 1px solid #3d3d3d;
+  border-radius: 4px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-date-picker:hover {
+  background: #3d3d3d;
+  border-color: #4CAF50;
+  transform: scale(1.05);
+}
+
+.btn-date-picker:active {
+  transform: scale(0.95);
+}
+
+.btn-clear-date-icon {
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid #3d3d3d;
+  border-radius: 4px;
+  color: #888;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.btn-clear-date-icon:hover {
+  background: #f44336;
+  border-color: #f44336;
+  color: white;
 }
 
 /* Table */
@@ -396,10 +522,22 @@ body {
   border-bottom: 2px solid #4CAF50;
 }
 
-.scraping-header h2 {
+.scraping-title-section {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.scraping-title-section h2 {
   margin: 0;
   color: #4CAF50;
   font-size: 20px;
+}
+
+.scraping-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .total-badge {
@@ -537,6 +675,48 @@ body {
   min-height: 0;
 }
 
+/* Scraping Split View (Scraping + ChatGPT side by side) */
+.scraping-split-view {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  min-height: 0;
+  padding: 0 10px 10px 10px;
+}
+
+.webview-container-split {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.chatgpt-panel {
+  width: 450px;
+  background: #2d2d2d;
+  border: 2px solid #4CAF50;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chatgpt-panel-header {
+  padding: 12px 15px;
+  background: #3d3d3d;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 2px solid #4CAF50;
+}
+
+.chatgpt-panel-header h3 {
+  flex: 1;
+  font-size: 16px;
+  color: #4CAF50;
+  margin: 0;
+}
+
 /* Forms */
 .cookies-manager,
 .actions-manager {
@@ -652,6 +832,76 @@ body {
 
 .checkbox-label span {
   font-size: 14px;
+}
+
+/* Platform List with Drag & Drop */
+.platform-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.platform-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #2d2d2d;
+  border: 1px solid #3d3d3d;
+  border-radius: 4px;
+  cursor: grab;
+  transition: all 0.2s;
+}
+
+.platform-item:hover {
+  background: #3d3d3d;
+  border-color: #4CAF50;
+}
+
+.platform-item.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.platform-item.locked {
+  cursor: not-allowed !important;
+  opacity: 0.6;
+}
+
+.drag-handle {
+  font-size: 16px;
+  color: #888;
+  cursor: grab;
+  user-select: none;
+}
+
+.platform-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.platform-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.platform-checkbox input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.platform-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.platform-desc {
+  font-size: 12px;
+  color: #888;
 }
 
 .keyword-list, .domain-list {
@@ -849,6 +1099,7 @@ td[title]:hover {
 }
 
 /* ChatGPT Sidebar */
+/* OLD SIDEBAR CSS - Now using .chatgpt-panel inside scraping tab
 .chatgpt-sidebar {
   width: 450px;
   background: #2d2d2d;
@@ -871,6 +1122,7 @@ td[title]:hover {
   font-size: 16px;
   color: #4CAF50;
 }
+*/
 
 /* Scrollbar */
 ::-webkit-scrollbar {
@@ -964,5 +1216,38 @@ td[title]:hover {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* Applied By Badges */
+.applied-by-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  display: inline-block;
+  letter-spacing: 0.5px;
+}
+
+.applied-by-badge.user {
+  background: #2196F3;
+  color: white;
+}
+
+.applied-by-badge.bot {
+  background: #FF9800;
+  color: white;
+}
+
+.applied-by-badge.none {
+  background: #555;
+  color: #aaa;
+}
+
+/* Applied Date Column */
+.applied-date {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
 }
 

@@ -9,6 +9,11 @@ const refreshBtn = document.getElementById('refreshBtn');
 const searchInput = document.getElementById('searchInput');
 const platformFilter = document.getElementById('platformFilter');
 const appliedFilter = document.getElementById('appliedFilter');
+const appliedByFilter = document.getElementById('appliedByFilter');
+const datePickerContainer = document.getElementById('datePickerContainer');
+const appliedDate = document.getElementById('appliedDate');
+const datePickerBtn = document.getElementById('datePickerBtn');
+const clearDateBtn = document.getElementById('clearDateBtn');
 const jobsTableBody = document.getElementById('jobsTableBody');
 const selectAllBtn = document.getElementById('selectAllBtn');
 const copySelectedBtn = document.getElementById('copySelectedBtn');
@@ -62,6 +67,9 @@ const addKeywordBtn = document.getElementById('addKeywordBtn');
 const addDomainBtn = document.getElementById('addDomainBtn');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const settingsStatus = document.getElementById('settingsStatus');
+
+// Scraping state
+let isScraping = false;
 
 // Settings state
 let currentSettings = {
@@ -149,16 +157,25 @@ ipcRenderer.on('gpt-response-timeout', () => {
 
 // Listen for scraper status changes
 ipcRenderer.on('scraper-status-changed', (event, data) => {
+  console.log('📡 Scraper status changed:', data.running ? 'RUNNING' : 'STOPPED');
   if (data.running) {
+    isScraping = true;
+    lockSettings();
     startBtn.disabled = true;
     stopBtn.disabled = false;
+    stopBtn.textContent = 'Stop Scraping';
     status.textContent = '● Running';
     status.style.color = '#4CAF50';
+    console.log('✅ Stop button enabled (from status event):', !stopBtn.disabled);
   } else {
+    isScraping = false;
+    unlockSettings();
     startBtn.disabled = false;
     stopBtn.disabled = true;
+    stopBtn.textContent = 'Stop Scraping';
     status.textContent = '● Stopped';
     status.style.color = '#f44336';
+    console.log('🔴 Stop button disabled (from status event):', stopBtn.disabled);
   }
   todayCount.textContent = `${data.todayCount} jobs today`;
 });
@@ -333,7 +350,55 @@ function setupEventListeners() {
   refreshBtn.addEventListener('click', loadJobs);
   searchInput.addEventListener('input', filterJobs);
   platformFilter.addEventListener('change', filterJobs);
-  appliedFilter.addEventListener('change', () => { currentPage = 1; loadJobs(); });
+  
+  // Applied filter - show/hide additional filters
+  appliedFilter.addEventListener('change', () => {
+    const isAppliedOnly = appliedFilter.value === 'applied';
+    
+    // Show/hide Applied By filter and Date Picker only when "Applied Only" is selected
+    if (isAppliedOnly) {
+      datePickerContainer.style.display = 'flex';
+    } else {
+      appliedByFilter.style.display = 'none';
+      datePickerContainer.style.display = 'none';
+      // Reset filters when hiding them
+      appliedByFilter.value = '';
+      appliedDate.value = '';
+      clearDateBtn.style.display = 'none';
+      datePickerBtn.textContent = '📅';
+    }
+    
+    currentPage = 1;
+    loadJobs();
+  });
+  
+  appliedByFilter.addEventListener('change', filterJobs);
+  
+  // Date picker button click - open the hidden date input
+  datePickerBtn.addEventListener('click', () => {
+    appliedDate.showPicker();
+  });
+  
+  // When date is selected, show clear button and filter
+  appliedDate.addEventListener('change', () => {
+    if (appliedDate.value) {
+      clearDateBtn.style.display = 'inline-block';
+      datePickerBtn.textContent = '📅✓';
+    } else {
+      clearDateBtn.style.display = 'none';
+      datePickerBtn.textContent = '📅';
+    }
+    filterJobs();
+  });
+  
+  // Clear date button
+  clearDateBtn.addEventListener('click', () => {
+    appliedDate.value = '';
+    clearDateBtn.style.display = 'none';
+    datePickerBtn.textContent = '📅';
+    filterJobs();
+  });
+  
   selectAllBtn.addEventListener('click', toggleSelectAll);
   copySelectedBtn.addEventListener('click', copySelected);
   deleteSelectedBtn.addEventListener('click', deleteSelected);
@@ -533,7 +598,7 @@ function setupEventListeners() {
 
 // Setup Tabs
 function setupTabs() {
-  const tabBtns = document.querySelectorAll('.tab-btn');
+  const tabBtns = document.querySelectorAll('.tab-btn-vertical');
   const tabPanes = document.querySelectorAll('.tab-pane');
 
   console.log(`🔧 Setting up ${tabBtns.length} tab buttons`);
@@ -564,6 +629,10 @@ function setupTabs() {
 // Scraper Control
 async function startScraping() {
   try {
+    // Set scraping state
+    isScraping = true;
+    lockSettings();
+    
     // Reset progress bar when starting
     resetProgressBar();
     progressStartTime = Date.now();
@@ -572,8 +641,10 @@ async function startScraping() {
     if (result.success) {
       startBtn.disabled = true;
       stopBtn.disabled = false;
+      stopBtn.textContent = 'Stop Scraping';
       status.textContent = '● Running';
       status.style.color = '#4CAF50';
+      console.log('✅ Stop button enabled:', !stopBtn.disabled);
       showNotification('🚀 Scraper started! Starting with Jobright...', 'success');
       
       // Automatically switch to Scraping tab to show work
@@ -592,6 +663,10 @@ async function startScraping() {
 }
 
 async function stopScraping() {
+  // Clear scraping state
+  isScraping = false;
+  unlockSettings();
+  
   // Show immediate feedback
   status.textContent = '● Stopping...';
   status.style.color = '#ff9800';
@@ -665,7 +740,7 @@ async function loadJobs() {
 
 function displayJobs(jobs) {
   if (jobs.length === 0) {
-    jobsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No jobs found. Start scraping to find jobs!</td></tr>';
+    jobsTableBody.innerHTML = '<tr><td colspan="6" class="no-data">No jobs found. Start scraping to find jobs!</td></tr>';
     if (pageInfo) pageInfo.textContent = 'Page 0 of 0';
     if (prevPageBtn) prevPageBtn.disabled = true;
     if (nextPageBtn) nextPageBtn.disabled = true;
@@ -688,12 +763,26 @@ function displayJobs(jobs) {
 
   jobsTableBody.innerHTML = pageJobs.map((job, pageIndex) => {
     const globalIndex = startIndex + pageIndex;
+    
+    // Format applied date for tooltip
+    const appliedDate = job.applied_date 
+      ? new Date(job.applied_date).toLocaleString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      : 'Not applied';
+    
     const detailsTooltip = `Company: ${job.company}
 Title: ${job.title}
 Salary: ${job.salary || 'Not specified'}
 Tech Stack: ${job.tech_stack || 'Not specified'}
 Location: ${job.location || 'Not specified'}
 Platform: ${job.platform}
+Applied By: ${job.applied_by || 'None'}
+Applied Date: ${appliedDate}
 URL: ${job.url}`;
 
     return `
@@ -704,6 +793,9 @@ URL: ${job.url}`;
       <td>
         <input type="checkbox" class="applied-checkbox" data-job-id="${job.id}" ${job.applied ? 'checked' : ''} 
           onchange="toggleAppliedStatus(${job.id}, this.checked)">
+      </td>
+      <td>
+        <span class="applied-by-badge ${job.applied_by?.toLowerCase() || 'none'}" title="Applied: ${appliedDate}">${job.applied_by || 'None'}</span>
       </td>
       <td>
         <div class="action-btns">
@@ -727,6 +819,8 @@ URL: ${job.url}`;
 function filterJobs() {
   const searchTerm = searchInput.value.toLowerCase();
   const platform = platformFilter.value;
+  const appliedBy = appliedByFilter.value;
+  const selectedDate = appliedDate.value;
   
   const filtered = allJobs.filter(job => {
     const matchesSearch = 
@@ -735,7 +829,32 @@ function filterJobs() {
     
     const matchesPlatform = !platform || job.platform === platform;
     
-    return matchesSearch && matchesPlatform;
+    const matchesAppliedBy = !appliedBy || job.applied_by === appliedBy;
+    
+    // Date filter logic - match exact day
+    let matchesDate = true;
+    if (selectedDate && job.applied_date) {
+      // Job date is stored as timestamp (milliseconds since epoch)
+      const jobDate = new Date(job.applied_date);
+      
+      // Get the local date components from the job timestamp
+      const jobYear = jobDate.getFullYear();
+      const jobMonth = jobDate.getMonth();
+      const jobDay = jobDate.getDate();
+      
+      // Parse the selected date (format: YYYY-MM-DD) as local date
+      const [filterYear, filterMonth, filterDay] = selectedDate.split('-').map(Number);
+      
+      // Compare date components (month is 0-indexed in JS)
+      matchesDate = (jobYear === filterYear && 
+                     jobMonth === (filterMonth - 1) && 
+                     jobDay === filterDay);
+    } else if (selectedDate) {
+      // If date filter is set but job has no applied_date, exclude it
+      matchesDate = false;
+    }
+    
+    return matchesSearch && matchesPlatform && matchesAppliedBy && matchesDate;
   });
   
   currentPage = 1; // Reset to first page when filtering
@@ -758,12 +877,11 @@ window.copyJobInfo = async (jobId) => {
 };
 
 window.toggleAppliedStatus = async (jobId, applied) => {
-  const success = await ipcRenderer.invoke('update-job-applied-status', jobId, applied);
+  const success = await ipcRenderer.invoke('update-job-applied-status', jobId, applied, 'User');
   if (success) {
-    // Update local state
-    const job = allJobs.find(j => j.id === jobId);
-    if (job) job.applied = applied;
-    showNotification(applied ? 'Marked as applied' : 'Marked as not applied', 'success');
+    // Reload jobs to update the UI with new applied_by and applied_date
+    await loadJobs();
+    showNotification(applied ? 'Marked as applied by User' : 'Marked as not applied', 'success');
   }
 };
 
@@ -861,9 +979,9 @@ async function markSelectedAsApplied() {
   
   if (selectedIds.length === 0) return;
   
-  const success = await ipcRenderer.invoke('update-multiple-jobs-applied-status', selectedIds, true);
+  const success = await ipcRenderer.invoke('update-multiple-jobs-applied-status', selectedIds, true, 'User');
   if (success) {
-    showNotification(`${selectedIds.length} job(s) marked as applied`, 'success');
+    showNotification(`${selectedIds.length} job(s) marked as applied by User`, 'success');
     await loadJobs();
   }
 }
@@ -874,7 +992,7 @@ async function markSelectedAsNotApplied() {
   
   if (selectedIds.length === 0) return;
   
-  const success = await ipcRenderer.invoke('update-multiple-jobs-applied-status', selectedIds, false);
+  const success = await ipcRenderer.invoke('update-multiple-jobs-applied-status', selectedIds, false, 'User');
   if (success) {
     showNotification(`${selectedIds.length} job(s) marked as not applied`, 'success');
     await loadJobs();
@@ -959,17 +1077,149 @@ async function testCookies() {
 }
 
 // Settings Functions
+// Lock/Unlock settings during scraping
+function lockSettings() {
+  const platformList = document.getElementById('platformList');
+  const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+  const addKeywordBtn = document.getElementById('addKeywordBtn');
+  const addDomainBtn = document.getElementById('addDomainBtn');
+  
+  if (platformList) {
+    platformList.classList.add('locked');
+    platformList.querySelectorAll('.platform-item').forEach(item => {
+      item.draggable = false;
+      item.style.cursor = 'not-allowed';
+    });
+  }
+  
+  if (saveSettingsBtn) saveSettingsBtn.disabled = true;
+  if (addKeywordBtn) addKeywordBtn.disabled = true;
+  if (addDomainBtn) addDomainBtn.disabled = true;
+  
+  document.querySelectorAll('.platform-item input[type="checkbox"]').forEach(cb => cb.disabled = true);
+}
+
+function unlockSettings() {
+  const platformList = document.getElementById('platformList');
+  const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+  const addKeywordBtn = document.getElementById('addKeywordBtn');
+  const addDomainBtn = document.getElementById('addDomainBtn');
+  
+  if (platformList) {
+    platformList.classList.remove('locked');
+    platformList.querySelectorAll('.platform-item').forEach(item => {
+      item.draggable = true;
+      item.style.cursor = 'grab';
+    });
+  }
+  
+  if (saveSettingsBtn) saveSettingsBtn.disabled = false;
+  if (addKeywordBtn) addKeywordBtn.disabled = false;
+  if (addDomainBtn) addDomainBtn.disabled = false;
+  
+  document.querySelectorAll('.platform-item input[type="checkbox"]').forEach(cb => cb.disabled = false);
+}
+
+// Render platform list with drag-and-drop
+function renderPlatforms() {
+  const platformList = document.getElementById('platformList');
+  if (!platformList) return;
+  
+  const platforms = [
+    { id: 'Jobright', name: 'Jobright', desc: 'AI-powered' },
+    { id: 'Himalayas', name: 'Himalayas', desc: 'remote + startup' },
+    { id: 'Jobgether', name: 'Jobgether', desc: 'remote-first' },
+    { id: 'BuiltIn', name: 'BuiltIn', desc: 'tech/startup' },
+    { id: 'ZipRecruiter', name: 'ZipRecruiter', desc: 'volume + variety' },
+    { id: 'RemoteOK', name: 'RemoteOK', desc: 'pure remote tech' },
+    { id: 'WeWorkRemotely', name: 'We Work Remotely', desc: 'quality remote' }
+  ];
+  
+  // Sort platforms by current order
+  const orderedPlatforms = [...platforms].sort((a, b) => {
+    const indexA = currentSettings.enabled_platforms.indexOf(a.id);
+    const indexB = currentSettings.enabled_platforms.indexOf(b.id);
+    if (indexA === -1 && indexB === -1) return 0;
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
+  
+  platformList.innerHTML = orderedPlatforms.map((platform, index) => {
+    const isChecked = currentSettings.enabled_platforms.includes(platform.id);
+    return `
+      <div class="platform-item" draggable="true" data-platform="${platform.id}">
+        <span class="drag-handle">⋮⋮</span>
+        <label class="platform-checkbox">
+          <input type="checkbox" id="platform-${platform.id}" value="${platform.id}" ${isChecked ? 'checked' : ''}>
+          <span class="platform-name">${platform.name}</span>
+          <span class="platform-desc">(${platform.desc})</span>
+        </label>
+      </div>
+    `;
+  }).join('');
+  
+  // Add drag-and-drop event listeners
+  setupDragAndDrop();
+}
+
+function setupDragAndDrop() {
+  const platformList = document.getElementById('platformList');
+  if (!platformList) return;
+  
+  let draggedItem = null;
+  
+  platformList.querySelectorAll('.platform-item').forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+      if (isScraping) {
+        e.preventDefault();
+        return;
+      }
+      draggedItem = item;
+      item.classList.add('dragging');
+    });
+    
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      draggedItem = null;
+    });
+    
+    item.addEventListener('dragover', (e) => {
+      if (isScraping) return;
+      e.preventDefault();
+      const afterElement = getDragAfterElement(platformList, e.clientY);
+      if (afterElement == null) {
+        platformList.appendChild(draggedItem);
+      } else {
+        platformList.insertBefore(draggedItem, afterElement);
+      }
+    });
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.platform-item:not(.dragging)')];
+  
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
 async function loadSettings() {
   try {
     const settings = await ipcRenderer.invoke('get-settings');
     if (settings) {
       currentSettings = settings;
       
-      // Update platform checkboxes
-      const platforms = settings.enabled_platforms || ['Jobright'];
-      document.querySelectorAll('[id^="platform-"]').forEach(checkbox => {
-        checkbox.checked = platforms.includes(checkbox.value);
-      });
+      // Render platform list with drag-and-drop
+      renderPlatforms();
       
       // Update ignore keywords
       currentSettings.ignore_keywords = settings.ignore_keywords || [];
@@ -995,20 +1245,24 @@ async function loadSettings() {
 
 async function saveSettings() {
   try {
-    // Get selected platforms
-    const selectedPlatforms = [];
-    document.querySelectorAll('[id^="platform-"]').forEach(checkbox => {
-      if (checkbox.checked) {
-        selectedPlatforms.push(checkbox.value);
+    // Get platform order from DOM
+    const platformList = document.getElementById('platformList');
+    const platformItems = platformList.querySelectorAll('.platform-item');
+    const orderedPlatforms = [];
+    
+    platformItems.forEach(item => {
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      if (checkbox && checkbox.checked) {
+        orderedPlatforms.push(checkbox.value);
       }
     });
     
-    if (selectedPlatforms.length === 0) {
+    if (orderedPlatforms.length === 0) {
       showMessage(settingsStatus, 'Please select at least one platform', 'error');
       return;
     }
     
-    currentSettings.enabled_platforms = selectedPlatforms;
+    currentSettings.enabled_platforms = orderedPlatforms;
     
     // Get salary values
     const minSalaryAnnual = document.getElementById('minSalaryAnnual');
