@@ -404,6 +404,53 @@ ipcMain.handle('save-profile', async (event, profileData) => {
   }
 });
 
+// Resume handlers
+ipcMain.handle('add-resume', async (event, resumeData) => {
+  try {
+    const id = db.addResume(resumeData);
+    return { success: true, id };
+  } catch (error) {
+    console.error('Error adding resume:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-all-resumes', async () => {
+  return db.getAllResumes();
+});
+
+ipcMain.handle('get-resume-by-id', async (event, id) => {
+  return db.getResumeById(id);
+});
+
+ipcMain.handle('get-primary-resume', async () => {
+  return db.getPrimaryResume();
+});
+
+ipcMain.handle('update-resume', async (event, id, resumeData) => {
+  try {
+    db.updateResume(id, resumeData);
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating resume:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-resume', async (event, id) => {
+  try {
+    db.deleteResume(id);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting resume:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-matching-resume', async (event, jobTechStack) => {
+  return db.getMatchingResume(jobTechStack);
+});
+
 ipcMain.handle('clear-profile', async () => {
   try {
     db.clearProfile();

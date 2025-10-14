@@ -191,6 +191,21 @@ class JobDatabase {
       )
     `);
 
+    // Resumes table - Support multiple resumes with tech stack labels
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS resumes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        tech_stack TEXT,
+        description TEXT,
+        is_primary BOOLEAN DEFAULT 0,
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `);
+
     // Bug Reports table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS bug_reports (
@@ -815,6 +830,121 @@ class JobDatabase {
     `).all();
     
     return stats;
+  }
+
+  // ========================================
+  // Resume Methods
+  // ========================================
+  
+  addResume(resumeData) {
+    const stmt = this.db.prepare(`
+      INSERT INTO resumes (label, file_name, file_path, tech_stack, description, is_primary)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      resumeData.label,
+      resumeData.file_name,
+      resumeData.file_path,
+      resumeData.tech_stack || null,
+      resumeData.description || null,
+      resumeData.is_primary || 0
+    );
+    
+    // If this is marked as primary, unset other primaries
+    if (resumeData.is_primary) {
+      this.db.prepare(`
+        UPDATE resumes SET is_primary = 0 WHERE id != ?
+      `).run(result.lastInsertRowid);
+    }
+    
+    return result.lastInsertRowid;
+  }
+  
+  getAllResumes() {
+    return this.db.prepare('SELECT * FROM resumes ORDER BY is_primary DESC, created_at DESC').all();
+  }
+  
+  getResumeById(id) {
+    return this.db.prepare('SELECT * FROM resumes WHERE id = ?').get(id);
+  }
+  
+  getPrimaryResume() {
+    return this.db.prepare('SELECT * FROM resumes WHERE is_primary = 1 LIMIT 1').get();
+  }
+  
+  updateResume(id, resumeData) {
+    const stmt = this.db.prepare(`
+      UPDATE resumes SET
+        label = ?,
+        tech_stack = ?,
+        description = ?,
+        is_primary = ?,
+        updated_at = strftime('%s', 'now')
+      WHERE id = ?
+    `);
+    stmt.run(
+      resumeData.label,
+      resumeData.tech_stack || null,
+      resumeData.description || null,
+      resumeData.is_primary || 0,
+      id
+    );
+    
+    // If this is marked as primary, unset other primaries
+    if (resumeData.is_primary) {
+      this.db.prepare(`
+        UPDATE resumes SET is_primary = 0 WHERE id != ?
+      `).run(id);
+    }
+  }
+  
+  deleteResume(id) {
+    this.db.prepare('DELETE FROM resumes WHERE id = ?').run(id);
+  }
+  
+  // Get best matching resume for a job based on tech stack
+  getMatchingResume(jobTechStack) {
+    if (!jobTechStack) {
+      return this.getPrimaryResume();
+    }
+    
+    // Get all resumes and calculate match score
+    const resumes = this.getAllResumes();
+    if (resumes.length === 0) return null;
+    
+    const jobTechs = jobTechStack.toLowerCase().split(/[,\s]+/).filter(t => t.length > 0);
+    
+    let bestMatch = null;
+    let bestScore = 0;
+    
+    for (const resume of resumes) {
+      if (!resume.tech_stack) continue;
+      
+      const resumeTechs = resume.tech_stack.toLowerCase().split(/[,\s]+/).filter(t => t.length > 0);
+      
+      // Calculate match score (number of matching technologies)
+      let score = 0;
+      for (const jobTech of jobTechs) {
+        for (const resumeTech of resumeTechs) {
+          if (jobTech.includes(resumeTech) || resumeTech.includes(jobTech)) {
+            score++;
+          }
+        }
+      }
+      
+      // Boost primary resume slightly
+      if (resume.is_primary) {
+        score += 0.5;
+      }
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = resume;
+      }
+    }
+    
+    // If no match found, return primary resume
+    return bestMatch || this.getPrimaryResume();
   }
 
   close() {
