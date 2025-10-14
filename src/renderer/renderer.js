@@ -2197,11 +2197,16 @@ let tempResumeExperiences = []; // Temporary storage for experiences before savi
 
 // Setup resume event listeners (called after DOM ready)
 function setupResumeListeners() {
+  console.log('🔧 Setting up resume event listeners...');
+  
   // Browse for new resume file
   const browseBtn = document.getElementById('browseNewResumeBtn');
+  console.log('Browse button element:', browseBtn);
+  
   if (browseBtn) {
+    console.log('✅ Browse button found, attaching listener');
     browseBtn.addEventListener('click', async () => {
-      console.log('Browse button clicked');
+      console.log('🔘 Browse button clicked!');
       try {
         console.log('Calling dialog:openFile...');
         const result = await ipcRenderer.invoke('dialog:openFile', {
