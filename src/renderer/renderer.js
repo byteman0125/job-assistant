@@ -320,6 +320,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   setupTabs();
   setupDragSelection();
+  setupResumeListeners(); // Setup resume event listeners
   
   // Setup GPT prompt modal buttons
   if (copyPromptBtn) {
@@ -2194,68 +2195,76 @@ document.getElementById('clearProfileBtn').addEventListener('click', clearProfil
 let selectedNewResumeFile = null;
 let tempResumeExperiences = []; // Temporary storage for experiences before saving resume
 
-// Browse for new resume file
-document.getElementById('browseNewResumeBtn').addEventListener('click', async () => {
-  console.log('Browse button clicked');
-  try {
-    console.log('Calling dialog:openFile...');
-    const result = await ipcRenderer.invoke('dialog:openFile', {
-      filters: [
-        { name: 'Documents', extensions: ['pdf', 'doc', 'docx'] }
-      ],
-      properties: ['openFile']
+// Setup resume event listeners (called after DOM ready)
+function setupResumeListeners() {
+  // Browse for new resume file
+  const browseBtn = document.getElementById('browseNewResumeBtn');
+  if (browseBtn) {
+    browseBtn.addEventListener('click', async () => {
+      console.log('Browse button clicked');
+      try {
+        console.log('Calling dialog:openFile...');
+        const result = await ipcRenderer.invoke('dialog:openFile', {
+          filters: [
+            { name: 'Documents', extensions: ['pdf', 'doc', 'docx'] }
+          ],
+          properties: ['openFile']
+        });
+        
+        console.log('Dialog result:', result);
+        
+        if (result && !result.canceled && result.filePath) {
+          selectedNewResumeFile = result.filePath;
+          document.getElementById('newResumeFilePath').value = result.fileName || result.filePath;
+          console.log('File selected:', selectedNewResumeFile);
+          showNotification('✅ Resume file selected: ' + result.fileName, 'success');
+        } else {
+          console.log('File selection canceled or failed');
+        }
+      } catch (error) {
+        console.error('Error browsing for resume:', error);
+        showNotification('❌ Error opening file dialog: ' + error.message, 'error');
+      }
     });
-    
-    console.log('Dialog result:', result);
-    
-    if (result && !result.canceled && result.filePath) {
-      selectedNewResumeFile = result.filePath;
-      document.getElementById('newResumeFilePath').value = result.fileName || result.filePath;
-      console.log('File selected:', selectedNewResumeFile);
-      showNotification('✅ Resume file selected: ' + result.fileName, 'success');
-    } else {
-      console.log('File selection canceled or failed');
-    }
-  } catch (error) {
-    console.error('Error browsing for resume:', error);
-    showNotification('❌ Error opening file dialog: ' + error.message, 'error');
   }
-});
 
-// Add experience to temporary list (before saving resume)
-document.getElementById('addExpToNewResumeBtn').addEventListener('click', () => {
-  const company = document.getElementById('newExpCompany').value.trim();
-  const role = document.getElementById('newExpRole').value.trim();
-  const period = document.getElementById('newExpPeriod').value.trim();
-  const field = document.getElementById('newExpField').value.trim();
-  const description = document.getElementById('newExpDescription').value.trim();
-  
-  if (!company || !role) {
-    showNotification('⚠️ Please enter company and role', 'warning');
-    return;
+  // Add experience to temporary list (before saving resume)
+  const addExpBtn = document.getElementById('addExpToNewResumeBtn');
+  if (addExpBtn) {
+    addExpBtn.addEventListener('click', () => {
+      const company = document.getElementById('newExpCompany').value.trim();
+      const role = document.getElementById('newExpRole').value.trim();
+      const period = document.getElementById('newExpPeriod').value.trim();
+      const field = document.getElementById('newExpField').value.trim();
+      const description = document.getElementById('newExpDescription').value.trim();
+      
+      if (!company || !role) {
+        showNotification('⚠️ Please enter company and role', 'warning');
+        return;
+      }
+      
+      // Add to temporary array
+      tempResumeExperiences.push({
+        company,
+        role,
+        period: period || 'N/A',
+        field: field || 'N/A',
+        description
+      });
+      
+      // Clear form
+      document.getElementById('newExpCompany').value = '';
+      document.getElementById('newExpRole').value = '';
+      document.getElementById('newExpPeriod').value = '';
+      document.getElementById('newExpField').value = '';
+      document.getElementById('newExpDescription').value = '';
+      
+      // Render temporary list
+      renderTempExperiences();
+      
+      showNotification('✅ Experience added! (will be saved with resume)', 'success');
+    });
   }
-  
-  // Add to temporary array
-  tempResumeExperiences.push({
-    company,
-    role,
-    period: period || 'N/A',
-    field: field || 'N/A',
-    description
-  });
-  
-  // Clear form
-  document.getElementById('newExpCompany').value = '';
-  document.getElementById('newExpRole').value = '';
-  document.getElementById('newExpPeriod').value = '';
-  document.getElementById('newExpField').value = '';
-  document.getElementById('newExpDescription').value = '';
-  
-  // Render temporary list
-  renderTempExperiences();
-  
-  showNotification('✅ Experience added! (will be saved with resume)', 'success');
-});
 
 // Render temporary experiences
 function renderTempExperiences() {
@@ -2292,8 +2301,10 @@ window.removeTempExp = function(index) {
   renderTempExperiences();
 };
 
-// Add new resume
-document.getElementById('addResumeBtn').addEventListener('click', async () => {
+  // Add new resume button
+  const addResumeBtn = document.getElementById('addResumeBtn');
+  if (addResumeBtn) {
+    addResumeBtn.addEventListener('click', async () => {
   const label = document.getElementById('newResumeLabel').value.trim();
   const isPrimary = document.getElementById('newResumeIsPrimary').checked;
   
@@ -2368,7 +2379,60 @@ document.getElementById('addResumeBtn').addEventListener('click', async () => {
     console.error('Error adding resume:', error);
     showNotification('❌ Failed to add resume', 'error');
   }
-});
+    });
+  }
+  
+  // Handle "Currently working" checkbox in modal
+  const expIsCurrentCheckbox = document.getElementById('expIsCurrent');
+  if (expIsCurrentCheckbox) {
+    expIsCurrentCheckbox.addEventListener('change', (e) => {
+      const endDateInput = document.getElementById('expEndDate');
+      if (endDateInput) {
+        endDateInput.disabled = e.target.checked;
+        if (e.target.checked) {
+          endDateInput.value = '';
+        }
+      }
+    });
+  }
+  
+  // Add experience to resume in modal
+  const addExpToResumeBtn = document.getElementById('addExpToResumeBtn');
+  if (addExpToResumeBtn) {
+    addExpToResumeBtn.addEventListener('click', async () => {
+      const company = document.getElementById('expCompany').value.trim();
+      const position = document.getElementById('expPosition').value.trim();
+      const startDate = document.getElementById('expStartDate').value;
+      const endDate = document.getElementById('expEndDate').value;
+      const isCurrent = document.getElementById('expIsCurrent').checked;
+      const description = document.getElementById('expDescription').value.trim();
+      
+      if (!company || !position || !startDate) {
+        showNotification('⚠️ Please fill in company, position, and start date', 'warning');
+        return;
+      }
+      
+      // Add to array
+      currentResumeExperiences.push({
+        company,
+        position,
+        start_date: startDate,
+        end_date: isCurrent ? null : endDate,
+        is_current: isCurrent,
+        description
+      });
+      
+      // Save to database
+      await saveResumeExperiences();
+      
+      // Clear form and re-render
+      clearExpForm();
+      renderResumeExperiences();
+      
+      showNotification('✅ Experience added!', 'success');
+    });
+  }
+}
 
 // Load and display resumes
 async function loadResumes() {
@@ -2568,41 +2632,7 @@ function renderResumeExperiences() {
   `).join('');
 }
 
-// Add experience to resume
-document.getElementById('addExpToResumeBtn').addEventListener('click', async () => {
-  const company = document.getElementById('expCompany').value.trim();
-  const position = document.getElementById('expPosition').value.trim();
-  const startDate = document.getElementById('expStartDate').value;
-  const endDate = document.getElementById('expEndDate').value;
-  const isCurrent = document.getElementById('expIsCurrent').checked;
-  const description = document.getElementById('expDescription').value.trim();
-  
-  if (!company || !position || !startDate) {
-    showNotification('⚠️ Please fill in company, position, and start date', 'warning');
-    return;
-  }
-  
-  // Add to array
-  currentResumeExperiences.push({
-    company,
-    position,
-    start_date: startDate,
-    end_date: isCurrent ? null : endDate,
-    is_current: isCurrent,
-    description
-  });
-  
-  // Save to database
-  await saveResumeExperiences();
-  
-  // Clear form and re-render
-  clearExpForm();
-  renderResumeExperiences();
-  
-  showNotification('✅ Experience added!', 'success');
-});
-
-// Delete experience from resume
+// Delete experience from resume (modal)
 window.deleteResumeExp = async function(index) {
   if (!confirm('Delete this experience?')) return;
   
@@ -2628,14 +2658,6 @@ async function saveResumeExperiences() {
     is_primary: resume.is_primary
   });
 }
-
-// Handle "Currently working" checkbox
-document.getElementById('expIsCurrent').addEventListener('change', (e) => {
-  document.getElementById('expEndDate').disabled = e.target.checked;
-  if (e.target.checked) {
-    document.getElementById('expEndDate').value = '';
-  }
-});
 
 // Load resumes when profile tab is opened
 document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
