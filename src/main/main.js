@@ -310,7 +310,7 @@ function stopScraping() {
     scraperManager.stop();
   }
   
-  console.log('Scraper stopped');
+  // Don't log here - renderer will show a single notification
   
   // Notify renderer that scraping has stopped
   if (mainWindow) {
@@ -387,6 +387,193 @@ ipcMain.handle('save-settings', async (event, settings) => {
     db.saveSetting(key, value);
   }
   return { success: true };
+});
+
+// Profile handlers
+ipcMain.handle('get-profile', async () => {
+  return db.getProfile();
+});
+
+ipcMain.handle('save-profile', async (event, profileData) => {
+  try {
+    db.saveProfile(profileData);
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving profile:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('clear-profile', async () => {
+  try {
+    db.clearProfile();
+    return { success: true };
+  } catch (error) {
+    console.error('Error clearing profile:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Work Experience handlers
+ipcMain.handle('get-all-work-experience', async () => {
+  try {
+    const experiences = db.getAllWorkExperience();
+    return { success: true, data: experiences };
+  } catch (error) {
+    console.error('Error getting work experience:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-work-experience', async (event, expData) => {
+  try {
+    const id = db.saveWorkExperience(expData);
+    return { success: true, id };
+  } catch (error) {
+    console.error('Error saving work experience:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('update-work-experience', async (event, id, expData) => {
+  try {
+    db.updateWorkExperience(id, expData);
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating work experience:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-work-experience', async (event, id) => {
+  try {
+    db.deleteWorkExperience(id);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting work experience:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Education handlers
+ipcMain.handle('get-all-education', async () => {
+  try {
+    const education = db.getAllEducation();
+    return { success: true, data: education };
+  } catch (error) {
+    console.error('Error getting education:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-education', async (event, eduData) => {
+  try {
+    const id = db.saveEducation(eduData);
+    return { success: true, id };
+  } catch (error) {
+    console.error('Error saving education:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('update-education', async (event, id, eduData) => {
+  try {
+    db.updateEducation(id, eduData);
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating education:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-education', async (event, id) => {
+  try {
+    db.deleteEducation(id);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting education:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Resume parsing handler
+ipcMain.handle('parse-resume', async (event, resumePath) => {
+  try {
+    const gptExtractor = require('./gptExtractor');
+    const parsedData = await gptExtractor.parseResumeFile(resumePath);
+    return { success: true, data: parsedData };
+  } catch (error) {
+    console.error('Error parsing resume:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Bug Report handlers
+ipcMain.handle('get-all-bugs', async (event, filter) => {
+  try {
+    const bugs = db.getAllBugs(filter || {});
+    return { success: true, data: bugs };
+  } catch (error) {
+    console.error('Error getting bugs:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-bug-stats', async () => {
+  try {
+    const stats = db.getBugStats();
+    return { success: true, data: stats };
+  } catch (error) {
+    console.error('Error getting bug stats:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('update-bug-status', async (event, id, status, notes) => {
+  try {
+    db.updateBugStatus(id, status, notes);
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating bug status:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-bug', async (event, id) => {
+  try {
+    db.deleteBug(id);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting bug:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('clear-all-bugs', async () => {
+  try {
+    db.clearAllBugs();
+    return { success: true };
+  } catch (error) {
+    console.error('Error clearing bugs:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// File dialog handler for resume/cover letter
+ipcMain.handle('open-file-dialog', async (event, options) => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: options.filters || [
+      { name: 'Documents', extensions: ['pdf', 'doc', 'docx'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  
+  if (!result.canceled && result.filePaths.length > 0) {
+    return { success: true, filePath: result.filePaths[0] };
+  }
+  return { success: false };
 });
 
 ipcMain.handle('start-scraping', async () => {

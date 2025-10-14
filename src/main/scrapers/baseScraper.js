@@ -416,6 +416,33 @@ class BaseScraper {
     }
   }
 
+  // Report bug with automatic deduplication
+  reportBug(errorType, errorMessage, additionalData = {}) {
+    try {
+      const bugData = {
+        platform: this.platform,
+        error_type: errorType,
+        error_message: errorMessage.substring(0, 500), // Limit message length
+        error_stack: additionalData.stack ? additionalData.stack.substring(0, 2000) : null,
+        url: additionalData.url || null,
+        job_title: additionalData.job_title || null,
+        job_company: additionalData.job_company || null
+      };
+      
+      const bugId = this.db.reportBug(bugData);
+      
+      // Only log when it's a new bug, not when incrementing count
+      if (bugId && !additionalData.silent) {
+        console.log(`${this.platform}: 🐛 Bug reported (ID: ${bugId})`);
+      }
+      
+      return bugId;
+    } catch (error) {
+      console.error(`${this.platform}: Error reporting bug:`, error.message);
+      return null;
+    }
+  }
+
   // Save job to database
   saveJob(job) {
     try {

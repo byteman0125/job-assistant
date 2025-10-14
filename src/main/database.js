@@ -36,6 +36,8 @@ class JobDatabase {
         is_remote BOOLEAN DEFAULT 1,
         is_startup BOOLEAN DEFAULT 0,
         location TEXT,
+        job_type TEXT,
+        industry TEXT,
         applied BOOLEAN DEFAULT 0,
         applied_by TEXT DEFAULT 'None',
         applied_date INTEGER,
@@ -61,6 +63,20 @@ class JobDatabase {
     // Add applied_date column if it doesn't exist (for existing databases)
     try {
       this.db.exec(`ALTER TABLE jobs ADD COLUMN applied_date INTEGER`);
+    } catch (err) {
+      // Column already exists, ignore
+    }
+    
+    // Add job_type column if it doesn't exist (for existing databases)
+    try {
+      this.db.exec(`ALTER TABLE jobs ADD COLUMN job_type TEXT`);
+    } catch (err) {
+      // Column already exists, ignore
+    }
+    
+    // Add industry column if it doesn't exist (for existing databases)
+    try {
+      this.db.exec(`ALTER TABLE jobs ADD COLUMN industry TEXT`);
     } catch (err) {
       // Column already exists, ignore
     }
@@ -93,6 +109,111 @@ class JobDatabase {
         value TEXT NOT NULL,
         updated_at INTEGER DEFAULT (strftime('%s', 'now'))
       )
+    `);
+
+    // Profile table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS profile (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT,
+        last_name TEXT,
+        email TEXT,
+        phone TEXT,
+        linkedin_url TEXT,
+        github_url TEXT,
+        portfolio_url TEXT,
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        zip_code TEXT,
+        country TEXT,
+        job_title TEXT,
+        years_experience INTEGER,
+        skills TEXT,
+        summary TEXT,
+        work_authorization TEXT,
+        sponsorship_required TEXT,
+        desired_salary INTEGER,
+        min_salary_annual INTEGER,
+        min_salary_monthly INTEGER,
+        min_salary_hourly INTEGER,
+        notice_period TEXT,
+        work_type TEXT,
+        employment_type TEXT,
+        resume_path TEXT,
+        cover_letter_path TEXT,
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `);
+    
+    // Add salary columns if they don't exist (for existing databases)
+    try {
+      this.db.exec(`ALTER TABLE profile ADD COLUMN min_salary_annual INTEGER`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE profile ADD COLUMN min_salary_monthly INTEGER`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE profile ADD COLUMN min_salary_hourly INTEGER`);
+    } catch (e) { /* Column already exists */ }
+
+    // Work Experience table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS work_experience (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company TEXT NOT NULL,
+        job_title TEXT NOT NULL,
+        location TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        is_current BOOLEAN DEFAULT 0,
+        description TEXT,
+        order_index INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `);
+
+    // Education table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS education (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school TEXT NOT NULL,
+        degree TEXT NOT NULL,
+        field_of_study TEXT,
+        location TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        is_current BOOLEAN DEFAULT 0,
+        gpa TEXT,
+        description TEXT,
+        order_index INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `);
+
+    // Bug Reports table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS bug_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform TEXT NOT NULL,
+        error_type TEXT NOT NULL,
+        error_message TEXT NOT NULL,
+        error_stack TEXT,
+        url TEXT,
+        job_title TEXT,
+        job_company TEXT,
+        status TEXT DEFAULT 'open',
+        occurrence_count INTEGER DEFAULT 1,
+        first_seen INTEGER DEFAULT (strftime('%s', 'now')),
+        last_seen INTEGER DEFAULT (strftime('%s', 'now')),
+        notes TEXT
+      )
+    `);
+    
+    // Create index for faster duplicate detection
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_bug_deduplication 
+      ON bug_reports(platform, error_type, error_message);
     `);
 
     // Create indexes
@@ -133,8 +254,8 @@ class JobDatabase {
   addJob(job) {
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO jobs 
-      (company, title, url, platform, timestamp, salary, tech_stack, is_remote, is_startup, location)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (company, title, url, platform, timestamp, salary, tech_stack, is_remote, is_startup, location, job_type, industry)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     // Ensure all values are proper types for SQLite
@@ -148,7 +269,9 @@ class JobDatabase {
       job.tech_stack ? String(job.tech_stack) : null,
       job.is_remote !== undefined ? (job.is_remote ? 1 : 0) : 1,
       job.is_startup !== undefined ? (job.is_startup ? 1 : 0) : 0,
-      job.location ? String(job.location) : null
+      job.location ? String(job.location) : null,
+      job.job_type ? String(job.job_type) : null,
+      job.industry ? String(job.industry) : null
     );
     
     return result.changes > 0;
@@ -349,6 +472,349 @@ class JobDatabase {
       }
     });
     return settings;
+  }
+
+  // Profile methods
+  saveProfile(profileData) {
+    // Check if profile exists
+    const existing = this.db.prepare('SELECT id FROM profile LIMIT 1').get();
+    
+    if (existing) {
+      // Update existing profile
+      const stmt = this.db.prepare(`
+        UPDATE profile SET
+          first_name = ?,
+          last_name = ?,
+          email = ?,
+          phone = ?,
+          linkedin_url = ?,
+          github_url = ?,
+          portfolio_url = ?,
+          address = ?,
+          city = ?,
+          state = ?,
+          zip_code = ?,
+          country = ?,
+          job_title = ?,
+          years_experience = ?,
+          skills = ?,
+          summary = ?,
+          work_authorization = ?,
+          sponsorship_required = ?,
+          desired_salary = ?,
+          min_salary_annual = ?,
+          min_salary_monthly = ?,
+          min_salary_hourly = ?,
+          notice_period = ?,
+          work_type = ?,
+          employment_type = ?,
+          resume_path = ?,
+          cover_letter_path = ?,
+          updated_at = ?
+        WHERE id = ?
+      `);
+      
+      stmt.run(
+        profileData.first_name || null,
+        profileData.last_name || null,
+        profileData.email || null,
+        profileData.phone || null,
+        profileData.linkedin_url || null,
+        profileData.github_url || null,
+        profileData.portfolio_url || null,
+        profileData.address || null,
+        profileData.city || null,
+        profileData.state || null,
+        profileData.zip_code || null,
+        profileData.country || null,
+        profileData.job_title || null,
+        profileData.years_experience || null,
+        profileData.skills || null,
+        profileData.summary || null,
+        profileData.work_authorization || null,
+        profileData.sponsorship_required || null,
+        profileData.desired_salary || null,
+        profileData.min_salary_annual || null,
+        profileData.min_salary_monthly || null,
+        profileData.min_salary_hourly || null,
+        profileData.notice_period || null,
+        profileData.work_type || null,
+        profileData.employment_type || null,
+        profileData.resume_path || null,
+        profileData.cover_letter_path || null,
+        Math.floor(Date.now() / 1000),
+        existing.id
+      );
+    } else {
+      // Insert new profile
+      const stmt = this.db.prepare(`
+        INSERT INTO profile (
+          first_name, last_name, email, phone,
+          linkedin_url, github_url, portfolio_url,
+          address, city, state, zip_code, country,
+          job_title, years_experience, skills, summary,
+          work_authorization, sponsorship_required,
+          desired_salary, min_salary_annual, min_salary_monthly, min_salary_hourly,
+          notice_period, work_type,
+          employment_type, resume_path, cover_letter_path,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(
+        profileData.first_name || null,
+        profileData.last_name || null,
+        profileData.email || null,
+        profileData.phone || null,
+        profileData.linkedin_url || null,
+        profileData.github_url || null,
+        profileData.portfolio_url || null,
+        profileData.address || null,
+        profileData.city || null,
+        profileData.state || null,
+        profileData.zip_code || null,
+        profileData.country || null,
+        profileData.job_title || null,
+        profileData.years_experience || null,
+        profileData.skills || null,
+        profileData.summary || null,
+        profileData.work_authorization || null,
+        profileData.sponsorship_required || null,
+        profileData.desired_salary || null,
+        profileData.min_salary_annual || null,
+        profileData.min_salary_monthly || null,
+        profileData.min_salary_hourly || null,
+        profileData.notice_period || null,
+        profileData.work_type || null,
+        profileData.employment_type || null,
+        profileData.resume_path || null,
+        profileData.cover_letter_path || null,
+        Math.floor(Date.now() / 1000)
+      );
+    }
+  }
+
+  getProfile() {
+    return this.db.prepare('SELECT * FROM profile LIMIT 1').get() || null;
+  }
+
+  clearProfile() {
+    this.db.prepare('DELETE FROM profile').run();
+  }
+
+  // ========================================
+  // Work Experience Methods
+  // ========================================
+  
+  getAllWorkExperience() {
+    return this.db.prepare('SELECT * FROM work_experience ORDER BY order_index ASC, created_at DESC').all();
+  }
+
+  saveWorkExperience(expData) {
+    const stmt = this.db.prepare(`
+      INSERT INTO work_experience (company, job_title, location, start_date, end_date, is_current, description, order_index)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      expData.company,
+      expData.job_title,
+      expData.location || null,
+      expData.start_date || null,
+      expData.end_date || null,
+      expData.is_current ? 1 : 0,
+      expData.description || null,
+      expData.order_index || 0
+    );
+    return result.lastInsertRowid;
+  }
+
+  updateWorkExperience(id, expData) {
+    const stmt = this.db.prepare(`
+      UPDATE work_experience 
+      SET company = ?, job_title = ?, location = ?, start_date = ?, end_date = ?, 
+          is_current = ?, description = ?, order_index = ?
+      WHERE id = ?
+    `);
+    stmt.run(
+      expData.company,
+      expData.job_title,
+      expData.location || null,
+      expData.start_date || null,
+      expData.end_date || null,
+      expData.is_current ? 1 : 0,
+      expData.description || null,
+      expData.order_index || 0,
+      id
+    );
+  }
+
+  deleteWorkExperience(id) {
+    this.db.prepare('DELETE FROM work_experience WHERE id = ?').run(id);
+  }
+
+  clearAllWorkExperience() {
+    this.db.prepare('DELETE FROM work_experience').run();
+  }
+
+  // ========================================
+  // Education Methods
+  // ========================================
+  
+  getAllEducation() {
+    return this.db.prepare('SELECT * FROM education ORDER BY order_index ASC, created_at DESC').all();
+  }
+
+  saveEducation(eduData) {
+    const stmt = this.db.prepare(`
+      INSERT INTO education (school, degree, field_of_study, location, start_date, end_date, is_current, gpa, description, order_index)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      eduData.school,
+      eduData.degree,
+      eduData.field_of_study || null,
+      eduData.location || null,
+      eduData.start_date || null,
+      eduData.end_date || null,
+      eduData.is_current ? 1 : 0,
+      eduData.gpa || null,
+      eduData.description || null,
+      eduData.order_index || 0
+    );
+    return result.lastInsertRowid;
+  }
+
+  updateEducation(id, eduData) {
+    const stmt = this.db.prepare(`
+      UPDATE education 
+      SET school = ?, degree = ?, field_of_study = ?, location = ?, start_date = ?, 
+          end_date = ?, is_current = ?, gpa = ?, description = ?, order_index = ?
+      WHERE id = ?
+    `);
+    stmt.run(
+      eduData.school,
+      eduData.degree,
+      eduData.field_of_study || null,
+      eduData.location || null,
+      eduData.start_date || null,
+      eduData.end_date || null,
+      eduData.is_current ? 1 : 0,
+      eduData.gpa || null,
+      eduData.description || null,
+      eduData.order_index || 0,
+      id
+    );
+  }
+
+  deleteEducation(id) {
+    this.db.prepare('DELETE FROM education WHERE id = ?').run(id);
+  }
+
+  clearAllEducation() {
+    this.db.prepare('DELETE FROM education').run();
+  }
+
+  // ========================================
+  // Bug Report Methods
+  // ========================================
+  
+  reportBug(bugData) {
+    // Check for duplicate (same platform, error_type, and error_message)
+    const existing = this.db.prepare(`
+      SELECT * FROM bug_reports 
+      WHERE platform = ? AND error_type = ? AND error_message = ? AND status != 'resolved'
+    `).get(bugData.platform, bugData.error_type, bugData.error_message);
+    
+    if (existing) {
+      // Update existing bug: increment count and update last_seen
+      this.db.prepare(`
+        UPDATE bug_reports 
+        SET occurrence_count = occurrence_count + 1,
+            last_seen = strftime('%s', 'now'),
+            url = COALESCE(?, url),
+            job_title = COALESCE(?, job_title),
+            job_company = COALESCE(?, job_company)
+        WHERE id = ?
+      `).run(bugData.url || null, bugData.job_title || null, bugData.job_company || null, existing.id);
+      
+      return existing.id;
+    } else {
+      // Insert new bug
+      const stmt = this.db.prepare(`
+        INSERT INTO bug_reports (platform, error_type, error_message, error_stack, url, job_title, job_company)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      const result = stmt.run(
+        bugData.platform,
+        bugData.error_type,
+        bugData.error_message,
+        bugData.error_stack || null,
+        bugData.url || null,
+        bugData.job_title || null,
+        bugData.job_company || null
+      );
+      return result.lastInsertRowid;
+    }
+  }
+  
+  getAllBugs(filter = {}) {
+    let query = 'SELECT * FROM bug_reports WHERE 1=1';
+    const params = [];
+    
+    if (filter.platform) {
+      query += ' AND platform = ?';
+      params.push(filter.platform);
+    }
+    
+    if (filter.status) {
+      query += ' AND status = ?';
+      params.push(filter.status);
+    }
+    
+    if (filter.error_type) {
+      query += ' AND error_type = ?';
+      params.push(filter.error_type);
+    }
+    
+    query += ' ORDER BY last_seen DESC';
+    
+    return this.db.prepare(query).all(...params);
+  }
+  
+  getBugById(id) {
+    return this.db.prepare('SELECT * FROM bug_reports WHERE id = ?').get(id);
+  }
+  
+  updateBugStatus(id, status, notes = null) {
+    const stmt = this.db.prepare(`
+      UPDATE bug_reports 
+      SET status = ?, notes = COALESCE(?, notes)
+      WHERE id = ?
+    `);
+    stmt.run(status, notes, id);
+  }
+  
+  deleteBug(id) {
+    this.db.prepare('DELETE FROM bug_reports WHERE id = ?').run(id);
+  }
+  
+  clearAllBugs() {
+    this.db.prepare('DELETE FROM bug_reports').run();
+  }
+  
+  getBugStats() {
+    const stats = this.db.prepare(`
+      SELECT 
+        platform,
+        error_type,
+        status,
+        COUNT(*) as count,
+        SUM(occurrence_count) as total_occurrences
+      FROM bug_reports
+      GROUP BY platform, error_type, status
+    `).all();
+    
+    return stats;
   }
 
   close() {

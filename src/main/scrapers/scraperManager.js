@@ -41,20 +41,22 @@ class ScraperManager {
     console.log('📹 Action Recorder: Ready to learn from you');
     await this.gptExtractor.initialize();
     
-    // Get enabled platforms from settings
+    // Get enabled platforms from settings (order matters!)
     const enabledPlatforms = this.db.getSetting('enabled_platforms') || ['Jobright'];
-    console.log(`⚙️ Enabled platforms: ${enabledPlatforms.join(', ')}`);
+    console.log(`⚙️ Enabled platforms (in order): ${enabledPlatforms.join(', ')}`);
     
-    // Filter scrapers based on enabled platforms
-    const activateScrapers = this.scrapers.filter(scraper => 
-      enabledPlatforms.includes(scraper.platform)
-    );
+    // Sort scrapers based on the order in enabledPlatforms
+    const activateScrapers = enabledPlatforms
+      .map(platformName => this.scrapers.find(s => s.platform === platformName))
+      .filter(scraper => scraper !== undefined); // Remove any platforms that don't have scrapers
     
     if (activateScrapers.length === 0) {
       console.log('⚠️ No platforms enabled in settings!');
       this.isRunning = false;
       return;
     }
+    
+    console.log(`🎯 Scraping order: ${activateScrapers.map(s => s.platform).join(' → ')}`);
     
     // Log available recorded actions
     const platforms = this.actionRecorder.getAllPlatforms();
@@ -116,7 +118,7 @@ class ScraperManager {
   stop() {
     this.isRunning = false;
     this.scrapers.forEach(scraper => scraper.stop());
-    console.log('All scrapers stopped');
+    // Don't log here - main.js will handle the notification
   }
 
   delay(ms) {

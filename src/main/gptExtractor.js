@@ -156,10 +156,41 @@ STEP 2: Extract job information (ONLY if not verification page)
 5. work_type - "Fully Remote", "Hybrid", or "Onsite"
 6. is_startup - "yes" or "no"
 7. location - City/State or "Remote"
+8. job_type - Classify into ONE of these categories:
+   - "Backend" (server-side, APIs, databases, backend frameworks)
+   - "Frontend" (UI, React, Vue, Angular, CSS, HTML)
+   - "Full Stack" (both frontend and backend responsibilities)
+   - "Mobile" (iOS, Android, React Native, Flutter)
+   - "DevOps" (infrastructure, CI/CD, cloud, Docker, Kubernetes)
+   - "Data Engineering" (ETL, data pipelines, big data)
+   - "Data Science" (ML, AI, analytics, statistics)
+   - "QA/Testing" (testing, automation, QA)
+   - "Security" (cybersecurity, infosec, pentesting)
+   - "Product/Design" (PM, UX, UI design)
+   - "Other" (if none match)
+9. industry - Classify company industry into ONE of these:
+   - "Technology/Software" (SaaS, tech products, software companies)
+   - "Fintech" (financial technology, banking, payments)
+   - "Healthcare" (health tech, medical, biotech)
+   - "E-commerce" (online retail, marketplaces)
+   - "Gaming" (video games, game development)
+   - "Education" (edtech, online learning, education)
+   - "Enterprise" (B2B software, enterprise solutions)
+   - "Consulting" (consulting firms, professional services)
+   - "Government" (government, public sector, defense)
+   - "Media/Entertainment" (streaming, content, media)
+   - "Crypto/Web3" (blockchain, cryptocurrency, web3)
+   - "Transportation" (logistics, delivery, rideshare)
+   - "Real Estate" (proptech, real estate)
+   - "Social Media" (social networks, community platforms)
+   - "AI/ML" (AI-focused companies, ML products)
+   - "Other" (if none match)
 
 CRITICAL:
 - Only mark as "Fully Remote" if explicitly stated
 - If mentions office/hybrid/on-site → work_type is NOT "Fully Remote"
+- Classify job_type based on PRIMARY responsibilities (not just requirements)
+- Classify industry based on the COMPANY'S primary business
 
 Return ONLY valid JSON:
 {
@@ -170,7 +201,9 @@ Return ONLY valid JSON:
   "tech_stack": "...",
   "work_type": "...",
   "is_startup": "...",
-  "location": "..."
+  "location": "...",
+  "job_type": "...",
+  "industry": "..."
 }`;
 
       console.log(`🤖 Prompt created with ${pageContent.bodyText?.length || 0} characters of content`);
@@ -499,11 +532,112 @@ Return ONLY valid JSON:
         isHybrid: workType.includes('hybrid') || location.includes('hybrid'),
         isOnsite: workType.includes('onsite') || location.includes('onsite'),
         isStartup: data.is_startup === 'yes' || data.is_startup === true,
+        jobType: data.job_type || 'Other',
+        industry: data.industry || 'Other',
         details: data.details
       };
     } catch (err) {
       console.log(`⚠️ Parse error: ${err.message}`);
       return null;
+    }
+  }
+
+  async parseResumeFile(resumePath) {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const mainWindow = getMainWindow();
+    
+    if (!mainWindow) {
+      throw new Error('Main window not available');
+    }
+
+    try {
+      console.log(`📄 Parsing resume: ${resumePath}`);
+      
+      // Read file content (for text extraction if needed)
+      const fileExt = path.extname(resumePath).toLowerCase();
+      let resumeText = '';
+      
+      // For now, we'll send the file path to ChatGPT and ask it to extract info
+      // In a more advanced version, we could extract text from PDF/DOC files first
+      
+      const prompt = `I have uploaded my resume. Please analyze it and extract the following information in JSON format:
+{
+  "first_name": "",
+  "last_name": "",
+  "email": "",
+  "phone": "",
+  "linkedin_url": "",
+  "github_url": "",
+  "portfolio_url": "",
+  "address": "",
+  "city": "",
+  "state": "",
+  "zip_code": "",
+  "country": "",
+  "job_title": "Current or most recent job title",
+  "years_experience": "Total years as a number",
+  "skills": "Comma-separated list of skills",
+  "summary": "Professional summary or objective",
+  "work_experience": [
+    {
+      "company": "",
+      "job_title": "",
+      "location": "",
+      "start_date": "MM/YYYY",
+      "end_date": "MM/YYYY or 'Present'",
+      "is_current": false,
+      "description": "Brief description of responsibilities"
+    }
+  ],
+  "education": [
+    {
+      "school": "",
+      "degree": "",
+      "field_of_study": "",
+      "location": "",
+      "start_date": "MM/YYYY",
+      "end_date": "MM/YYYY",
+      "is_current": false,
+      "gpa": "",
+      "description": ""
+    }
+  ]
+}
+
+Please provide ONLY the JSON object, no additional text. File path: ${resumePath}`;
+
+      // Note: This is a placeholder. In production, you'd want to either:
+      // 1. Use ChatGPT's file upload API
+      // 2. Extract text from the resume file first and send that text
+      // 3. Use a specialized resume parsing service
+      
+      // For now, return a message that manual parsing is needed
+      return {
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        linkedin_url: '',
+        github_url: '',
+        portfolio_url: '',
+        address: '',
+        city: '',
+        state: '',
+        zip_code: '',
+        country: 'United States',
+        job_title: '',
+        years_experience: null,
+        skills: '',
+        summary: '',
+        work_experience: [],
+        education: [],
+        _note: 'Resume parsing requires manual implementation with file reading and ChatGPT API integration'
+      };
+      
+    } catch (error) {
+      console.error('❌ Resume parsing error:', error);
+      throw new Error(`Failed to parse resume: ${error.message}`);
     }
   }
 

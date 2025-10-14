@@ -350,6 +350,8 @@ function setupEventListeners() {
   refreshBtn.addEventListener('click', loadJobs);
   searchInput.addEventListener('input', filterJobs);
   platformFilter.addEventListener('change', filterJobs);
+  document.getElementById('jobTypeFilter').addEventListener('change', filterJobs);
+  document.getElementById('industryFilter').addEventListener('change', filterJobs);
   
   // Applied filter - show/hide additional filters
   appliedFilter.addEventListener('change', () => {
@@ -667,12 +669,11 @@ async function stopScraping() {
   isScraping = false;
   unlockSettings();
   
-  // Show immediate feedback
+  // Show immediate feedback (status only, no toast yet)
   status.textContent = '● Stopping...';
   status.style.color = '#ff9800';
   stopBtn.disabled = true;
   stopBtn.textContent = 'Stopping...';
-  showNotification('🛑 Stopping scraper... (may take a few seconds)', 'info');
   
   const result = await ipcRenderer.invoke('stop-scraping');
   if (result.success) {
@@ -684,6 +685,8 @@ async function stopScraping() {
     
     // Reset progress bar when stopping
     resetProgressBar();
+    
+    // Show single success notification
     showNotification('✅ Scraper stopped successfully', 'success');
   } else {
     stopBtn.disabled = false;
@@ -790,6 +793,8 @@ URL: ${job.url}`;
       <td class="row-number">${globalIndex + 1}</td>
       <td class="truncate-cell" title="${escapeHtml(detailsTooltip)}">${escapeHtml(truncateText(job.company, 30))}</td>
       <td class="truncate-cell" title="${escapeHtml(detailsTooltip)}">${escapeHtml(truncateText(job.title, 50))}</td>
+      <td><span class="job-type-badge">${job.job_type || 'N/A'}</span></td>
+      <td><span class="industry-badge">${job.industry || 'N/A'}</span></td>
       <td>
         <input type="checkbox" class="applied-checkbox" data-job-id="${job.id}" ${job.applied ? 'checked' : ''} 
           onchange="toggleAppliedStatus(${job.id}, this.checked)">
@@ -819,6 +824,8 @@ URL: ${job.url}`;
 function filterJobs() {
   const searchTerm = searchInput.value.toLowerCase();
   const platform = platformFilter.value;
+  const jobType = document.getElementById('jobTypeFilter').value;
+  const industry = document.getElementById('industryFilter').value;
   const appliedBy = appliedByFilter.value;
   const selectedDate = appliedDate.value;
   
@@ -828,6 +835,10 @@ function filterJobs() {
       job.title.toLowerCase().includes(searchTerm);
     
     const matchesPlatform = !platform || job.platform === platform;
+    
+    const matchesJobType = !jobType || job.job_type === jobType;
+    
+    const matchesIndustry = !industry || job.industry === industry;
     
     const matchesAppliedBy = !appliedBy || job.applied_by === appliedBy;
     
@@ -854,7 +865,7 @@ function filterJobs() {
       matchesDate = false;
     }
     
-    return matchesSearch && matchesPlatform && matchesAppliedBy && matchesDate;
+    return matchesSearch && matchesPlatform && matchesJobType && matchesIndustry && matchesAppliedBy && matchesDate;
   });
   
   currentPage = 1; // Reset to first page when filtering
@@ -869,11 +880,21 @@ window.copyJobInfo = async (jobId) => {
   const job = allJobs.find(j => j.id === jobId);
   if (!job) return;
   
-  // Tab-separated format: Company\tTitle\tURL
-  const jobInfo = `${job.company}\t${job.title}\t${job.url}`;
+  // Enhanced format with all important info
+  const jobInfo = `Company: ${job.company}
+Title: ${job.title}
+Job Type: ${job.job_type || 'N/A'}
+Industry: ${job.industry || 'N/A'}
+Salary: ${job.salary || 'Not specified'}
+Tech Stack: ${job.tech_stack || 'Not specified'}
+Location: ${job.location || 'Not specified'}
+Remote: ${job.is_remote ? 'Yes' : 'No'}
+Startup: ${job.is_startup ? 'Yes' : 'No'}
+Platform: ${job.platform}
+URL: ${job.url}`;
   
   await ipcRenderer.invoke('copy-to-clipboard', jobInfo);
-  showNotification('✅ Copied to clipboard!', 'success');
+  showNotification('✅ Copied full job details to clipboard!', 'success');
 };
 
 window.toggleAppliedStatus = async (jobId, applied) => {
@@ -1519,4 +1540,1347 @@ ipcRenderer.on('scraper-warning', (event, data) => {
 ipcRenderer.on('scraper-info', (event, data) => {
   showNotification(`ℹ️ ${data.platform}: ${data.message}`, 'info');
 });
+
+// ========================================
+// Profile Management
+// ========================================
+
+// Load profile data on startup
+async function loadProfile() {
+  try {
+    const profile = await ipcRenderer.invoke('get-profile');
+    
+    // If no profile exists, try to load salary from settings (for migration)
+    let minSalaryAnnual = '';
+    let minSalaryMonthly = '';
+    let minSalaryHourly = '';
+    
+    if (!profile) {
+      // Load from settings if profile doesn't exist
+      const settings = await ipcRenderer.invoke('get-settings');
+      minSalaryAnnual = settings.min_salary_annual || '';
+      minSalaryMonthly = settings.min_salary_monthly || '';
+      minSalaryHourly = settings.min_salary_hourly || '';
+    } else {
+      // Use profile values, but fallback to settings if profile doesn't have them
+      const settings = await ipcRenderer.invoke('get-settings');
+      minSalaryAnnual = profile.min_salary_annual || settings.min_salary_annual || '';
+      minSalaryMonthly = profile.min_salary_monthly || settings.min_salary_monthly || '';
+      minSalaryHourly = profile.min_salary_hourly || settings.min_salary_hourly || '';
+    }
+    
+    if (profile) {
+      document.getElementById('profileFirstName').value = profile.first_name || '';
+      document.getElementById('profileLastName').value = profile.last_name || '';
+      document.getElementById('profileEmail').value = profile.email || '';
+      document.getElementById('profilePhone').value = profile.phone || '';
+      document.getElementById('profileLinkedIn').value = profile.linkedin_url || '';
+      document.getElementById('profileGithub').value = profile.github_url || '';
+      document.getElementById('profilePortfolio').value = profile.portfolio_url || '';
+      document.getElementById('profileAddress').value = profile.address || '';
+      document.getElementById('profileCity').value = profile.city || '';
+      document.getElementById('profileState').value = profile.state || '';
+      document.getElementById('profileZipCode').value = profile.zip_code || '';
+      document.getElementById('profileCountry').value = profile.country || '';
+      document.getElementById('profileJobTitle').value = profile.job_title || '';
+      document.getElementById('profileYearsExperience').value = profile.years_experience || '';
+      document.getElementById('profileSkills').value = profile.skills || '';
+      document.getElementById('profileSummary').value = profile.summary || '';
+      document.getElementById('profileWorkAuthorization').value = profile.work_authorization || '';
+      document.getElementById('profileSponsorshipRequired').value = profile.sponsorship_required || 'no';
+      document.getElementById('profileDesiredSalary').value = profile.desired_salary || '';
+      document.getElementById('profileNoticePeriod').value = profile.notice_period || 'immediate';
+      document.getElementById('profileWorkType').value = profile.work_type || 'remote';
+      
+      // Handle multiple employment types (stored as comma-separated)
+      const employmentTypes = profile.employment_type ? profile.employment_type.split(',') : ['full_time'];
+      document.getElementById('profileEmploymentFullTime').checked = employmentTypes.includes('full_time');
+      document.getElementById('profileEmploymentContract').checked = employmentTypes.includes('contract');
+      document.getElementById('profileEmploymentPartTime').checked = employmentTypes.includes('part_time');
+      document.getElementById('profileEmploymentFreelance').checked = employmentTypes.includes('freelance');
+      
+      document.getElementById('profileResumePath').value = profile.resume_path || '';
+      document.getElementById('profileCoverLetterPath').value = profile.cover_letter_path || '';
+    }
+    
+    // Set salary fields (from profile or fallback to settings)
+    document.getElementById('profileMinSalaryAnnual').value = minSalaryAnnual;
+    document.getElementById('profileMinSalaryMonthly').value = minSalaryMonthly;
+    document.getElementById('profileMinSalaryHourly').value = minSalaryHourly;
+    
+  } catch (error) {
+    console.error('Error loading profile:', error);
+  }
+}
+
+// Save profile
+async function saveProfile() {
+  const profileData = {
+    first_name: document.getElementById('profileFirstName').value,
+    last_name: document.getElementById('profileLastName').value,
+    email: document.getElementById('profileEmail').value,
+    phone: document.getElementById('profilePhone').value,
+    linkedin_url: document.getElementById('profileLinkedIn').value,
+    github_url: document.getElementById('profileGithub').value,
+    portfolio_url: document.getElementById('profilePortfolio').value,
+    address: document.getElementById('profileAddress').value,
+    city: document.getElementById('profileCity').value,
+    state: document.getElementById('profileState').value,
+    zip_code: document.getElementById('profileZipCode').value,
+    country: document.getElementById('profileCountry').value,
+    job_title: document.getElementById('profileJobTitle').value,
+    years_experience: parseInt(document.getElementById('profileYearsExperience').value) || null,
+    skills: document.getElementById('profileSkills').value,
+    summary: document.getElementById('profileSummary').value,
+    work_authorization: document.getElementById('profileWorkAuthorization').value,
+    sponsorship_required: document.getElementById('profileSponsorshipRequired').value,
+    desired_salary: parseInt(document.getElementById('profileDesiredSalary').value) || null,
+    min_salary_annual: parseInt(document.getElementById('profileMinSalaryAnnual').value) || null,
+    min_salary_monthly: parseInt(document.getElementById('profileMinSalaryMonthly').value) || null,
+    min_salary_hourly: parseInt(document.getElementById('profileMinSalaryHourly').value) || null,
+    notice_period: document.getElementById('profileNoticePeriod').value,
+    work_type: document.getElementById('profileWorkType').value,
+    employment_type: getSelectedEmploymentTypes(),
+    resume_path: document.getElementById('profileResumePath').value,
+    cover_letter_path: document.getElementById('profileCoverLetterPath').value
+  };
+
+  // Helper function to get selected employment types
+  function getSelectedEmploymentTypes() {
+    const types = [];
+    if (document.getElementById('profileEmploymentFullTime').checked) types.push('full_time');
+    if (document.getElementById('profileEmploymentContract').checked) types.push('contract');
+    if (document.getElementById('profileEmploymentPartTime').checked) types.push('part_time');
+    if (document.getElementById('profileEmploymentFreelance').checked) types.push('freelance');
+    return types.length > 0 ? types.join(',') : 'full_time'; // Default to full_time if none selected
+  }
+
+  try {
+    const result = await ipcRenderer.invoke('save-profile', profileData);
+    if (result.success) {
+      // Also sync salary settings for scraper
+      const salarySettings = {
+        min_salary_annual: profileData.min_salary_annual,
+        min_salary_monthly: profileData.min_salary_monthly,
+        min_salary_hourly: profileData.min_salary_hourly
+      };
+      await ipcRenderer.invoke('save-settings', salarySettings);
+      
+      showProfileMessage('✅ Profile saved successfully!', 'success');
+    } else {
+      showProfileMessage('❌ Error saving profile: ' + result.error, 'error');
+    }
+  } catch (error) {
+    showProfileMessage('❌ Error saving profile: ' + error.message, 'error');
+  }
+}
+
+// Clear profile
+async function clearProfile() {
+  if (!confirm('Are you sure you want to clear all profile data? This action cannot be undone.')) {
+    return;
+  }
+
+  try {
+    const result = await ipcRenderer.invoke('clear-profile');
+    if (result.success) {
+      // Clear all form fields
+      document.getElementById('profileFirstName').value = '';
+      document.getElementById('profileLastName').value = '';
+      document.getElementById('profileEmail').value = '';
+      document.getElementById('profilePhone').value = '';
+      document.getElementById('profileLinkedIn').value = '';
+      document.getElementById('profileGithub').value = '';
+      document.getElementById('profilePortfolio').value = '';
+      document.getElementById('profileAddress').value = '';
+      document.getElementById('profileCity').value = '';
+      document.getElementById('profileState').value = '';
+      document.getElementById('profileZipCode').value = '';
+      document.getElementById('profileCountry').value = 'United States';
+      document.getElementById('profileJobTitle').value = '';
+      document.getElementById('profileYearsExperience').value = '';
+      document.getElementById('profileSkills').value = '';
+      document.getElementById('profileSummary').value = '';
+      document.getElementById('profileWorkAuthorization').value = '';
+      document.getElementById('profileSponsorshipRequired').value = 'no';
+      document.getElementById('profileDesiredSalary').value = '';
+      document.getElementById('profileMinSalaryAnnual').value = '';
+      document.getElementById('profileMinSalaryMonthly').value = '';
+      document.getElementById('profileMinSalaryHourly').value = '';
+      document.getElementById('profileNoticePeriod').value = 'immediate';
+      document.getElementById('profileWorkType').value = 'remote';
+      
+      // Uncheck all employment types
+      document.getElementById('profileEmploymentFullTime').checked = true; // Default to full_time
+      document.getElementById('profileEmploymentContract').checked = false;
+      document.getElementById('profileEmploymentPartTime').checked = false;
+      document.getElementById('profileEmploymentFreelance').checked = false;
+      
+      document.getElementById('profileResumePath').value = '';
+      document.getElementById('profileCoverLetterPath').value = '';
+      
+      showProfileMessage('✅ Profile cleared successfully!', 'success');
+    } else {
+      showProfileMessage('❌ Error clearing profile: ' + result.error, 'error');
+    }
+  } catch (error) {
+    showProfileMessage('❌ Error clearing profile: ' + error.message, 'error');
+  }
+}
+
+// Browse for resume file
+async function browseResume() {
+  try {
+    const result = await ipcRenderer.invoke('open-file-dialog', {
+      filters: [
+        { name: 'Documents', extensions: ['pdf', 'doc', 'docx'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    
+    if (result.success && result.filePath) {
+      document.getElementById('profileResumePath').value = result.filePath;
+    }
+  } catch (error) {
+    console.error('Error browsing for resume:', error);
+  }
+}
+
+// Browse for cover letter file
+async function browseCoverLetter() {
+  try {
+    const result = await ipcRenderer.invoke('open-file-dialog', {
+      filters: [
+        { name: 'Documents', extensions: ['pdf', 'doc', 'docx'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    
+    if (result.success && result.filePath) {
+      document.getElementById('profileCoverLetterPath').value = result.filePath;
+    }
+  } catch (error) {
+    console.error('Error browsing for cover letter:', error);
+  }
+}
+
+// Show profile status message
+function showProfileMessage(message, type) {
+  const statusDiv = document.getElementById('profileStatus');
+  statusDiv.textContent = message;
+  statusDiv.className = 'status-message ' + (type === 'success' ? 'success' : 'error');
+  statusDiv.style.display = 'block';
+  
+  setTimeout(() => {
+    statusDiv.style.display = 'none';
+  }, 5000);
+}
+
+// ========================================
+// WIZARD NAVIGATION
+// ========================================
+
+let currentWizardPage = 1;
+const totalWizardPages = 6;
+
+function goToWizardPage(pageNum) {
+  if (pageNum < 1 || pageNum > totalWizardPages) return;
+  
+  currentWizardPage = pageNum;
+  
+  // Update page visibility
+  document.querySelectorAll('.wizard-page').forEach((page, index) => {
+    page.classList.toggle('active', index + 1 === pageNum);
+  });
+  
+  // Update step indicators
+  document.querySelectorAll('.wizard-step').forEach((step, index) => {
+    const stepNum = index + 1;
+    step.classList.remove('active', 'completed');
+    
+    if (stepNum === pageNum) {
+      step.classList.add('active');
+    } else if (stepNum < pageNum) {
+      step.classList.add('completed');
+    }
+  });
+  
+  // Update navigation buttons
+  const prevBtn = document.getElementById('wizardPrevBtn');
+  const nextBtn = document.getElementById('wizardNextBtn');
+  const wizardActions = document.getElementById('wizardActions');
+  
+  prevBtn.style.display = pageNum === 1 ? 'none' : 'inline-block';
+  
+  if (pageNum === totalWizardPages) {
+    nextBtn.style.display = 'none';
+    wizardActions.style.display = 'flex';
+  } else {
+    nextBtn.style.display = 'inline-block';
+    nextBtn.textContent = 'Next →';
+    wizardActions.style.display = 'none';
+  }
+}
+
+// Wizard navigation event listeners
+document.getElementById('wizardPrevBtn').addEventListener('click', () => {
+  goToWizardPage(currentWizardPage - 1);
+});
+
+document.getElementById('wizardNextBtn').addEventListener('click', () => {
+  goToWizardPage(currentWizardPage + 1);
+});
+
+// Allow clicking on wizard steps
+document.querySelectorAll('.wizard-step').forEach((step, index) => {
+  step.addEventListener('click', () => {
+    goToWizardPage(index + 1);
+  });
+});
+
+// Resume parse button enable
+document.getElementById('profileResumePath').addEventListener('input', (e) => {
+  document.getElementById('parseResumeBtn').disabled = !e.target.value;
+});
+
+// Parse resume button
+document.getElementById('parseResumeBtn').addEventListener('click', async () => {
+  const resumePath = document.getElementById('profileResumePath').value;
+  if (!resumePath) return;
+  
+  const parseBtn = document.getElementById('parseResumeBtn');
+  const statusEl = document.getElementById('parseResumeStatus');
+  
+  parseBtn.disabled = true;
+  statusEl.textContent = '🔄 Parsing resume with AI... This may take a moment.';
+  statusEl.className = 'parse-status parsing';
+  
+  try {
+    const result = await ipcRenderer.invoke('parse-resume', resumePath);
+    
+    if (result.success && result.data) {
+      fillFormWithParsedData(result.data);
+      statusEl.textContent = '✅ Resume parsed! Profile fields have been filled. Review and click Next.';
+      statusEl.className = 'parse-status success';
+      
+      // Auto-advance to next page after 2 seconds
+      setTimeout(() => {
+        goToWizardPage(2);
+      }, 2000);
+    } else {
+      statusEl.textContent = '⚠️ Resume parsing is not fully implemented yet. Please fill the form manually.';
+      statusEl.className = 'parse-status error';
+      parseBtn.disabled = false;
+    }
+  } catch (error) {
+    statusEl.textContent = '❌ Error parsing resume: ' + error.message;
+    statusEl.className = 'parse-status error';
+    parseBtn.disabled = false;
+  }
+});
+
+function fillFormWithParsedData(data) {
+  // Personal Information
+  if (data.first_name) document.getElementById('profileFirstName').value = data.first_name;
+  if (data.last_name) document.getElementById('profileLastName').value = data.last_name;
+  if (data.email) document.getElementById('profileEmail').value = data.email;
+  if (data.phone) document.getElementById('profilePhone').value = data.phone;
+  if (data.linkedin_url) document.getElementById('profileLinkedIn').value = data.linkedin_url;
+  if (data.github_url) document.getElementById('profileGithub').value = data.github_url;
+  if (data.portfolio_url) document.getElementById('profilePortfolio').value = data.portfolio_url;
+  
+  // Location
+  if (data.address) document.getElementById('profileAddress').value = data.address;
+  if (data.city) document.getElementById('profileCity').value = data.city;
+  if (data.state) document.getElementById('profileState').value = data.state;
+  if (data.zip_code) document.getElementById('profileZipCode').value = data.zip_code;
+  if (data.country) document.getElementById('profileCountry').value = data.country;
+  
+  // Professional
+  if (data.job_title) document.getElementById('profileJobTitle').value = data.job_title;
+  if (data.years_experience) document.getElementById('profileYearsExperience').value = data.years_experience;
+  if (data.skills) document.getElementById('profileSkills').value = data.skills;
+  if (data.summary) document.getElementById('profileSummary').value = data.summary;
+  
+  // Work Experience
+  if (data.work_experience && Array.isArray(data.work_experience)) {
+    data.work_experience.forEach(exp => {
+      addWorkExperienceCard(exp);
+    });
+  }
+  
+  // Education
+  if (data.education && Array.isArray(data.education)) {
+    data.education.forEach(edu => {
+      addEducationCard(edu);
+    });
+  }
+}
+
+// ========================================
+// WORK EXPERIENCE MANAGEMENT
+// ========================================
+
+let workExperiences = [];
+
+async function loadWorkExperience() {
+  try {
+    const result = await ipcRenderer.invoke('get-all-work-experience');
+    if (result.success) {
+      workExperiences = result.data || [];
+      renderWorkExperience();
+    }
+  } catch (error) {
+    console.error('Error loading work experience:', error);
+  }
+}
+
+function renderWorkExperience() {
+  const container = document.getElementById('workExperienceList');
+  container.innerHTML = '';
+  
+  if (workExperiences.length === 0) {
+    container.innerHTML = '<p style="color: #888; text-align: center;">No work experience added yet.</p>';
+    return;
+  }
+  
+  workExperiences.forEach((exp, index) => {
+    const card = createWorkExperienceCard(exp, index);
+    container.appendChild(card);
+  });
+}
+
+function createWorkExperienceCard(exp, index) {
+  const card = document.createElement('div');
+  card.className = 'experience-card';
+  
+  const dates = exp.is_current ? 
+    `${exp.start_date || ''} - Present` : 
+    `${exp.start_date || ''} - ${exp.end_date || ''}`;
+  
+  card.innerHTML = `
+    <div class="experience-card-header">
+      <div class="experience-card-title">
+        <h4>${exp.job_title}</h4>
+        <p>${exp.company}${exp.location ? ' • ' + exp.location : ''}</p>
+      </div>
+      <div class="experience-card-actions">
+        <button class="btn-icon" onclick="editWorkExperience(${index})">✏️</button>
+        <button class="btn-icon danger" onclick="deleteWorkExperience(${exp.id})">🗑️</button>
+      </div>
+    </div>
+    <div class="experience-card-body">
+      <div class="experience-dates">${dates}</div>
+      ${exp.description ? `<div class="experience-description">${exp.description}</div>` : ''}
+    </div>
+  `;
+  
+  return card;
+}
+
+async function addWorkExperienceCard(data = null) {
+  const expData = data || await promptWorkExperienceDialog();
+  if (!expData) return;
+  
+  try {
+    const result = await ipcRenderer.invoke('save-work-experience', expData);
+    if (result.success) {
+      await loadWorkExperience();
+    }
+  } catch (error) {
+    console.error('Error saving work experience:', error);
+  }
+}
+
+async function editWorkExperience(index) {
+  const exp = workExperiences[index];
+  const updated = await promptWorkExperienceDialog(exp);
+  
+  if (updated) {
+    try {
+      const result = await ipcRenderer.invoke('update-work-experience', exp.id, updated);
+      if (result.success) {
+        await loadWorkExperience();
+      }
+    } catch (error) {
+      console.error('Error updating work experience:', error);
+    }
+  }
+}
+
+async function deleteWorkExperience(id) {
+  if (!confirm('Are you sure you want to delete this work experience?')) return;
+  
+  try {
+    const result = await ipcRenderer.invoke('delete-work-experience', id);
+    if (result.success) {
+      await loadWorkExperience();
+    }
+  } catch (error) {
+    console.error('Error deleting work experience:', error);
+  }
+}
+
+function promptWorkExperienceDialog(existing = null) {
+  const company = prompt('Company Name:', existing?.company || '');
+  if (!company) return null;
+  
+  const job_title = prompt('Job Title:', existing?.job_title || '');
+  if (!job_title) return null;
+  
+  const location = prompt('Location (e.g., San Francisco, CA):', existing?.location || '');
+  const start_date = prompt('Start Date (MM/YYYY):', existing?.start_date || '');
+  const is_current = confirm('Is this your current position?');
+  const end_date = is_current ? null : prompt('End Date (MM/YYYY):', existing?.end_date || '');
+  const description = prompt('Brief description of responsibilities:', existing?.description || '');
+  
+  return {
+    company,
+    job_title,
+    location,
+    start_date,
+    end_date,
+    is_current,
+    description,
+    order_index: existing?.order_index || 0
+  };
+}
+
+document.getElementById('addWorkExperienceBtn').addEventListener('click', () => addWorkExperienceCard());
+
+// ========================================
+// EDUCATION MANAGEMENT
+// ========================================
+
+let education = [];
+
+async function loadEducation() {
+  try {
+    const result = await ipcRenderer.invoke('get-all-education');
+    if (result.success) {
+      education = result.data || [];
+      renderEducation();
+    }
+  } catch (error) {
+    console.error('Error loading education:', error);
+  }
+}
+
+function renderEducation() {
+  const container = document.getElementById('educationList');
+  container.innerHTML = '';
+  
+  if (education.length === 0) {
+    container.innerHTML = '<p style="color: #888; text-align: center;">No education added yet.</p>';
+    return;
+  }
+  
+  education.forEach((edu, index) => {
+    const card = createEducationCard(edu, index);
+    container.appendChild(card);
+  });
+}
+
+function createEducationCard(edu, index) {
+  const card = document.createElement('div');
+  card.className = 'experience-card';
+  
+  const dates = edu.is_current ? 
+    `${edu.start_date || ''} - Present` : 
+    `${edu.start_date || ''} - ${edu.end_date || ''}`;
+  
+  card.innerHTML = `
+    <div class="experience-card-header">
+      <div class="experience-card-title">
+        <h4>${edu.degree}${edu.field_of_study ? ' in ' + edu.field_of_study : ''}</h4>
+        <p>${edu.school}${edu.location ? ' • ' + edu.location : ''}</p>
+      </div>
+      <div class="experience-card-actions">
+        <button class="btn-icon" onclick="editEducation(${index})">✏️</button>
+        <button class="btn-icon danger" onclick="deleteEducation(${edu.id})">🗑️</button>
+      </div>
+    </div>
+    <div class="experience-card-body">
+      <div class="experience-dates">${dates}${edu.gpa ? ' • GPA: ' + edu.gpa : ''}</div>
+      ${edu.description ? `<div class="experience-description">${edu.description}</div>` : ''}
+    </div>
+  `;
+  
+  return card;
+}
+
+async function addEducationCard(data = null) {
+  const eduData = data || await promptEducationDialog();
+  if (!eduData) return;
+  
+  try {
+    const result = await ipcRenderer.invoke('save-education', eduData);
+    if (result.success) {
+      await loadEducation();
+    }
+  } catch (error) {
+    console.error('Error saving education:', error);
+  }
+}
+
+async function editEducation(index) {
+  const edu = education[index];
+  const updated = await promptEducationDialog(edu);
+  
+  if (updated) {
+    try {
+      const result = await ipcRenderer.invoke('update-education', edu.id, updated);
+      if (result.success) {
+        await loadEducation();
+      }
+    } catch (error) {
+      console.error('Error updating education:', error);
+    }
+  }
+}
+
+async function deleteEducation(id) {
+  if (!confirm('Are you sure you want to delete this education entry?')) return;
+  
+  try {
+    const result = await ipcRenderer.invoke('delete-education', id);
+    if (result.success) {
+      await loadEducation();
+    }
+  } catch (error) {
+    console.error('Error deleting education:', error);
+  }
+}
+
+function promptEducationDialog(existing = null) {
+  const school = prompt('School Name:', existing?.school || '');
+  if (!school) return null;
+  
+  const degree = prompt('Degree (e.g., Bachelor of Science):', existing?.degree || '');
+  if (!degree) return null;
+  
+  const field_of_study = prompt('Field of Study (e.g., Computer Science):', existing?.field_of_study || '');
+  const location = prompt('Location:', existing?.location || '');
+  const start_date = prompt('Start Date (MM/YYYY):', existing?.start_date || '');
+  const is_current = confirm('Are you currently studying here?');
+  const end_date = is_current ? null : prompt('End Date (MM/YYYY):', existing?.end_date || '');
+  const gpa = prompt('GPA (optional):', existing?.gpa || '');
+  const description = prompt('Additional details (optional):', existing?.description || '');
+  
+  return {
+    school,
+    degree,
+    field_of_study,
+    location,
+    start_date,
+    end_date,
+    is_current,
+    gpa,
+    description,
+    order_index: existing?.order_index || 0
+  };
+}
+
+document.getElementById('addEducationBtn').addEventListener('click', () => addEducationCard());
+
+// Load work experience and education on startup
+loadWorkExperience();
+loadEducation();
+
+// Make functions global for inline onclick handlers
+window.editWorkExperience = editWorkExperience;
+window.deleteWorkExperience = deleteWorkExperience;
+window.editEducation = editEducation;
+window.deleteEducation = deleteEducation;
+
+// Setup profile event listeners
+document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
+document.getElementById('clearProfileBtn').addEventListener('click', clearProfile);
+document.getElementById('browseResumeBtn').addEventListener('click', browseResume);
+document.getElementById('browseCoverLetterBtn').addEventListener('click', browseCoverLetter);
+
+// Load profile on startup
+loadProfile();
+
+// ========================================
+// BUG REPORTS TAB
+// ========================================
+
+let allBugs = [];
+
+async function loadBugs() {
+  try {
+    const filter = {
+      platform: document.getElementById('bugPlatformFilter').value || undefined,
+      status: document.getElementById('bugStatusFilter').value || undefined,
+      error_type: document.getElementById('bugTypeFilter').value || undefined
+    };
+    
+    const result = await ipcRenderer.invoke('get-all-bugs', filter);
+    if (result.success) {
+      allBugs = result.data;
+      displayBugs();
+      updateBugCount();
+      await loadBugStats();
+    }
+  } catch (error) {
+    console.error('Error loading bugs:', error);
+  }
+}
+
+function displayBugs() {
+  const tbody = document.getElementById('bugsTableBody');
+  
+  if (allBugs.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" style="text-align: center; padding: 40px; color: #888;">
+          No bugs found. Try adjusting your filters or wait for scraping to detect issues.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = allBugs.map(bug => {
+    const firstSeen = new Date(bug.first_seen * 1000).toLocaleString();
+    const lastSeen = new Date(bug.last_seen * 1000).toLocaleString();
+    const jobInfo = bug.job_company || bug.job_title ? 
+      `<strong>${bug.job_company || 'N/A'}</strong><br/>${bug.job_title || ''}` : 'N/A';
+    
+    return `
+      <tr class="bug-row" onclick="showBugDetails(${bug.id})" style="cursor: pointer;" title="Click to see full details">
+        <td>${bug.id}</td>
+        <td><span class="bug-platform">${bug.platform}</span></td>
+        <td><span class="bug-error-type">${bug.error_type}</span></td>
+        <td class="bug-error-message" title="${escapeHtml(bug.error_message)}">${escapeHtml(bug.error_message)}</td>
+        <td class="bug-job-info">${jobInfo}</td>
+        <td><span class="bug-count">${bug.occurrence_count}</span></td>
+        <td class="bug-date">${firstSeen}</td>
+        <td class="bug-date">${lastSeen}</td>
+        <td><span class="bug-status-badge ${bug.status}">${bug.status}</span></td>
+        <td class="bug-actions" onclick="event.stopPropagation();">
+          ${bug.status !== 'resolved' ? `<button class="btn-resolve" onclick="updateBugStatus(${bug.id}, 'resolved')">✓ Resolve</button>` : ''}
+          ${bug.status !== 'ignored' ? `<button class="btn-ignore" onclick="updateBugStatus(${bug.id}, 'ignored')">⊘ Ignore</button>` : ''}
+          <button class="btn-delete" onclick="deleteBug(${bug.id})">🗑️</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function loadBugStats() {
+  try {
+    const result = await ipcRenderer.invoke('get-bug-stats');
+    if (result.success) {
+      const stats = result.data;
+      
+      // Calculate totals
+      const totalOpen = stats.filter(s => s.status === 'open').reduce((sum, s) => sum + s.count, 0);
+      const totalResolved = stats.filter(s => s.status === 'resolved').reduce((sum, s) => sum + s.count, 0);
+      const totalOccurrences = stats.reduce((sum, s) => sum + s.total_occurrences, 0);
+      const totalUnique = stats.reduce((sum, s) => sum + s.count, 0);
+      
+      document.getElementById('bugStats').innerHTML = `
+        <div class="bug-stat-card">
+          <h4>Open Bugs</h4>
+          <div class="stat-value" style="color: #f44336">${totalOpen}</div>
+        </div>
+        <div class="bug-stat-card">
+          <h4>Resolved</h4>
+          <div class="stat-value" style="color: #4CAF50">${totalResolved}</div>
+        </div>
+        <div class="bug-stat-card">
+          <h4>Unique Issues</h4>
+          <div class="stat-value">${totalUnique}</div>
+        </div>
+        <div class="bug-stat-card">
+          <h4>Total Occurrences</h4>
+          <div class="stat-value">${totalOccurrences}</div>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Error loading bug stats:', error);
+  }
+}
+
+function updateBugCount() {
+  const openBugs = allBugs.filter(b => b.status === 'open').length;
+  const countEl = document.getElementById('bugsTabCount');
+  if (countEl) {
+    countEl.textContent = openBugs;
+    countEl.style.display = openBugs > 0 ? 'inline-block' : 'none';
+  }
+}
+
+window.updateBugStatus = async function(bugId, status) {
+  try {
+    const result = await ipcRenderer.invoke('update-bug-status', bugId, status, null);
+    if (result.success) {
+      showNotification(`✅ Bug ${bugId} marked as ${status}`, 'success');
+      await loadBugs();
+    } else {
+      showNotification('❌ Error updating bug status', 'error');
+    }
+  } catch (error) {
+    console.error('Error updating bug status:', error);
+    showNotification('❌ Error updating bug status', 'error');
+  }
+};
+
+window.deleteBug = async function(bugId) {
+  if (!confirm('Are you sure you want to delete this bug report?')) return;
+  
+  try {
+    const result = await ipcRenderer.invoke('delete-bug', bugId);
+    if (result.success) {
+      showNotification('✅ Bug deleted', 'success');
+      await loadBugs();
+    } else {
+      showNotification('❌ Error deleting bug', 'error');
+    }
+  } catch (error) {
+    console.error('Error deleting bug:', error);
+    showNotification('❌ Error deleting bug', 'error');
+  }
+};
+
+async function clearAllBugs() {
+  if (!confirm('Are you sure you want to clear ALL bug reports? This cannot be undone!')) return;
+  
+  try {
+    const result = await ipcRenderer.invoke('clear-all-bugs');
+    if (result.success) {
+      showNotification('✅ All bugs cleared', 'success');
+      await loadBugs();
+    } else {
+      showNotification('❌ Error clearing bugs', 'error');
+    }
+  } catch (error) {
+    console.error('Error clearing bugs:', error);
+    showNotification('❌ Error clearing bugs', 'error');
+  }
+}
+
+// Bug report event listeners
+document.getElementById('refreshBugsBtn').addEventListener('click', loadBugs);
+document.getElementById('clearAllBugsBtn').addEventListener('click', clearAllBugs);
+document.getElementById('bugPlatformFilter').addEventListener('change', loadBugs);
+document.getElementById('bugStatusFilter').addEventListener('change', loadBugs);
+document.getElementById('bugTypeFilter').addEventListener('change', loadBugs);
+
+// Load bugs when switching to bug tab
+document.querySelector('[data-tab="bugs"]').addEventListener('click', () => {
+  loadBugs();
+});
+
+// Show bug details modal
+let currentBugId = null;
+
+window.showBugDetails = function(bugId) {
+  const bug = allBugs.find(b => b.id === bugId);
+  if (!bug) return;
+  
+  currentBugId = bugId;
+  
+  // Populate modal
+  document.getElementById('bugDetailPlatform').textContent = bug.platform;
+  document.getElementById('bugDetailType').textContent = bug.error_type;
+  document.getElementById('bugDetailStatus').textContent = bug.status;
+  document.getElementById('bugDetailStatus').className = `bug-status-badge ${bug.status}`;
+  document.getElementById('bugDetailMessage').textContent = bug.error_message;
+  document.getElementById('bugDetailStack').textContent = bug.error_stack || 'No stack trace available';
+  document.getElementById('bugDetailUrl').textContent = bug.url || 'N/A';
+  document.getElementById('bugDetailUrl').href = bug.url || '#';
+  document.getElementById('bugDetailCompany').textContent = bug.job_company || 'N/A';
+  document.getElementById('bugDetailTitle').textContent = bug.job_title || 'N/A';
+  document.getElementById('bugDetailCount').textContent = bug.occurrence_count;
+  document.getElementById('bugDetailFirstSeen').textContent = new Date(bug.first_seen * 1000).toLocaleString();
+  document.getElementById('bugDetailLastSeen').textContent = new Date(bug.last_seen * 1000).toLocaleString();
+  document.getElementById('bugDetailNotes').value = bug.notes || '';
+  
+  // Show modal
+  document.getElementById('bugDetailsModal').style.display = 'flex';
+};
+
+window.closeBugDetailsModal = function() {
+  document.getElementById('bugDetailsModal').style.display = 'none';
+  currentBugId = null;
+};
+
+// Save bug notes
+document.getElementById('saveBugNotesBtn').addEventListener('click', async () => {
+  if (!currentBugId) return;
+  
+  const notes = document.getElementById('bugDetailNotes').value;
+  const bug = allBugs.find(b => b.id === currentBugId);
+  
+  try {
+    const result = await ipcRenderer.invoke('update-bug-status', currentBugId, bug.status, notes);
+    if (result.success) {
+      showNotification('✅ Notes saved', 'success');
+      await loadBugs();
+    }
+  } catch (error) {
+    console.error('Error saving notes:', error);
+    showNotification('❌ Error saving notes', 'error');
+  }
+});
+
+// Copy bug details
+document.getElementById('copyBugDetailsBtn').addEventListener('click', async () => {
+  if (!currentBugId) return;
+  
+  const bug = allBugs.find(b => b.id === currentBugId);
+  if (!bug) return;
+  
+  const details = `BUG REPORT #${bug.id}
+
+Platform: ${bug.platform}
+Error Type: ${bug.error_type}
+Status: ${bug.status}
+
+Error Message:
+${bug.error_message}
+
+Stack Trace:
+${bug.error_stack || 'N/A'}
+
+Context:
+- URL: ${bug.url || 'N/A'}
+- Company: ${bug.job_company || 'N/A'}
+- Job Title: ${bug.job_title || 'N/A'}
+
+Occurrence Stats:
+- Count: ${bug.occurrence_count}
+- First Seen: ${new Date(bug.first_seen * 1000).toLocaleString()}
+- Last Seen: ${new Date(bug.last_seen * 1000).toLocaleString()}
+
+Notes:
+${bug.notes || 'No notes'}
+`;
+  
+  await ipcRenderer.invoke('copy-to-clipboard', details);
+  showNotification('✅ Bug details copied to clipboard!', 'success');
+});
+
+// Close modal when clicking outside
+document.getElementById('bugDetailsModal').addEventListener('click', (e) => {
+  if (e.target.id === 'bugDetailsModal') {
+    closeBugDetailsModal();
+  }
+});
+
+// Load bugs on startup
+loadBugs();
+
+// ========================================
+// METRICS TAB
+// ========================================
+
+async function loadMetrics() {
+  try {
+    const jobs = allJobs.length > 0 ? allJobs : (await ipcRenderer.invoke('get-all-jobs')).data || [];
+    
+    if (jobs.length === 0) {
+      showEmptyMetrics();
+      return;
+    }
+    
+    // Calculate overall stats
+    const totalJobs = jobs.length;
+    const appliedJobs = jobs.filter(j => j.applied && j.applied_by === 'User').length;
+    const botFiltered = jobs.filter(j => j.applied && j.applied_by === 'Bot').length;
+    const pending = jobs.filter(j => !j.applied).length;
+    const applyRate = totalJobs > 0 ? ((appliedJobs / totalJobs) * 100).toFixed(1) : '0';
+    
+    // Calculate average salary
+    const salariesWithNumbers = jobs
+      .map(j => extractSalaryNumber(j.salary))
+      .filter(s => s > 0);
+    const avgSalary = salariesWithNumbers.length > 0 
+      ? Math.round(salariesWithNumbers.reduce((a, b) => a + b, 0) / salariesWithNumbers.length)
+      : null;
+    
+    // Update overview cards
+    document.getElementById('metricTotalJobs').textContent = totalJobs;
+    document.getElementById('metricAppliedJobs').textContent = appliedJobs;
+    document.getElementById('metricBotFiltered').textContent = botFiltered;
+    document.getElementById('metricPending').textContent = pending;
+    document.getElementById('metricApplyRate').textContent = applyRate + '%';
+    document.getElementById('metricAvgSalary').textContent = avgSalary 
+      ? '$' + avgSalary.toLocaleString() : 'N/A';
+    
+    // Generate all charts
+    generatePlatformChart(jobs);
+    generateJobTypeChart(jobs);
+    generateIndustryChart(jobs);
+    generateRemoteChart(jobs);
+    generateStartupChart(jobs);
+    generateTimelineChart(jobs);
+    generateSalaryChart(jobs);
+    generateTechStackChart(jobs);
+    generateTopCompaniesChart(jobs);
+    generateLocationChart(jobs);
+    generateFilterChart(jobs);
+    generateWeeklyTrendsChart(jobs);
+    
+  } catch (error) {
+    console.error('Error loading metrics:', error);
+  }
+}
+
+function showEmptyMetrics() {
+  document.getElementById('metricTotalJobs').textContent = '0';
+  document.getElementById('metricAppliedJobs').textContent = '0';
+  document.getElementById('metricBotFiltered').textContent = '0';
+  document.getElementById('metricPending').textContent = '0';
+  document.getElementById('metricApplyRate').textContent = '0%';
+  document.getElementById('metricAvgSalary').textContent = 'N/A';
+  
+  const emptyMessage = '<div class="chart-empty">No data available. Start scraping to see metrics!</div>';
+  document.getElementById('platformChart').innerHTML = emptyMessage;
+  document.getElementById('jobTypeChart').innerHTML = emptyMessage;
+  document.getElementById('industryChart').innerHTML = emptyMessage;
+}
+
+function extractSalaryNumber(salaryStr) {
+  if (!salaryStr || salaryStr === 'Not specified') return 0;
+  
+  // Extract numbers from salary string (e.g., "$120k-$150k" -> 135000)
+  const numbers = salaryStr.match(/\d+/g);
+  if (!numbers || numbers.length === 0) return 0;
+  
+  // If it's a range, take the average
+  if (numbers.length >= 2) {
+    const low = parseInt(numbers[0]);
+    const high = parseInt(numbers[1]);
+    const avg = (low + high) / 2;
+    
+    // Detect if it's in thousands (k) or actual numbers
+    if (salaryStr.toLowerCase().includes('k')) {
+      return avg * 1000;
+    }
+    return avg;
+  }
+  
+  // Single number
+  const num = parseInt(numbers[0]);
+  if (salaryStr.toLowerCase().includes('k')) {
+    return num * 1000;
+  }
+  return num;
+}
+
+function generatePlatformChart(jobs) {
+  const platformCounts = {};
+  jobs.forEach(job => {
+    platformCounts[job.platform] = (platformCounts[job.platform] || 0) + 1;
+  });
+  
+  renderBarChart('platformChart', platformCounts);
+}
+
+function generateJobTypeChart(jobs) {
+  const jobTypeCounts = {};
+  jobs.forEach(job => {
+    const type = job.job_type || 'Other';
+    jobTypeCounts[type] = (jobTypeCounts[type] || 0) + 1;
+  });
+  
+  renderBarChart('jobTypeChart', jobTypeCounts);
+}
+
+function generateIndustryChart(jobs) {
+  const industryCounts = {};
+  jobs.forEach(job => {
+    const industry = job.industry || 'Other';
+    industryCounts[industry] = (industryCounts[industry] || 0) + 1;
+  });
+  
+  renderBarChart('industryChart', industryCounts);
+}
+
+function generateRemoteChart(jobs) {
+  const remoteCounts = {
+    'Fully Remote': jobs.filter(j => j.is_remote).length,
+    'Hybrid/Onsite': jobs.filter(j => !j.is_remote).length
+  };
+  
+  renderBarChart('remoteChart', remoteCounts);
+}
+
+function generateStartupChart(jobs) {
+  const startupCounts = {
+    'Startup': jobs.filter(j => j.is_startup).length,
+    'Established': jobs.filter(j => !j.is_startup).length
+  };
+  
+  renderBarChart('startupChart', startupCounts);
+}
+
+function generateTimelineChart(jobs) {
+  const dailyCounts = {};
+  
+  jobs.forEach(job => {
+    const date = new Date(job.timestamp || job.created_at * 1000);
+    const dateKey = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    dailyCounts[dateKey] = (dailyCounts[dateKey] || 0) + 1;
+  });
+  
+  // Get last 14 days
+  const sortedDates = Object.keys(dailyCounts).sort((a, b) => {
+    return new Date(a) - new Date(b);
+  }).slice(-14);
+  
+  const timelineData = {};
+  sortedDates.forEach(date => {
+    timelineData[date] = dailyCounts[date];
+  });
+  
+  renderTimelineChart('timelineChart', timelineData);
+}
+
+function generateSalaryChart(jobs) {
+  const salaryRanges = {
+    'Not Specified': 0,
+    '$0-$60k': 0,
+    '$60k-$90k': 0,
+    '$90k-$120k': 0,
+    '$120k-$150k': 0,
+    '$150k-$200k': 0,
+    '$200k+': 0
+  };
+  
+  jobs.forEach(job => {
+    const salary = extractSalaryNumber(job.salary);
+    
+    if (salary === 0) {
+      salaryRanges['Not Specified']++;
+    } else if (salary < 60000) {
+      salaryRanges['$0-$60k']++;
+    } else if (salary < 90000) {
+      salaryRanges['$60k-$90k']++;
+    } else if (salary < 120000) {
+      salaryRanges['$90k-$120k']++;
+    } else if (salary < 150000) {
+      salaryRanges['$120k-$150k']++;
+    } else if (salary < 200000) {
+      salaryRanges['$150k-$200k']++;
+    } else {
+      salaryRanges['$200k+']++;
+    }
+  });
+  
+  renderBarChart('salaryChart', salaryRanges);
+}
+
+function generateTechStackChart(jobs) {
+  const techCounts = {};
+  
+  jobs.forEach(job => {
+    if (job.tech_stack) {
+      const techs = job.tech_stack.split(',').map(t => t.trim());
+      techs.forEach(tech => {
+        if (tech) {
+          techCounts[tech] = (techCounts[tech] || 0) + 1;
+        }
+      });
+    }
+  });
+  
+  // Get top 10
+  const topTechs = Object.entries(techCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .reduce((obj, [key, val]) => { obj[key] = val; return obj; }, {});
+  
+  renderBarChart('techStackChart', topTechs);
+}
+
+function generateTopCompaniesChart(jobs) {
+  const companyCounts = {};
+  
+  jobs.forEach(job => {
+    companyCounts[job.company] = (companyCounts[job.company] || 0) + 1;
+  });
+  
+  // Get top 10
+  const topCompanies = Object.entries(companyCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .reduce((obj, [key, val]) => { obj[key] = val; return obj; }, {});
+  
+  renderBarChart('topCompaniesChart', topCompanies);
+}
+
+function generateLocationChart(jobs) {
+  const locationCounts = {};
+  
+  jobs.forEach(job => {
+    const loc = job.location || 'Not specified';
+    locationCounts[loc] = (locationCounts[loc] || 0) + 1;
+  });
+  
+  // Get top 10
+  const topLocations = Object.entries(locationCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .reduce((obj, [key, val]) => { obj[key] = val; return obj; }, {});
+  
+  renderBarChart('locationChart', topLocations);
+}
+
+function generateFilterChart(jobs) {
+  const filterStats = {
+    'Remote Jobs': jobs.filter(j => j.is_remote).length,
+    'Startup Jobs': jobs.filter(j => j.is_startup).length,
+    'With Salary': jobs.filter(j => j.salary && j.salary !== 'Not specified').length,
+    'Ignored (Keywords)': jobs.filter(j => j.salary && j.salary.startsWith('Ignored:')).length,
+    'Bot Filtered': jobs.filter(j => j.applied_by === 'Bot').length
+  };
+  
+  renderBarChart('filterChart', filterStats);
+}
+
+function generateWeeklyTrendsChart(jobs) {
+  // Group by week
+  const weekCounts = {};
+  
+  jobs.forEach(job => {
+    const date = new Date(job.timestamp || job.created_at * 1000);
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay()); // Start of week
+    const weekKey = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    
+    weekCounts[weekKey] = (weekCounts[weekKey] || 0) + 1;
+  });
+  
+  renderTimelineChart('weeklyTrendsChart', weekCounts);
+}
+
+function renderBarChart(elementId, data) {
+  const container = document.getElementById(elementId);
+  if (!container) return;
+  
+  const entries = Object.entries(data);
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="chart-empty">No data available</div>';
+    return;
+  }
+  
+  const maxValue = Math.max(...entries.map(([_, count]) => count));
+  const total = entries.reduce((sum, [_, count]) => sum + count, 0);
+  
+  const html = `
+    <div class="chart-bar-container">
+      ${entries.map(([label, count]) => {
+        const percentage = ((count / maxValue) * 100);
+        const percentOfTotal = ((count / total) * 100).toFixed(1);
+        
+        return `
+          <div class="chart-bar-item">
+            <div class="chart-bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+            <div class="chart-bar-visual">
+              <div class="chart-bar" style="width: ${percentage}%"></div>
+              <div class="chart-bar-value">${count}</div>
+              <div class="chart-bar-percentage">(${percentOfTotal}%)</div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  
+  container.innerHTML = html;
+}
+
+function renderTimelineChart(elementId, data) {
+  const container = document.getElementById(elementId);
+  if (!container) return;
+  
+  const entries = Object.entries(data);
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="chart-empty">No data available</div>';
+    return;
+  }
+  
+  const maxValue = Math.max(...entries.map(([_, count]) => count));
+  
+  const html = `
+    <div class="timeline-chart">
+      ${entries.map(([label, count]) => {
+        const heightPercent = (count / maxValue) * 100;
+        
+        return `
+          <div class="timeline-bar" style="height: ${heightPercent}%" title="${label}: ${count} jobs">
+            <div class="timeline-bar-value">${count}</div>
+            <div class="timeline-bar-label">${label}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  
+  container.innerHTML = html;
+}
+
+async function exportMetrics() {
+  try {
+    const jobs = allJobs.length > 0 ? allJobs : (await ipcRenderer.invoke('get-all-jobs')).data || [];
+    
+    const report = {
+      generated_at: new Date().toISOString(),
+      summary: {
+        total_jobs: jobs.length,
+        applied_jobs: jobs.filter(j => j.applied && j.applied_by === 'User').length,
+        bot_filtered: jobs.filter(j => j.applied_by === 'Bot').length,
+        pending: jobs.filter(j => !j.applied).length
+      },
+      by_platform: generateGroupStats(jobs, 'platform'),
+      by_job_type: generateGroupStats(jobs, 'job_type'),
+      by_industry: generateGroupStats(jobs, 'industry'),
+      remote_stats: {
+        remote: jobs.filter(j => j.is_remote).length,
+        not_remote: jobs.filter(j => !j.is_remote).length
+      },
+      startup_stats: {
+        startup: jobs.filter(j => j.is_startup).length,
+        established: jobs.filter(j => !j.is_startup).length
+      }
+    };
+    
+    const reportText = JSON.stringify(report, null, 2);
+    await ipcRenderer.invoke('copy-to-clipboard', reportText);
+    showNotification('✅ Metrics report copied to clipboard!', 'success');
+    
+  } catch (error) {
+    console.error('Error exporting metrics:', error);
+    showNotification('❌ Error exporting metrics', 'error');
+  }
+}
+
+function generateGroupStats(jobs, field) {
+  const counts = {};
+  jobs.forEach(job => {
+    const value = job[field] || 'Unknown';
+    counts[value] = (counts[value] || 0) + 1;
+  });
+  return counts;
+}
+
+// Event listeners for metrics
+document.getElementById('refreshMetricsBtn').addEventListener('click', loadMetrics);
+document.getElementById('exportMetricsBtn').addEventListener('click', exportMetrics);
+
+// Load metrics when switching to metrics tab
+document.querySelector('[data-tab="metrics"]').addEventListener('click', () => {
+  loadMetrics();
+});
+
+// Load metrics on startup
+setTimeout(() => {
+  loadMetrics();
+}, 1000);
 

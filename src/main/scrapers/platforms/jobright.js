@@ -342,11 +342,37 @@ class JobrightScraper extends BaseScraper {
         if (matchedKeyword) {
           console.log(`${this.platform}: 🚫 Ignored - Title contains keyword "${matchedKeyword}"`);
           console.log(`${this.platform}: Title: "${jobCard.title}"`);
-          console.log(`${this.platform}: Marking as "already applied" and skipping...`);
+          console.log(`${this.platform}: Saving to database and marking as applied by Bot...`);
           
-          // Ensure we're on Jobright page with cards loaded
+          // Save job to database with minimal info (no GPT extraction needed)
           try {
-            // Navigate to Jobright if not already there
+            const ignoredJob = {
+              company: jobCard.company,
+              title: jobCard.title,
+              url: 'https://jobright.ai/jobs/recommend', // Use base URL since we don't have specific URL
+              is_remote: false, // Unknown
+              is_startup: false, // Unknown
+              salary: `Ignored: ${matchedKeyword}`,
+              tech_stack: '',
+              location: ''
+            };
+            
+            const saved = this.saveJob(ignoredJob);
+            if (saved) {
+              const jobs = this.db.getAllJobs();
+              const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
+              if (savedJob) {
+                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
+                console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (ignored keyword)`);
+              }
+            }
+          } catch (saveErr) {
+            console.log(`${this.platform}: ⚠️ Error saving ignored job: ${saveErr.message}`);
+          }
+          
+          // Try to click "Not Interested" on Jobright to remove it from feed
+          try {
+            // Ensure we're on Jobright page with cards loaded
             const currentUrl = this.page.url();
             if (!currentUrl.includes('jobright.ai/jobs/recommend')) {
               console.log(`${this.platform}: 🔄 Navigating to Jobright page...`);
@@ -380,7 +406,7 @@ class JobrightScraper extends BaseScraper {
               console.log(`${this.platform}: ⚠️ No cards appeared - skipping click`);
             }
           } catch (err) {
-            console.log(`${this.platform}: ⚠️ Error marking as applied: ${err.message}`);
+            console.log(`${this.platform}: ⚠️ Error clicking Not Interested: ${err.message}`);
           }
           
           continue; // Skip to next job
@@ -1412,7 +1438,9 @@ class JobrightScraper extends BaseScraper {
                 is_startup: gptResult.isStartup,
                 location: gptResult.location || 'United States',
                 salary: gptResult.salary,
-                tech_stack: gptResult.techStack
+                tech_stack: gptResult.techStack,
+                job_type: gptResult.jobType,
+                industry: gptResult.industry
               });
 
               if (saved) {

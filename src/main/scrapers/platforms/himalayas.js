@@ -51,8 +51,12 @@ class HimalayasScraper extends BaseScraper {
       for (let i = 0; i < Math.min(jobLinks.length, 20); i++) {
         if (!this.isRunning) break;
 
+        let jobUrl = null;
+        let company = null;
+        let title = null;
+
         try {
-          const jobUrl = jobLinks[i];
+          jobUrl = jobLinks[i];
           console.log(`${this.platform}: Processing job ${i + 1}/${jobLinks.length}`);
           
           // Navigate to job page
@@ -63,8 +67,6 @@ class HimalayasScraper extends BaseScraper {
           const finalUrl = this.window.webContents.getURL();
 
           // ALWAYS try GPT extraction first
-          let company = null;
-          let title = null;
           
           if (this.gptExtractor) {
             console.log(`${this.platform}: 🤖 Using ChatGPT to extract job data...`);
@@ -101,11 +103,24 @@ class HimalayasScraper extends BaseScraper {
           await this.randomDelay(2000, 4000);
         } catch (error) {
           console.error(`${this.platform}: Error processing job:`, error.message);
+          
+          // Report bug automatically with deduplication
+          this.reportBug('Processing Error', error.message, {
+            stack: error.stack,
+            url: jobUrl,
+            job_title: title,
+            job_company: company
+          });
         }
       }
 
     } catch (error) {
       console.error(`${this.platform}: Scraping error:`, error.message);
+      
+      // Report scraping error
+      this.reportBug('Scraping Error', error.message, {
+        stack: error.stack
+      });
     } finally {
       await this.closeBrowser();
       this.isRunning = false;
