@@ -880,12 +880,8 @@ window.copyJobInfo = async (jobId) => {
   const job = allJobs.find(j => j.id === jobId);
   if (!job) return;
   
-  // Copy essential job info: Company, Title, URL, Job Type, Tech Stack
-  const jobInfo = `Company: ${job.company}
-Title: ${job.title}
-URL: ${job.url}
-Job Type: ${job.job_type || 'N/A'}
-Tech Stack: ${job.tech_stack || 'Not specified'}`;
+  // Copy essential job info with tab-separated format
+  const jobInfo = `${job.company}\t${job.title}\t${job.url}\t${job.job_type || 'N/A'}\t${job.tech_stack || 'Not specified'}`;
   
   await ipcRenderer.invoke('copy-to-clipboard', jobInfo);
   showNotification('✅ Copied job info to clipboard!', 'success');
