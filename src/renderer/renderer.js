@@ -2700,6 +2700,9 @@ window.setPrimaryResume = async function(resumeId) {
   }
 };
 
+// Store edit experiences globally
+let editResumeExperiences = [];
+
 // Edit resume - Make it globally accessible
 async function editResume(resumeId) {
   console.log('🔧 Edit resume called with ID:', resumeId);
@@ -2723,6 +2726,24 @@ async function editResume(resumeId) {
     document.getElementById('editResumeTechStack').value = resume.tech_stack || '';
     document.getElementById('editResumeIsPrimary').checked = resume.is_primary === 1;
     
+    // Load work experiences
+    try {
+      editResumeExperiences = JSON.parse(resume.work_experiences_json || '[]');
+    } catch (e) {
+      console.error('Error parsing work experiences:', e);
+      editResumeExperiences = [];
+    }
+    
+    // Clear the add experience form
+    document.getElementById('editExpCompany').value = '';
+    document.getElementById('editExpRole').value = '';
+    document.getElementById('editExpPeriod').value = '';
+    document.getElementById('editExpField').value = '';
+    document.getElementById('editExpDescription').value = '';
+    
+    // Render experiences
+    renderEditExperiences();
+    
     // Show modal
     document.getElementById('editResumeModal').style.display = 'flex';
   } catch (error) {
@@ -2734,9 +2755,95 @@ async function editResume(resumeId) {
 // Make it globally accessible
 window.editResume = editResume;
 
+// Render edit experiences
+function renderEditExperiences() {
+  const container = document.getElementById('editResumeExpList');
+  
+  if (!editResumeExperiences || editResumeExperiences.length === 0) {
+    container.innerHTML = '<p style="color: #999; font-size: 12px; text-align: center; padding: 10px;">No work experiences added yet</p>';
+    return;
+  }
+  
+  container.innerHTML = editResumeExperiences.map((exp, index) => `
+    <div class="work-exp-card" style="background: #2a2a2a; padding: 10px; border-radius: 6px; border: 1px solid #3d3d3d;">
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px;">
+        <div>
+          <strong style="color: #4CAF50; font-size: 12px;">${exp.company}</strong>
+          <span style="color: #999; font-size: 11px; margin-left: 8px;">${exp.period}</span>
+        </div>
+        <div style="display: flex; gap: 5px;">
+          <button class="btn btn-sm" style="padding: 3px 8px; font-size: 10px; background: #3d3d3d;" onclick="editEditExperience(${index})">✏️ Edit</button>
+          <button class="btn btn-sm" style="padding: 3px 8px; font-size: 10px; background: #d32f2f;" onclick="deleteEditExperience(${index})">🗑️</button>
+        </div>
+      </div>
+      <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">${exp.role}</div>
+      <div style="font-size: 10px; color: #aaa; margin-bottom: 4px;">📌 ${exp.field}</div>
+      ${exp.description ? `<div style="font-size: 10px; color: #bbb; margin-top: 6px; padding-top: 6px; border-top: 1px solid #3d3d3d;">${exp.description}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// Add experience in edit modal
+window.addEditExperience = function() {
+  const company = document.getElementById('editExpCompany').value.trim();
+  const role = document.getElementById('editExpRole').value.trim();
+  const period = document.getElementById('editExpPeriod').value.trim();
+  const field = document.getElementById('editExpField').value.trim();
+  const description = document.getElementById('editExpDescription').value.trim();
+  
+  if (!company || !role || !period || !field) {
+    showNotification('⚠️ Please fill in Company, Role, Period, and Field', 'warning');
+    return;
+  }
+  
+  editResumeExperiences.push({
+    company,
+    role,
+    period,
+    field,
+    description
+  });
+  
+  // Clear form
+  document.getElementById('editExpCompany').value = '';
+  document.getElementById('editExpRole').value = '';
+  document.getElementById('editExpPeriod').value = '';
+  document.getElementById('editExpField').value = '';
+  document.getElementById('editExpDescription').value = '';
+  
+  renderEditExperiences();
+  showNotification('✅ Experience added', 'success');
+};
+
+// Edit experience in edit modal
+window.editEditExperience = function(index) {
+  const exp = editResumeExperiences[index];
+  
+  // Fill form with experience data
+  document.getElementById('editExpCompany').value = exp.company;
+  document.getElementById('editExpRole').value = exp.role;
+  document.getElementById('editExpPeriod').value = exp.period;
+  document.getElementById('editExpField').value = exp.field;
+  document.getElementById('editExpDescription').value = exp.description || '';
+  
+  // Remove from array (will be re-added when user clicks Add)
+  editResumeExperiences.splice(index, 1);
+  renderEditExperiences();
+  
+  showNotification('✏️ Edit the experience and click "Add Experience" to save', 'info');
+};
+
+// Delete experience in edit modal
+window.deleteEditExperience = function(index) {
+  editResumeExperiences.splice(index, 1);
+  renderEditExperiences();
+  showNotification('🗑️ Experience removed', 'success');
+};
+
 // Close edit resume modal
 window.closeEditResumeModal = function() {
   document.getElementById('editResumeModal').style.display = 'none';
+  editResumeExperiences = [];
 };
 
 // Save edited resume
@@ -2747,22 +2854,22 @@ window.saveEditedResume = async function() {
     const newTechStack = document.getElementById('editResumeTechStack').value.trim();
     const newIsPrimary = document.getElementById('editResumeIsPrimary').checked;
     
-    console.log('💾 Saving resume changes:', { resumeId, newLabel, newTechStack, newIsPrimary });
+    console.log('💾 Saving resume changes:', { resumeId, newLabel, newTechStack, newIsPrimary, experiences: editResumeExperiences });
     
     if (!newLabel) {
       showNotification('⚠️ Label cannot be empty', 'warning');
       return;
     }
     
-    // Get current resume to preserve other fields
+    // Get current resume to preserve file info
     const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
     
-    // Update resume
+    // Update resume with new work experiences
     const updateData = {
       label: newLabel,
       tech_stack: newTechStack,
       description: resume.description || '',
-      work_experiences_json: resume.work_experiences_json || '[]',
+      work_experiences_json: JSON.stringify(editResumeExperiences),
       is_primary: newIsPrimary ? 1 : 0
     };
     
