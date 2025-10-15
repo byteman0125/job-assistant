@@ -249,32 +249,70 @@ class JobrightScraper extends BaseScraper {
         });
       }
       
-      console.log(`${this.platform}: 🖱️ Clicking "More Options" button to open dropdown...`);
+      console.log(`${this.platform}: 🖱️ Clicking "More Options" button to open dropdown... [PRIMARY FILTER]`);
       const clicked = await this.page.evaluate((company, title) => {
         const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+        console.log(`🔍 [PRIMARY] Found ${cards.length} job cards on page`);
+        
         for (const card of cards) {
           const companyEl = card.querySelector('div.index_company-name__gKiOY');
           const titleEl = card.querySelector('h2.index_job-title__UjuEY');
           if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
-            console.log(`✅ Found matching card in helper: "${company}" - "${title}"`);
+            console.log(`✅ [PRIMARY] Found matching card: "${company}" - "${title}"`);
             
-            // Find "More Options" button (three dots)
-            const moreBtn = card.querySelector('img[alt="more-options"]') ||
-                           card.querySelector('[class*="job-more-button"]') ||
-                           card.querySelector('.ant-dropdown-trigger');
+            // Find "More Options" button - ENHANCED SEARCH
+            console.log('🔍 [PRIMARY] Searching for "More Options" button...');
+            
+            let moreBtn = card.querySelector('img[alt="more-options"]');
+            console.log(`   ✓ img[alt="more-options"]: ${moreBtn ? 'FOUND ✅' : 'NOT FOUND ❌'}`);
+            
+            if (!moreBtn) {
+              moreBtn = card.querySelector('[class*="job-more-button"]');
+              console.log(`   ✓ [class*="job-more-button"]: ${moreBtn ? 'FOUND ✅' : 'NOT FOUND ❌'}`);
+              if (moreBtn) {
+                const img = moreBtn.querySelector('img');
+                if (img) {
+                  console.log(`      → Found img inside container`);
+                  moreBtn = img;
+                }
+              }
+            }
+            
+            if (!moreBtn) {
+              moreBtn = card.querySelector('.ant-dropdown-trigger');
+              console.log(`   ✓ .ant-dropdown-trigger: ${moreBtn ? 'FOUND ✅' : 'NOT FOUND ❌'}`);
+            }
+            
+            if (!moreBtn) {
+              const allImgs = card.querySelectorAll('img');
+              for (const img of allImgs) {
+                if (img.src && img.src.includes('more')) {
+                  moreBtn = img;
+                  console.log(`   ✓ img with "more" in src: FOUND ✅ (${img.src})`);
+                  break;
+                }
+              }
+              if (!moreBtn) {
+                console.log(`   ✓ img with "more" in src: NOT FOUND ❌`);
+              }
+            }
             
             if (moreBtn) {
-              console.log(`✅ Found "More Options" button (tag: ${moreBtn.tagName}, alt: ${moreBtn.alt || 'N/A'})`);
-              // Click the parent element if it's an img
-              const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
-              console.log(`🖱️ Simulating real click on ${clickTarget.tagName} element...`);
+              console.log(`✅ [PRIMARY] FINAL: Found "More Options" button!`);
+              console.log(`   Tag: ${moreBtn.tagName}`);
+              console.log(`   Alt: ${moreBtn.alt || 'N/A'}`);
+              console.log(`   Src: ${moreBtn.src || 'N/A'}`);
+              console.log(`   Class: ${moreBtn.className}`);
               
-              // Simulate real mouse events (not just click())
+              // Click the IMG directly
+              const clickTarget = moreBtn;
+              console.log(`🖱️ [PRIMARY] Clicking IMG element directly...`);
+              
               const rect = clickTarget.getBoundingClientRect();
               const x = rect.left + rect.width / 2;
               const y = rect.top + rect.height / 2;
+              console.log(`   Click coordinates: (${x}, ${y})`);
               
-              // Dispatch mousedown, mouseup, and click events
               ['mousedown', 'mouseup', 'click'].forEach(eventType => {
                 const event = new MouseEvent(eventType, {
                   view: window,
@@ -289,19 +327,32 @@ class JobrightScraper extends BaseScraper {
               
               return true;
             } else {
-              console.log('❌ "More Options" button not found on card');
+              console.log('❌ [PRIMARY] "More Options" button not found after ALL attempts');
               
-              // Debug: Log all images on the card
+              const allButtons = card.querySelectorAll('button');
               const allImgs = card.querySelectorAll('img');
-              console.log(`📊 Card has ${allImgs.length} images`);
+              const allDivs = card.querySelectorAll('div[class*="dropdown"]');
+              
+              console.log(`📊 [PRIMARY] Card debugging:`);
+              console.log(`   Total buttons: ${allButtons.length}`);
+              console.log(`   Total images: ${allImgs.length}`);
+              console.log(`   Divs with "dropdown": ${allDivs.length}`);
+              
+              console.log(`\n🖼️ [PRIMARY] All images in card:`);
               allImgs.forEach((img, idx) => {
-                console.log(`  Img ${idx + 1}: alt="${img.alt || 'none'}"`);
+                console.log(`   [${idx + 1}] alt="${img.alt || 'NONE'}", src="${img.src || 'NONE'}", class="${img.className || 'NONE'}"`);
+              });
+              
+              console.log(`\n🔘 [PRIMARY] All buttons in card:`);
+              allButtons.forEach((btn, idx) => {
+                console.log(`   [${idx + 1}] id="${btn.id || 'NONE'}", class="${btn.className || 'NONE'}"`);
               });
               
               return false;
             }
           }
         }
+        console.log('❌ [PRIMARY] Card not found');
         return false;
       }, jobCard.company, jobCard.title);
       
@@ -1131,6 +1182,8 @@ class JobrightScraper extends BaseScraper {
         console.log(`${this.platform}: ⚡ QUICK ACTION: Clicking "More Options" to open dropdown...`);
         console.log(`${this.platform}: 📍 Current page URL: ${this.page.url()}`);
         try {
+
+          console.log("============ QUICK ACTION: Clicking 'More Options' to open dropdown =============");
           const quickClicked = await this.page.evaluate((company, title) => {
             const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
             for (const card of cards) {
@@ -1143,16 +1196,55 @@ class JobrightScraper extends BaseScraper {
               if (cardCompany === company && cardTitle === title) {
                 console.log(`✅ Found matching card: "${company}" - "${title}"`);
                 
-                // Find "More Options" button (three dots)
-                const moreBtn = card.querySelector('img[alt="more-options"]') ||
-                               card.querySelector('[class*="job-more-button"]') ||
-                               card.querySelector('.ant-dropdown-trigger');
+                // Find "More Options" button (three dots) - ENHANCED SEARCH
+                console.log('🔍 Searching for "More Options" button with multiple approaches...');
+                
+                let moreBtn = card.querySelector('img[alt="more-options"]');
+                console.log(`   ✓ img[alt="more-options"]: ${moreBtn ? 'FOUND ✅' : 'NOT FOUND ❌'}`);
+                
+                if (!moreBtn) {
+                  moreBtn = card.querySelector('[class*="job-more-button"]');
+                  console.log(`   ✓ [class*="job-more-button"]: ${moreBtn ? 'FOUND ✅' : 'NOT FOUND ❌'}`);
+                  if (moreBtn) {
+                    // Get the img inside if container found
+                    const img = moreBtn.querySelector('img');
+                    if (img) {
+                      console.log(`      → Found img inside container`);
+                      moreBtn = img;
+                    }
+                  }
+                }
+                
+                if (!moreBtn) {
+                  moreBtn = card.querySelector('.ant-dropdown-trigger');
+                  console.log(`   ✓ .ant-dropdown-trigger: ${moreBtn ? 'FOUND ✅' : 'NOT FOUND ❌'}`);
+                }
+                
+                if (!moreBtn) {
+                  // Look for any img with "more" in src
+                  const allImgs = card.querySelectorAll('img');
+                  for (const img of allImgs) {
+                    if (img.src && img.src.includes('more')) {
+                      moreBtn = img;
+                      console.log(`   ✓ img with "more" in src: FOUND ✅ (${img.src})`);
+                      break;
+                    }
+                  }
+                  if (!moreBtn) {
+                    console.log(`   ✓ img with "more" in src: NOT FOUND ❌`);
+                  }
+                }
                 
                 if (moreBtn) {
-                  console.log(`✅ Found "More Options" button (tag: ${moreBtn.tagName}, alt: ${moreBtn.alt || 'N/A'})`);
-                  // Click the parent element if it's an img
-                  const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
-                  console.log(`🖱️ Simulating real click on ${clickTarget.tagName} element...`);
+                  console.log(`✅ FINAL: Found "More Options" button!`);
+                  console.log(`   Tag: ${moreBtn.tagName}`);
+                  console.log(`   Alt: ${moreBtn.alt || 'N/A'}`);
+                  console.log(`   Src: ${moreBtn.src || 'N/A'}`);
+                  console.log(`   Class: ${moreBtn.className}`);
+                  
+                  // Click the IMG directly (it has ant-dropdown-trigger)
+                  const clickTarget = moreBtn;
+                  console.log(`🖱️ Clicking IMG element directly...`);
                   
                   // Simulate real mouse events (not just click())
                   const rect = clickTarget.getBoundingClientRect();
@@ -1174,14 +1266,26 @@ class JobrightScraper extends BaseScraper {
                   
                   return true;
                 } else {
-                  console.log('❌ "More Options" button not found on card');
+                  console.log('❌ "More Options" button not found on card after ALL search attempts');
                   
-                  // Debug: Log all buttons/imgs on the card
+                  // Debug: Log ALL elements on the card
                   const allButtons = card.querySelectorAll('button');
                   const allImgs = card.querySelectorAll('img');
-                  console.log(`📊 Card has ${allButtons.length} buttons, ${allImgs.length} images`);
+                  const allDivs = card.querySelectorAll('div[class*="dropdown"]');
+                  
+                  console.log(`📊 Card debugging info:`);
+                  console.log(`   Total buttons: ${allButtons.length}`);
+                  console.log(`   Total images: ${allImgs.length}`);
+                  console.log(`   Divs with "dropdown": ${allDivs.length}`);
+                  
+                  console.log(`\n🖼️ All images in card:`);
                   allImgs.forEach((img, idx) => {
-                    console.log(`  Img ${idx + 1}: alt="${img.alt || 'none'}"`);
+                    console.log(`   [${idx + 1}] alt="${img.alt || 'NONE'}", src="${img.src || 'NONE'}", class="${img.className || 'NONE'}"`);
+                  });
+                  
+                  console.log(`\n🔘 All buttons in card:`);
+                  allButtons.forEach((btn, idx) => {
+                    console.log(`   [${idx + 1}] id="${btn.id || 'NONE'}", class="${btn.className || 'NONE'}"`);
                   });
                   
                   return false;
