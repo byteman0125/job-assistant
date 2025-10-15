@@ -107,7 +107,16 @@ class JobrightScraper extends BaseScraper {
           const companyEl = card.querySelector('div.index_company-name__gKiOY');
           const titleEl = card.querySelector('h2.index_job-title__UjuEY');
           if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
-            const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+            // Try multiple selectors for "Not Interested" button (cross-platform compatibility)
+            const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
+                                     card.querySelector('button[id*="not-interest"]') ||
+                                     card.querySelector('button[class*="not-interest"]') ||
+                                     card.querySelector('button[aria-label*="Not interested"]') ||
+                                     card.querySelector('button[aria-label*="not interested"]') ||
+                               card.querySelector('button[id*="not-interest"]') ||
+                               card.querySelector('button[class*="not-interest"]') ||
+                               card.querySelector('button[aria-label*="Not interested"]') ||
+                               card.querySelector('button[aria-label*="not interested"]');
             if (dislikeBtn) {
               dislikeBtn.click();
               return true;
@@ -613,7 +622,11 @@ class JobrightScraper extends BaseScraper {
                 const companyEl = card.querySelector('div.index_company-name__gKiOY');
                 const titleEl = card.querySelector('h2.index_job-title__UjuEY');
                 if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
-                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
+                                     card.querySelector('button[id*="not-interest"]') ||
+                                     card.querySelector('button[class*="not-interest"]') ||
+                                     card.querySelector('button[aria-label*="Not interested"]') ||
+                                     card.querySelector('button[aria-label*="not interested"]');
                   if (dislikeBtn) {
                     dislikeBtn.click();
                     return true;
@@ -652,7 +665,11 @@ class JobrightScraper extends BaseScraper {
               const cardTitle = titleEl?.textContent?.trim();
               
               if (cardCompany === company && cardTitle === title) {
-                const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
+                                     card.querySelector('button[id*="not-interest"]') ||
+                                     card.querySelector('button[class*="not-interest"]') ||
+                                     card.querySelector('button[aria-label*="Not interested"]') ||
+                                     card.querySelector('button[aria-label*="not interested"]');
                 if (dislikeBtn) {
                   dislikeBtn.click();
                   return true;
@@ -903,7 +920,11 @@ class JobrightScraper extends BaseScraper {
                 const cardTitle = titleEl?.textContent?.trim();
                 
                 if (cardCompany === company && cardTitle === title) {
-                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
+                                     card.querySelector('button[id*="not-interest"]') ||
+                                     card.querySelector('button[class*="not-interest"]') ||
+                                     card.querySelector('button[aria-label*="Not interested"]') ||
+                                     card.querySelector('button[aria-label*="not interested"]');
                   if (dislikeBtn) {
                     dislikeBtn.click();
                     return true;
@@ -1311,7 +1332,11 @@ class JobrightScraper extends BaseScraper {
                 const companyEl = card.querySelector('div.index_company-name__gKiOY');
                 const titleEl = card.querySelector('h2.index_job-title__UjuEY');
                 if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
-                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF');
+                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
+                                     card.querySelector('button[id*="not-interest"]') ||
+                                     card.querySelector('button[class*="not-interest"]') ||
+                                     card.querySelector('button[aria-label*="Not interested"]') ||
+                                     card.querySelector('button[aria-label*="not interested"]');
                   if (dislikeBtn) {
                     dislikeBtn.click();
                     return true;
