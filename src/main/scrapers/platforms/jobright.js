@@ -320,7 +320,8 @@ class JobrightScraper extends BaseScraper {
       console.log(`${this.platform}: 📋 UI Info:`, JSON.stringify(modalInfo, null, 2));
       
       // SCENARIO 1: Dropdown menu is visible (new UI)
-      if (modalInfo.dropdownVisible) {
+      // OR Modal exists but has 0 options (which means it's actually a dropdown)
+      if (modalInfo.dropdownVisible || (modalInfo.modalVisible && modalInfo.radioCount === 0)) {
         console.log(`${this.platform}: 📋 Dropdown menu detected! Clicking "Already Applied"...`);
         
         const dropdownClicked = await this.page.evaluate(() => {
@@ -354,8 +355,8 @@ class JobrightScraper extends BaseScraper {
         }
       }
       
-      // SCENARIO 2: Modal is visible (old UI)
-      if (!modalInfo.modalVisible) {
+      // SCENARIO 2: Modal is visible with actual radio options (old UI)
+      if (!modalInfo.modalVisible || modalInfo.radioCount === 0) {
         console.log(`${this.platform}: ⚠️ Neither dropdown nor modal found! Skipping...`);
         await new Promise(r => setTimeout(r, 2000));
         return true;
