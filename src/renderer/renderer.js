@@ -2915,7 +2915,8 @@ window.saveEditedResume = async function() {
 
 // Delete resume - Direct delete without confirmation
 window.deleteResume = async function(resumeId) {
-  console.log('🗑️ Delete resume called for ID:', resumeId);
+  console.log('🗑️🗑️🗑️ Delete resume called for ID:', resumeId);
+  showNotification('🗑️ Delete button clicked! ID: ' + resumeId, 'info');
   
   try {
     // Get resume details first
