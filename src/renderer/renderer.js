@@ -2612,7 +2612,7 @@ async function loadResumes() {
             ${resume.is_primary ? '<span class="primary-badge">★ Primary</span>' : ''}
           </div>
           <div class="resume-card-actions">
-            <button class="btn btn-primary btn-sm edit-resume-btn" data-resume-id="${resume.id}">✏️ Edit</button>
+            <button class="btn btn-primary btn-sm edit-resume-btn" data-resume-id="${resume.id}" onclick="editResume(${resume.id})">✏️ Edit</button>
             <button class="btn btn-secondary btn-sm" onclick="manageResumeExperiences(${resume.id}, '${resume.label.replace(/'/g, "\\'")}')">💼 Work Experience</button>
             ${!resume.is_primary ? `<button class="btn btn-secondary btn-sm" onclick="setPrimaryResume(${resume.id})">Set as Primary</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteResume(${resume.id})">🗑️ Delete</button>
@@ -2700,12 +2700,12 @@ window.setPrimaryResume = async function(resumeId) {
   }
 };
 
-// Edit resume
-window.editResume = async function(resumeId) {
-  console.log('Edit resume called with ID:', resumeId);
+// Edit resume - Make it globally accessible
+async function editResume(resumeId) {
+  console.log('🔧 Edit resume called with ID:', resumeId);
   try {
     const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
-    console.log('Resume fetched:', resume);
+    console.log('📄 Resume fetched:', resume);
     if (!resume) {
       showNotification('❌ Resume not found', 'error');
       return;
@@ -2713,7 +2713,7 @@ window.editResume = async function(resumeId) {
     
     // Prompt for new values
     const newLabel = prompt('Resume Label:', resume.label);
-    console.log('New label:', newLabel);
+    console.log('✏️ New label:', newLabel);
     if (newLabel === null) return; // User cancelled
     if (!newLabel || newLabel.trim() === '') {
       showNotification('⚠️ Label cannot be empty', 'warning');
@@ -2726,6 +2726,7 @@ window.editResume = async function(resumeId) {
     const newIsPrimary = confirm('Set as primary resume?');
     
     // Update resume
+    console.log('💾 Updating resume with data:', { label: newLabel.trim(), tech_stack: newTechStack.trim(), is_primary: newIsPrimary });
     const result = await ipcRenderer.invoke('update-resume', resumeId, {
       label: newLabel.trim(),
       tech_stack: newTechStack.trim(),
@@ -2734,6 +2735,7 @@ window.editResume = async function(resumeId) {
       is_primary: newIsPrimary ? 1 : 0
     });
     
+    console.log('📝 Update result:', result);
     if (result.success) {
       showNotification('✅ Resume updated successfully!', 'success');
       await loadResumes();
@@ -2741,10 +2743,13 @@ window.editResume = async function(resumeId) {
       showNotification('❌ Failed to update resume: ' + result.error, 'error');
     }
   } catch (error) {
-    console.error('Error editing resume:', error);
+    console.error('❌ Error editing resume:', error);
     showNotification('❌ Failed to edit resume', 'error');
   }
-};
+}
+
+// Make it globally accessible
+window.editResume = editResume;
 
 // Delete resume
 window.deleteResume = async function(resumeId) {
@@ -2899,12 +2904,19 @@ document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
 
 // Add event delegation for edit resume buttons
 document.addEventListener('click', async (e) => {
+  console.log('Click detected on element:', e.target, 'Classes:', e.target.className);
   if (e.target.classList.contains('edit-resume-btn')) {
     e.preventDefault();
+    e.stopPropagation();
     const resumeId = parseInt(e.target.getAttribute('data-resume-id'));
-    console.log('Edit button clicked for resume ID:', resumeId);
+    console.log('✅ Edit button clicked for resume ID:', resumeId);
     await editResume(resumeId);
   }
+});
+
+// Also try direct event listener on the container
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('🔧 Setting up resume edit event delegation...');
 });
 
 // ========================================
