@@ -297,12 +297,18 @@ class JobrightScraper extends BaseScraper {
             const timeEl = card.querySelector('span.index_publish-time__cMfCi') || card.querySelector('[class*="publish-time"]');
             const applyBtn = card.querySelector('button.index_apply-button__kp79C') || card.querySelector('button[class*="apply-button"]');
             
+            // Check button text to detect "DIRECT APPLY" (Easy Apply equivalent)
+            const buttonText = applyBtn ? applyBtn.textContent.trim().toUpperCase() : '';
+            const isDirectApply = buttonText.includes('DIRECT') || buttonText.includes('EASY');
+            
             return {
               index: index,
               title: titleEl ? titleEl.textContent.trim() : null,
               company: companyEl ? companyEl.textContent.trim() : null,
               postedTime: timeEl ? timeEl.textContent.trim() : null,
-              hasApplyButton: !!applyBtn
+              hasApplyButton: !!applyBtn,
+              buttonText: buttonText,
+              isDirectApply: isDirectApply
             };
           }).filter(job => job.title && job.company && job.hasApplyButton);
         });
@@ -392,6 +398,23 @@ class JobrightScraper extends BaseScraper {
       consecutiveOldJobs = 0;
       
       console.log(`${this.platform}: ✅ Job is fresh (≤ 7 days old) - Processing...`);
+      
+      // CHECK: Is this a "DIRECT APPLY" or "EASY APPLY" job? (We want to avoid these)
+      if (jobCard.isDirectApply) {
+        console.log(`${this.platform}: 🚫 SKIPPING - "DIRECT APPLY" or "EASY APPLY" job (button text: "${jobCard.buttonText}")`);
+        console.log(`${this.platform}: These jobs use simplified application forms - avoiding as requested`);
+        
+        // Click "Not Interested" to remove it and reveal next card
+        try {
+          await this.clickNotInterestedButton(jobCard);
+          console.log(`${this.platform}: ✅ Marked as "Not Interested" and removed from feed`);
+        } catch (err) {
+          console.log(`${this.platform}: ⚠️ Could not remove job: ${err.message}`);
+        }
+        
+        await this.randomDelay(1000, 1500);
+        continue; // Get next card from refreshed list
+      }
       
       // CHECK: Ignore keywords in job title
       const ignoreKeywords = this.db.getSetting('ignore_keywords') || [];
