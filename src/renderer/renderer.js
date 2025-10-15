@@ -2413,7 +2413,10 @@ function renderTempExperiences() {
           <div class="temp-exp-title">${exp.role}</div>
           <div class="temp-exp-company">${exp.company}</div>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="removeTempExp(${index})">🗑️</button>
+        <div style="display: flex; gap: 5px;">
+          <button class="btn btn-primary btn-sm" onclick="editTempExp(${index})" title="Edit">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="removeTempExp(${index})" title="Delete">🗑️</button>
+        </div>
       </div>
       <div class="temp-exp-period">📅 ${exp.period}</div>
       <div class="temp-exp-field">🏢 ${exp.field}</div>
@@ -2422,10 +2425,35 @@ function renderTempExperiences() {
   `).join('');
 }
 
-// Remove temporary experience
-window.removeTempExp = function(index) {
+// Edit temporary experience
+window.editTempExp = function(index) {
+  const exp = tempResumeExperiences[index];
+  
+  // Fill form with existing data
+  document.getElementById('newExpCompany').value = exp.company;
+  document.getElementById('newExpRole').value = exp.role;
+  document.getElementById('newExpPeriod').value = exp.period === 'N/A' ? '' : exp.period;
+  document.getElementById('newExpField').value = exp.field === 'N/A' ? '' : exp.field;
+  document.getElementById('newExpDescription').value = exp.description || '';
+  
+  // Remove from array (will be re-added when user clicks Add)
   tempResumeExperiences.splice(index, 1);
   renderTempExperiences();
+  
+  // Scroll to form
+  document.getElementById('newExpCompany').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('newExpCompany').focus();
+  
+  showNotification('✏️ Edit the experience and click "Add Experience" to save changes', 'info');
+};
+
+// Remove temporary experience
+window.removeTempExp = function(index) {
+  if (confirm('Remove this experience from the list?')) {
+    tempResumeExperiences.splice(index, 1);
+    renderTempExperiences();
+    showNotification('✅ Experience removed', 'success');
+  }
 };
 
   // Add new resume button
@@ -2746,18 +2774,45 @@ function renderResumeExperiences() {
     <div class="exp-card" style="background: #2d2d2d; border: 1px solid #3d3d3d; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
         <div>
-          <strong style="color: #4CAF50; font-size: 15px;">${exp.position}</strong>
+          <strong style="color: #4CAF50; font-size: 15px;">${exp.position || exp.role}</strong>
           <div style="color: #aaa; font-size: 13px;">${exp.company}</div>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="deleteResumeExp(${index})">🗑️</button>
+        <div style="display: flex; gap: 5px;">
+          <button class="btn btn-primary btn-sm" onclick="editResumeExp(${index})" title="Edit">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteResumeExp(${index})" title="Delete">🗑️</button>
+        </div>
       </div>
       <div style="color: #999; font-size: 12px; margin-bottom: 6px;">
-        📅 ${exp.start_date} - ${exp.is_current ? 'Present' : exp.end_date}
+        📅 ${exp.start_date || exp.period} ${exp.end_date ? '- ' + exp.end_date : (exp.is_current ? '- Present' : '')}
       </div>
+      ${(exp.field && exp.field !== 'N/A') ? `<div style="color: #66BB6A; font-size: 12px; margin-bottom: 6px;">🏢 ${exp.field}</div>` : ''}
       ${exp.description ? `<div style="color: #ccc; font-size: 13px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #3d3d3d;">${exp.description}</div>` : ''}
     </div>
   `).join('');
 }
+
+// Edit experience from resume (modal)
+window.editResumeExp = function(index) {
+  const exp = currentResumeExperiences[index];
+  
+  // Fill modal form with existing data (check both old and new field names)
+  document.getElementById('expCompany').value = exp.company || '';
+  document.getElementById('expPosition').value = exp.position || exp.role || '';
+  document.getElementById('expStartDate').value = exp.start_date || exp.period?.split('-')[0]?.trim() || '';
+  document.getElementById('expEndDate').value = exp.end_date || exp.period?.split('-')[1]?.trim() || '';
+  document.getElementById('expDescription').value = exp.description || '';
+  document.getElementById('expIsCurrent').checked = exp.is_current || false;
+  
+  // Remove from array (will be re-added when user clicks Add)
+  currentResumeExperiences.splice(index, 1);
+  renderResumeExperiences();
+  
+  // Scroll to form
+  document.getElementById('expCompany').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('expCompany').focus();
+  
+  showNotification('✏️ Edit the experience and click "Add Experience" to save changes', 'info');
+};
 
 // Delete experience from resume (modal)
 window.deleteResumeExp = async function(index) {
