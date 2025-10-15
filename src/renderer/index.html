@@ -1098,6 +1098,73 @@
     </div>
   </div>
 
+  <!-- Education Edit Modal -->
+  <div id="educationModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>📚 Edit Education</h3>
+        <button class="btn-icon" id="closeEducationModal">✖</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editEducationId">
+        <input type="hidden" id="editEducationIndex">
+        
+        <div class="form-group">
+          <label for="editEduSchool">School Name *</label>
+          <input type="text" id="editEduSchool" class="form-control" placeholder="e.g., MIT">
+        </div>
+        
+        <div class="form-group">
+          <label for="editEduDegree">Degree *</label>
+          <input type="text" id="editEduDegree" class="form-control" placeholder="e.g., Bachelor of Science">
+        </div>
+        
+        <div class="form-group">
+          <label for="editEduField">Field of Study</label>
+          <input type="text" id="editEduField" class="form-control" placeholder="e.g., Computer Science">
+        </div>
+        
+        <div class="form-group">
+          <label for="editEduLocation">Location</label>
+          <input type="text" id="editEduLocation" class="form-control" placeholder="e.g., Boston, MA">
+        </div>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="editEduStartDate">Start Date</label>
+            <input type="text" id="editEduStartDate" class="form-control" placeholder="e.g., Sep 2018">
+          </div>
+          
+          <div class="form-group">
+            <label for="editEduEndDate">End Date</label>
+            <input type="text" id="editEduEndDate" class="form-control" placeholder="e.g., May 2022">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="editEduIsCurrent">
+            <span>Currently Attending</span>
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label for="editEduGpa">GPA</label>
+          <input type="text" id="editEduGpa" class="form-control" placeholder="e.g., 3.8">
+        </div>
+        
+        <div class="form-group">
+          <label for="editEduDescription">Description (Optional)</label>
+          <textarea id="editEduDescription" class="form-textarea" rows="3" placeholder="Relevant coursework, achievements, honors..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelEducationEdit">Cancel</button>
+        <button class="btn btn-primary" id="saveEducationEdit">💾 Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="renderer.js"></script>
 </body>
 </html>

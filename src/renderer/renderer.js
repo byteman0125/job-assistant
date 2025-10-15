@@ -2301,8 +2301,8 @@ function createEducationCard(edu, index) {
         <p>${edu.school}${edu.location ? ' • ' + edu.location : ''}</p>
       </div>
       <div class="experience-card-actions">
-        <button class="btn-icon" onclick="editEducation(${index})">✏️</button>
-        <button class="btn-icon danger" onclick="deleteEducation(${edu.id})">🗑️</button>
+        <button class="btn-icon edit-education-btn" data-index="${index}">✏️</button>
+        <button class="btn-icon danger delete-education-btn" data-id="${edu.id}">🗑️</button>
       </div>
     </div>
     <div class="experience-card-body">
@@ -2315,78 +2315,130 @@ function createEducationCard(edu, index) {
 }
 
 async function addEducationCard(data = null) {
-  const eduData = data || await promptEducationDialog();
-  if (!eduData) return;
-  
-  try {
-    const result = await ipcRenderer.invoke('save-education', eduData);
-    if (result.success) {
-      await loadEducation();
-    }
-  } catch (error) {
-    console.error('Error saving education:', error);
-  }
-}
-
-async function editEducation(index) {
-  const edu = education[index];
-  const updated = await promptEducationDialog(edu);
-  
-  if (updated) {
+  if (data) {
+    // Called from profile load - directly save the data
     try {
-      const result = await ipcRenderer.invoke('update-education', edu.id, updated);
+      const result = await ipcRenderer.invoke('save-education', data);
       if (result.success) {
         await loadEducation();
       }
     } catch (error) {
-      console.error('Error updating education:', error);
+      console.error('Error saving education:', error);
     }
+  } else {
+    // Called from add button - open modal
+    openEducationModal();
+  }
+}
+
+function openEducationModal(index = null) {
+  const modal = document.getElementById('educationModal');
+  const edu = index !== null ? education[index] : null;
+  
+  // Populate fields
+  document.getElementById('editEducationId').value = edu?.id || '';
+  document.getElementById('editEducationIndex').value = index !== null ? index : '';
+  document.getElementById('editEduSchool').value = edu?.school || '';
+  document.getElementById('editEduDegree').value = edu?.degree || '';
+  document.getElementById('editEduField').value = edu?.field_of_study || '';
+  document.getElementById('editEduLocation').value = edu?.location || '';
+  document.getElementById('editEduStartDate').value = edu?.start_date || '';
+  document.getElementById('editEduEndDate').value = edu?.end_date || '';
+  document.getElementById('editEduIsCurrent').checked = edu?.is_current || false;
+  document.getElementById('editEduGpa').value = edu?.gpa || '';
+  document.getElementById('editEduDescription').value = edu?.description || '';
+  
+  modal.style.display = 'flex';
+}
+
+function closeEducationModal() {
+  document.getElementById('educationModal').style.display = 'none';
+}
+
+async function saveEducationFromModal() {
+  const id = document.getElementById('editEducationId').value;
+  const school = document.getElementById('editEduSchool').value.trim();
+  const degree = document.getElementById('editEduDegree').value.trim();
+  
+  if (!school || !degree) {
+    showNotification('❌ School name and degree are required', 'error');
+    return;
+  }
+  
+  const eduData = {
+    school,
+    degree,
+    field_of_study: document.getElementById('editEduField').value.trim(),
+    location: document.getElementById('editEduLocation').value.trim(),
+    start_date: document.getElementById('editEduStartDate').value.trim(),
+    end_date: document.getElementById('editEduEndDate').value.trim(),
+    is_current: document.getElementById('editEduIsCurrent').checked ? 1 : 0,
+    gpa: document.getElementById('editEduGpa').value.trim(),
+    description: document.getElementById('editEduDescription').value.trim(),
+    order_index: 0
+  };
+  
+  try {
+    let result;
+    if (id) {
+      // Update existing
+      result = await ipcRenderer.invoke('update-education', parseInt(id), eduData);
+    } else {
+      // Add new
+      result = await ipcRenderer.invoke('save-education', eduData);
+    }
+    
+    if (result.success) {
+      showNotification('✅ Education saved successfully', 'success');
+      closeEducationModal();
+      await loadEducation();
+    } else {
+      showNotification('❌ Failed to save education', 'error');
+    }
+  } catch (error) {
+    console.error('Error saving education:', error);
+    showNotification('❌ Error saving education', 'error');
   }
 }
 
 async function deleteEducation(id) {
-  if (!confirm('Are you sure you want to delete this education entry?')) return;
-  
   try {
     const result = await ipcRenderer.invoke('delete-education', id);
     if (result.success) {
+      showNotification('✅ Education deleted successfully', 'success');
       await loadEducation();
+    } else {
+      showNotification('❌ Failed to delete education', 'error');
     }
   } catch (error) {
     console.error('Error deleting education:', error);
+    showNotification('❌ Error deleting education', 'error');
   }
 }
 
-function promptEducationDialog(existing = null) {
-  const school = prompt('School Name:', existing?.school || '');
-  if (!school) return null;
-  
-  const degree = prompt('Degree (e.g., Bachelor of Science):', existing?.degree || '');
-  if (!degree) return null;
-  
-  const field_of_study = prompt('Field of Study (e.g., Computer Science):', existing?.field_of_study || '');
-  const location = prompt('Location:', existing?.location || '');
-  const start_date = prompt('Start Date (MM/YYYY):', existing?.start_date || '');
-  const is_current = confirm('Are you currently studying here?');
-  const end_date = is_current ? null : prompt('End Date (MM/YYYY):', existing?.end_date || '');
-  const gpa = prompt('GPA (optional):', existing?.gpa || '');
-  const description = prompt('Additional details (optional):', existing?.description || '');
-  
-  return {
-    school,
-    degree,
-    field_of_study,
-    location,
-    start_date,
-    end_date,
-    is_current,
-    gpa,
-    description,
-    order_index: existing?.order_index || 0
-  };
-}
+document.getElementById('addEducationBtn').addEventListener('click', () => openEducationModal());
 
-document.getElementById('addEducationBtn').addEventListener('click', () => addEducationCard());
+// Education modal event listeners
+document.getElementById('closeEducationModal').addEventListener('click', closeEducationModal);
+document.getElementById('cancelEducationEdit').addEventListener('click', closeEducationModal);
+document.getElementById('saveEducationEdit').addEventListener('click', saveEducationFromModal);
+
+// Event delegation for education buttons
+document.addEventListener('click', (e) => {
+  // Edit education button
+  if (e.target.classList.contains('edit-education-btn') || e.target.closest('.edit-education-btn')) {
+    const btn = e.target.classList.contains('edit-education-btn') ? e.target : e.target.closest('.edit-education-btn');
+    const index = parseInt(btn.dataset.index);
+    openEducationModal(index);
+  }
+  
+  // Delete education button
+  if (e.target.classList.contains('delete-education-btn') || e.target.closest('.delete-education-btn')) {
+    const btn = e.target.classList.contains('delete-education-btn') ? e.target : e.target.closest('.delete-education-btn');
+    const id = parseInt(btn.dataset.id);
+    deleteEducation(id);
+  }
+});
 
 // Load work experience and education on startup
 loadWorkExperience();
@@ -2395,8 +2447,6 @@ loadEducation();
 // Make functions global for inline onclick handlers
 window.editWorkExperience = editWorkExperience;
 window.deleteWorkExperience = deleteWorkExperience;
-window.editEducation = editEducation;
-window.deleteEducation = deleteEducation;
 
 // Setup profile event listeners
 document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
