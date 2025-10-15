@@ -2613,7 +2613,6 @@ async function loadResumes() {
             ${resume.is_primary ? '<span class="primary-badge">★ Primary</span>' : ''}
           </div>
           <div class="resume-card-actions">
-            <button class="btn btn-primary btn-sm edit-resume-btn" data-resume-id="${resume.id}" onclick="editResume(${resume.id})">✏️ Edit</button>
             <button class="btn btn-secondary btn-sm" onclick="manageResumeExperiences(${resume.id}, '${resume.label.replace(/'/g, "\\'")}')">💼 Work Experience</button>
             ${!resume.is_primary ? `<button class="btn btn-secondary btn-sm" onclick="setPrimaryResume(${resume.id})">Set as Primary</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteResume(${resume.id})">🗑️ Delete</button>
