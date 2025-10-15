@@ -2785,15 +2785,15 @@ function renderEditExperiences() {
   container.innerHTML = editResumeExperiences.map((exp, index) => {
     console.log(`Experience ${index}:`, exp);
     return `
-    <div class="work-exp-card" style="background: #2a2a2a; padding: 10px; border-radius: 6px; border: 1px solid #3d3d3d;">
+    <div class="work-exp-card" style="background: #2a2a2a; padding: 10px; border-radius: 6px; border: 1px solid #3d3d3d; position: relative;">
       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px;">
         <div>
           <strong style="color: #4CAF50; font-size: 12px;">${exp.company || 'No Company'}</strong>
           <span style="color: #999; font-size: 11px; margin-left: 8px;">${exp.period || 'No Period'}</span>
         </div>
-        <div style="display: flex; gap: 5px;">
-          <button class="btn btn-sm edit-exp-btn" data-exp-index="${index}" style="padding: 3px 8px; font-size: 10px; background: #3d3d3d;">✏️ Edit</button>
-          <button class="btn btn-sm delete-exp-btn" data-exp-index="${index}" style="padding: 3px 8px; font-size: 10px; background: #d32f2f;">🗑️</button>
+        <div style="display: flex; gap: 5px; position: relative; z-index: 1;">
+          <button class="btn btn-sm edit-exp-btn" data-exp-index="${index}" style="padding: 3px 8px; font-size: 10px; background: #3d3d3d; cursor: pointer; pointer-events: auto;">✏️ Edit</button>
+          <button class="btn btn-sm delete-exp-btn" data-exp-index="${index}" style="padding: 3px 8px; font-size: 10px; background: #d32f2f; cursor: pointer; pointer-events: auto;">🗑️</button>
         </div>
       </div>
       <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">${exp.role || 'No Role'}</div>
@@ -2802,23 +2802,6 @@ function renderEditExperiences() {
     </div>
   `;
   }).join('');
-  
-  // Add event listeners after rendering
-  document.querySelectorAll('.edit-exp-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const index = parseInt(this.getAttribute('data-exp-index'));
-      console.log('Edit experience clicked:', index);
-      editEditExperience(index);
-    });
-  });
-  
-  document.querySelectorAll('.delete-exp-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const index = parseInt(this.getAttribute('data-exp-index'));
-      console.log('Delete experience clicked:', index);
-      deleteEditExperience(index);
-    });
-  });
 }
 
 // Add experience in edit modal
@@ -3082,13 +3065,36 @@ document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
 
 // Add event delegation for edit resume buttons
 document.addEventListener('click', async (e) => {
-  console.log('Click detected on element:', e.target, 'Classes:', e.target.className);
+  // console.log('Click detected on element:', e.target, 'Classes:', e.target.className);
+  
+  // Edit resume button
   if (e.target.classList.contains('edit-resume-btn')) {
     e.preventDefault();
     e.stopPropagation();
     const resumeId = parseInt(e.target.getAttribute('data-resume-id'));
     console.log('✅ Edit button clicked for resume ID:', resumeId);
     await editResume(resumeId);
+    return;
+  }
+  
+  // Edit experience button (within edit modal)
+  if (e.target.classList.contains('edit-exp-btn')) {
+    e.preventDefault();
+    e.stopPropagation();
+    const index = parseInt(e.target.getAttribute('data-exp-index'));
+    console.log('✅ Edit experience button clicked for index:', index);
+    editEditExperience(index);
+    return;
+  }
+  
+  // Delete experience button (within edit modal)
+  if (e.target.classList.contains('delete-exp-btn')) {
+    e.preventDefault();
+    e.stopPropagation();
+    const index = parseInt(e.target.getAttribute('data-exp-index'));
+    console.log('✅ Delete experience button clicked for index:', index);
+    deleteEditExperience(index);
+    return;
   }
 });
 
