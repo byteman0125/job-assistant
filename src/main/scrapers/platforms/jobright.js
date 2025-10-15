@@ -283,63 +283,34 @@ class JobrightScraper extends BaseScraper {
       console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
       
       // STEP 3: Handle modal OR dropdown menu
-      console.log(`${this.platform}: ⏳ Waiting for reason modal or dropdown to appear...`);
-      await new Promise(r => setTimeout(r, 1500)); // Wait a bit longer for modal/dropdown
+      console.log(`${this.platform}: ⏳ Waiting for UI to appear...`);
+      await new Promise(r => setTimeout(r, 1500)); // Wait for modal/dropdown
       
-      // Check what's on the page and log it
-      const modalInfo = await this.page.evaluate(() => {
-        // Check for dropdown menu (new UI)
-        const dropdown = document.querySelector('.ant-dropdown.ant-dropdown-placement-bottom');
-        const dropdownVisible = dropdown && dropdown.offsetParent !== null;
-        
-        // Check for modal (old UI)
-        const modal = document.querySelector('.ant-modal');
-        const popup = document.querySelector('[class*="not-interest-popup"]');
-        
-        // Get all radio options (for modal)
-        const radios = document.querySelectorAll('input.ant-radio-input');
-        const radioInfo = Array.from(radios).map(radio => ({
-          value: radio.value,
-          text: radio.parentElement?.parentElement?.textContent?.trim() || 'Unknown',
-          visible: radio.offsetParent !== null
-        }));
-        
-        // Check for submit button (for modal)
-        const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
-        
+      // FIRST: Check if dropdown exists
+      console.log(`${this.platform}: 🔍 Checking for dropdown menu...`);
+      const dropdownCheck = await this.page.evaluate(() => {
+        const dropdownItems = document.querySelectorAll('.ant-dropdown-menu-item');
         return {
-          dropdownVisible: dropdownVisible,
-          modalVisible: !!modal || !!popup,
-          radioCount: radios.length,
-          radioOptions: radioInfo,
-          submitButtonExists: !!submitBtn,
-          submitButtonDisabled: submitBtn?.disabled || false
+          exists: dropdownItems.length > 0,
+          count: dropdownItems.length,
+          items: Array.from(dropdownItems).map(item => ({
+            text: item.textContent?.trim() || '',
+            menuId: item.getAttribute('data-menu-id')
+          }))
         };
       });
       
-      console.log(`${this.platform}: 📋 UI Info:`, JSON.stringify(modalInfo, null, 2));
+      console.log(`${this.platform}: 📋 Dropdown check: Found ${dropdownCheck.count} items`);
       
-      // SCENARIO 1: Dropdown menu is visible (new UI)
-      // OR Modal exists but has 0 options (which means it's actually a dropdown)
-      if (modalInfo.dropdownVisible || (modalInfo.modalVisible && modalInfo.radioCount === 0)) {
-        console.log(`${this.platform}: 📋 Checking for dropdown menu...`);
+      // SCENARIO 1: Dropdown exists - use dropdown approach
+      if (dropdownCheck.exists) {
+        console.log(`${this.platform}: ✅ Dropdown menu detected!`);
+        dropdownCheck.items.forEach((item, idx) => {
+          console.log(`${this.platform}:   Item ${idx + 1}: "${item.text}" (id: ${item.menuId})`);
+        });
         
         const dropdownClicked = await this.page.evaluate(() => {
-          // Find "Already Applied" option in dropdown
           const dropdownItems = document.querySelectorAll('.ant-dropdown-menu-item');
-          console.log(`🔍 Found ${dropdownItems.length} dropdown items`);
-          
-          // Debug: Log all dropdown items
-          if (dropdownItems.length > 0) {
-            console.log(`📋 Dropdown menu items:`);
-            dropdownItems.forEach((item, idx) => {
-              const menuId = item.getAttribute('data-menu-id');
-              const text = item.textContent?.trim() || '';
-              console.log(`  Item ${idx + 1}: text="${text}", menuId="${menuId}"`);
-            });
-          } else {
-            console.log(`⚠️ No dropdown items found - button click may have worked directly`);
-          }
           
           for (const item of dropdownItems) {
             const menuId = item.getAttribute('data-menu-id');
@@ -347,42 +318,53 @@ class JobrightScraper extends BaseScraper {
             
             // Look for "Already Applied" or menu ID containing "applied"
             if (text.includes('Already Applied') || (menuId && menuId.includes('applied'))) {
-              console.log('✅ Found "Already Applied" in dropdown, clicking...');
+              console.log('✅ Clicking "Already Applied" option');
               item.click();
-              return { success: true, reason: 'Dropdown "Already Applied" clicked' };
+              return { success: true };
             }
           }
           
-          // If no dropdown items found, assume the button click worked directly
-          if (dropdownItems.length === 0) {
-            return { success: true, reason: 'No dropdown needed - button click worked directly' };
-          }
-          
-          console.log('❌ "Already Applied" option not found in dropdown');
-          return { success: false, reason: 'Dropdown option not found' };
+          console.log('❌ "Already Applied" option not found');
+          return { success: false };
         });
         
-        console.log(`${this.platform}: 📤 Dropdown result:`, JSON.stringify(dropdownClicked));
-        
         if (dropdownClicked.success) {
-          console.log(`${this.platform}: ✅ Action completed: ${dropdownClicked.reason}`);
-          console.log(`${this.platform}: ⏳ Waiting 2s for changes to take effect...`);
+          console.log(`${this.platform}: ✅ Clicked "Already Applied" from dropdown`);
+          console.log(`${this.platform}: ⏳ Waiting 2s...`);
           await new Promise(r => setTimeout(r, 2000));
           return true;
         } else {
-          console.log(`${this.platform}: ⚠️ Could not complete dropdown action - continuing anyway`);
+          console.log(`${this.platform}: ⚠️ Could not click dropdown - continuing anyway`);
           await new Promise(r => setTimeout(r, 2000));
           return true;
         }
       }
       
-      // SCENARIO 2: Modal is visible with actual radio options (old UI)
+      // SCENARIO 2: No dropdown - check for modal
+      console.log(`${this.platform}: 📋 No dropdown found, checking for modal...`);
+      const modalInfo = await this.page.evaluate(() => {
+        const modal = document.querySelector('.ant-modal');
+        const popup = document.querySelector('[class*="not-interest-popup"]');
+        const radios = document.querySelectorAll('input.ant-radio-input');
+        const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
+        
+        return {
+          modalVisible: !!modal || !!popup,
+          radioCount: radios.length,
+          submitButtonExists: !!submitBtn
+        };
+      });
+      
+      console.log(`${this.platform}: 📋 Modal check: visible=${modalInfo.modalVisible}, radios=${modalInfo.radioCount}`);
+      
+      // If no modal either, assume button worked directly
       if (!modalInfo.modalVisible || modalInfo.radioCount === 0) {
-        console.log(`${this.platform}: ⚠️ Neither dropdown nor modal found! Skipping...`);
+        console.log(`${this.platform}: ✅ No modal/dropdown needed - button click worked directly`);
         await new Promise(r => setTimeout(r, 2000));
         return true;
       }
       
+      // SCENARIO 3: Modal with radio options (old UI)
       console.log(`${this.platform}: ✅ Modal detected with ${modalInfo.radioCount} options`);
       
       // Try to click "I already applied" radio button (value="5")
