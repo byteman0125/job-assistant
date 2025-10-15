@@ -1129,6 +1129,7 @@ class JobrightScraper extends BaseScraper {
         
         // ⚡ IMMEDIATELY click "More Options" while card still exists!
         console.log(`${this.platform}: ⚡ QUICK ACTION: Clicking "More Options" to open dropdown...`);
+        console.log(`${this.platform}: 📍 Current page URL: ${this.page.url()}`);
         try {
           const quickClicked = await this.page.evaluate((company, title) => {
             const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
