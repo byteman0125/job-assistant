@@ -2612,7 +2612,7 @@ async function loadResumes() {
             ${resume.is_primary ? '<span class="primary-badge">★ Primary</span>' : ''}
           </div>
           <div class="resume-card-actions">
-            <button class="btn btn-primary btn-sm" onclick="editResume(${resume.id})">✏️ Edit</button>
+            <button class="btn btn-primary btn-sm edit-resume-btn" data-resume-id="${resume.id}">✏️ Edit</button>
             <button class="btn btn-secondary btn-sm" onclick="manageResumeExperiences(${resume.id}, '${resume.label.replace(/'/g, "\\'")}')">💼 Work Experience</button>
             ${!resume.is_primary ? `<button class="btn btn-secondary btn-sm" onclick="setPrimaryResume(${resume.id})">Set as Primary</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteResume(${resume.id})">🗑️ Delete</button>
@@ -2895,6 +2895,16 @@ async function saveResumeExperiences() {
 // Load resumes when profile tab is opened
 document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
   loadResumes();
+});
+
+// Add event delegation for edit resume buttons
+document.addEventListener('click', async (e) => {
+  if (e.target.classList.contains('edit-resume-btn')) {
+    e.preventDefault();
+    const resumeId = parseInt(e.target.getAttribute('data-resume-id'));
+    console.log('Edit button clicked for resume ID:', resumeId);
+    await editResume(resumeId);
+  }
 });
 
 // ========================================
