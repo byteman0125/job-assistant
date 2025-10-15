@@ -449,43 +449,46 @@ Examples:
             // Loop through metadata items to identify each by icon or content
             metadataItems.forEach((item) => {
               const img = item.querySelector('img');
-              const span = item.querySelector('span');
-              
-              if (!span) return;
-              
-              const text = span.textContent.trim();
               const iconAlt = img ? img.getAttribute('alt') : '';
               
-              // Check for Remote/Hybrid/Onsite by keyword-highlight
-              const highlightEl = span.querySelector('.keyword-highlight');
+              // Check for Remote/Hybrid/Onsite by keyword-highlight (it's inside keyword-highlight-container)
+              const highlightEl = item.querySelector('.keyword-highlight');
               if (highlightEl) {
-                workLocationType = highlightEl.textContent.trim().toUpperCase();
-              }
-              // Remote icon check
-              else if (iconAlt === 'remote') {
-                // If it has keyword-highlight inside, that's the work type
-                const keywordEl = item.querySelector('.keyword-highlight');
-                if (keywordEl) {
-                  workLocationType = keywordEl.textContent.trim().toUpperCase();
+                const workTypeText = highlightEl.textContent.trim().toUpperCase();
+                if (workTypeText === 'REMOTE' || workTypeText === 'HYBRID' || workTypeText === 'ONSITE') {
+                  workLocationType = workTypeText;
+                  return; // Found work type, skip other checks for this item
                 }
               }
+              
+              // Get text from span (handle nested spans)
+              const span = item.querySelector('span');
+              if (!span) return;
+              const text = span.textContent.trim();
+              
+              // Skip if this looks like work type but we didn't get highlight element
+              if (text.toUpperCase().includes('REMOTE') || text.toUpperCase().includes('HYBRID') || text.toUpperCase().includes('ONSITE')) {
+                // Extract work type from text as fallback
+                if (text.toUpperCase().includes('REMOTE')) workLocationType = 'REMOTE';
+                else if (text.toUpperCase().includes('HYBRID')) workLocationType = 'HYBRID';
+                else if (text.toUpperCase().includes('ONSITE')) workLocationType = 'ONSITE';
+                return;
+              }
+              
               // Location: has 'position' icon
-              else if (iconAlt === 'position' || iconAlt === 'location') {
+              if (iconAlt === 'position' || iconAlt === 'location') {
                 jobLocation = text;
+                return;
               }
-              // Salary: contains $ or /yr or /hr or K (but not Remote/Hybrid/Onsite)
-              else if ((text.includes('$') || text.includes('/yr') || text.includes('/hr') || (text.includes('K') && text.match(/\d/))) && 
-                       !text.toUpperCase().includes('REMOTE') && 
-                       !text.toUpperCase().includes('HYBRID') && 
-                       !text.toUpperCase().includes('ONSITE')) {
+              
+              // Salary: contains $ or /yr or /hr or K with numbers
+              if (text.includes('$') || text.includes('/yr') || text.includes('/hr') || (text.includes('K') && text.match(/\d/))) {
                 salaryText = text;
+                return;
               }
+              
               // Fallback: if no icon matched and text looks like location (has comma or state)
-              else if ((text.includes(',') || text.match(/\b[A-Z]{2}\b/)) && 
-                       jobLocation === 'Unknown' &&
-                       !text.toUpperCase().includes('REMOTE') && 
-                       !text.toUpperCase().includes('HYBRID') && 
-                       !text.toUpperCase().includes('ONSITE')) {
+              if ((text.includes(',') || text.match(/\b[A-Z]{2}\b/)) && jobLocation === 'Unknown') {
                 jobLocation = text;
               }
             });
