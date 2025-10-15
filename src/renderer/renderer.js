@@ -2846,8 +2846,9 @@ document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
   loadResumes();
 });
 
-// Load profile on startup
+// Load profile and resumes on startup
 loadProfile();
+loadResumes();
 
 // ========================================
 // BUG REPORTS TAB
