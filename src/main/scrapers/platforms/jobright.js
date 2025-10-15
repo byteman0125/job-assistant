@@ -561,10 +561,28 @@ class JobrightScraper extends BaseScraper {
                 const cardTitle = titleEl?.textContent?.trim();
                 
                 if (cardCompany === company && cardTitle === title) {
-                  const btn = card.querySelector('button.index_apply-button__kp79C');
+                  // Try all possible button selectors
+                  const btn = card.querySelector('button.index_apply-button__kp79C') ||
+                              card.querySelector('button[class*="apply-button"]') ||
+                              card.querySelector('button[class*="apply"]') ||
+                              card.querySelector('a[class*="apply-button"]') ||
+                              card.querySelector('a[class*="apply"]') ||
+                              card.querySelector('button[aria-label*="Apply"]') ||
+                              card.querySelector('button[aria-label*="apply"]');
+                  
                   if (btn) {
                     btn.click();
-                    return true;
+                    return { success: true, method: 'matched' };
+                  } else {
+                    // Debug: Log all buttons found in this card
+                    const allButtons = Array.from(card.querySelectorAll('button, a'));
+                    const buttonInfo = allButtons.map(b => ({
+                      tag: b.tagName,
+                      class: b.className,
+                      id: b.id,
+                      text: b.textContent?.trim()?.substring(0, 50)
+                    }));
+                    return { success: false, debug: buttonInfo };
                   }
                 }
               }
@@ -572,22 +590,31 @@ class JobrightScraper extends BaseScraper {
               // Fallback: Click first card
               const firstCard = cards[0];
               if (firstCard) {
-                const btn = firstCard.querySelector('button.index_apply-button__kp79C');
+                const btn = firstCard.querySelector('button.index_apply-button__kp79C') ||
+                            firstCard.querySelector('button[class*="apply-button"]') ||
+                            firstCard.querySelector('button[class*="apply"]') ||
+                            firstCard.querySelector('a[class*="apply-button"]') ||
+                            firstCard.querySelector('a[class*="apply"]') ||
+                            firstCard.querySelector('button[aria-label*="Apply"]') ||
+                            firstCard.querySelector('button[aria-label*="apply"]');
                 if (btn) {
                   btn.click();
-                  return true;
+                  return { success: true, method: 'first_card' };
                 }
               }
               
-              return false;
+              return { success: false, debug: 'No cards or buttons found' };
             }, jobCard.company, jobCard.title);
             
-            if (clicked) {
-              console.log(`${this.platform}: ✅ Clicked button`);
+            if (clicked && clicked.success) {
+              console.log(`${this.platform}: ✅ Clicked button (method: ${clicked.method})`);
               console.log(`${this.platform}: ⏳ Waiting 1s for tab to open...`);
               await new Promise(r => setTimeout(r, 1000));
             } else {
               console.log(`${this.platform}: ⚠️ Button not found`);
+              if (clicked && clicked.debug) {
+                console.log(`${this.platform}: 🔍 DEBUG - Buttons/links found on card:`, JSON.stringify(clicked.debug, null, 2));
+              }
             }
           } catch (clickError) {
             console.log(`${this.platform}: ⚠️ Click error: ${clickError.message}`);
