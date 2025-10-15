@@ -2703,48 +2703,74 @@ window.setPrimaryResume = async function(resumeId) {
 // Edit resume - Make it globally accessible
 async function editResume(resumeId) {
   console.log('🔧 Edit resume called with ID:', resumeId);
+  
   try {
+    console.log('📞 Calling get-resume-by-id...');
     const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
-    console.log('📄 Resume fetched:', resume);
+    console.log('📄 Resume fetched:', JSON.stringify(resume));
+    
     if (!resume) {
-      showNotification('❌ Resume not found', 'error');
+      console.error('❌ Resume not found in database');
+      alert('Resume not found');
       return;
     }
+    
+    console.log('✅ Resume found, showing prompts...');
     
     // Prompt for new values
-    const newLabel = prompt('Resume Label:', resume.label);
-    console.log('✏️ New label:', newLabel);
-    if (newLabel === null) return; // User cancelled
+    const newLabel = prompt('Resume Label:', resume.label || '');
+    console.log('✏️ User entered label:', newLabel);
+    
+    if (newLabel === null) {
+      console.log('⚠️ User cancelled at label prompt');
+      return; // User cancelled
+    }
+    
     if (!newLabel || newLabel.trim() === '') {
-      showNotification('⚠️ Label cannot be empty', 'warning');
+      console.warn('⚠️ Empty label provided');
+      alert('Label cannot be empty');
       return;
     }
     
-    const newTechStack = prompt('Tech Stack (comma-separated):', resume.tech_stack);
-    if (newTechStack === null) return; // User cancelled
+    const newTechStack = prompt('Tech Stack (comma-separated):', resume.tech_stack || '');
+    console.log('🔧 User entered tech stack:', newTechStack);
+    
+    if (newTechStack === null) {
+      console.log('⚠️ User cancelled at tech stack prompt');
+      return; // User cancelled
+    }
     
     const newIsPrimary = confirm('Set as primary resume?');
+    console.log('⭐ Set as primary?', newIsPrimary);
     
     // Update resume
-    console.log('💾 Updating resume with data:', { label: newLabel.trim(), tech_stack: newTechStack.trim(), is_primary: newIsPrimary });
-    const result = await ipcRenderer.invoke('update-resume', resumeId, {
+    const updateData = {
       label: newLabel.trim(),
-      tech_stack: newTechStack.trim(),
-      description: resume.description,
-      work_experiences_json: resume.work_experiences_json,
+      tech_stack: newTechStack ? newTechStack.trim() : '',
+      description: resume.description || '',
+      work_experiences_json: resume.work_experiences_json || '[]',
       is_primary: newIsPrimary ? 1 : 0
-    });
+    };
     
-    console.log('📝 Update result:', result);
-    if (result.success) {
-      showNotification('✅ Resume updated successfully!', 'success');
+    console.log('💾 Updating resume with data:', JSON.stringify(updateData));
+    console.log('📞 Calling update-resume...');
+    
+    const result = await ipcRenderer.invoke('update-resume', resumeId, updateData);
+    
+    console.log('📝 Update result:', JSON.stringify(result));
+    
+    if (result && result.success) {
+      console.log('✅ Resume updated successfully');
+      alert('Resume updated successfully!');
       await loadResumes();
     } else {
-      showNotification('❌ Failed to update resume: ' + result.error, 'error');
+      console.error('❌ Update failed:', result);
+      alert('Failed to update resume: ' + (result ? result.error : 'Unknown error'));
     }
   } catch (error) {
     console.error('❌ Error editing resume:', error);
-    showNotification('❌ Failed to edit resume', 'error');
+    console.error('Error stack:', error.stack);
+    alert('Failed to edit resume: ' + error.message);
   }
 }
 
