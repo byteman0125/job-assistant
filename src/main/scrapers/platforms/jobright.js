@@ -108,17 +108,17 @@ class JobrightScraper extends BaseScraper {
     }
   }
 
-  // Helper: Check if location is in USA using GPT
-  async checkIfUSALocation(location) {
+  // Helper: Check if location is in USA (pattern-based, no GPT needed)
+  checkIfUSALocation(location) {
     try {
       if (!location || location === 'Unknown') {
         console.log(`${this.platform}: ⚠️ Unknown location - assuming USA`);
         return true; // If location is unknown, proceed (might be remote)
       }
       
-      // Quick check for obvious USA indicators
+      // USA indicators and state abbreviations
       const usaIndicators = [
-        'USA', 'U.S.A', 'US', 'United States',
+        'USA', 'U.S.A', 'U.S', 'US', 'United States', 'America',
         // Common US state abbreviations
         'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
         'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
@@ -142,29 +142,29 @@ class JobrightScraper extends BaseScraper {
         return true;
       }
       
-      // Use GPT to verify ambiguous locations
-      console.log(`${this.platform}: 🤔 Checking location with GPT: "${location}"`);
+      // Check for non-USA indicators
+      const nonUSAIndicators = [
+        'CANADA', 'TORONTO', 'VANCOUVER', 'MONTREAL', 'OTTAWA',
+        'UK', 'LONDON', 'MANCHESTER', 'EDINBURGH',
+        'GERMANY', 'BERLIN', 'MUNICH',
+        'FRANCE', 'PARIS',
+        'INDIA', 'BANGALORE', 'MUMBAI', 'DELHI',
+        'AUSTRALIA', 'SYDNEY', 'MELBOURNE',
+        'WORLDWIDE', 'GLOBAL', 'INTERNATIONAL'
+      ];
       
-      const prompt = `Is this job location in the United States (USA)?
-
-Location: "${location}"
-
-Reply with ONLY "YES" if it's in the USA, or "NO" if it's not in the USA.
-Examples:
-- "Westlake, TX" → YES
-- "New York, NY" → YES
-- "Remote - USA" → YES
-- "Toronto, Canada" → NO
-- "London, UK" → NO
-- "Remote - Worldwide" → NO`;
-
-      const gptResponse = await this.gptExtractor.sendToGPT(prompt);
-      const isUSA = gptResponse && gptResponse.trim().toUpperCase().includes('YES');
+      const hasNonUSAIndicator = nonUSAIndicators.some(indicator => 
+        locationUpper.includes(indicator)
+      );
       
-      console.log(`${this.platform}: 🤖 GPT says: ${gptResponse ? gptResponse.trim() : 'No response'}`);
-      console.log(`${this.platform}: ${isUSA ? '✅' : '❌'} Location is ${isUSA ? 'in' : 'NOT in'} USA`);
+      if (hasNonUSAIndicator) {
+        console.log(`${this.platform}: ❌ Non-USA location detected: "${location}"`);
+        return false;
+      }
       
-      return isUSA;
+      // Default: if ambiguous, assume USA (false negatives are worse than false positives)
+      console.log(`${this.platform}: ⚠️ Ambiguous location "${location}" - assuming USA`);
+      return true;
     } catch (error) {
       console.error(`${this.platform}: ⚠️ Error checking USA location:`, error.message);
       // On error, assume USA to avoid false negatives
@@ -644,7 +644,7 @@ Examples:
       // CHECK: Job location - Must be USA
       console.log(`${this.platform}: 📍 Job Location: ${jobCard.location}`);
       
-      const isUSALocation = await this.checkIfUSALocation(jobCard.location);
+      const isUSALocation = this.checkIfUSALocation(jobCard.location);
       
       if (!isUSALocation) {
         console.log(`${this.platform}: 🚫 SKIPPING - Non-USA location: "${jobCard.location}"`);
