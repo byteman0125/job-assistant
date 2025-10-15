@@ -41,6 +41,70 @@ class JobrightScraper extends BaseScraper {
     return false; // Default: assume fresh if can't determine
   }
 
+  // Helper: Check if location is in USA using GPT
+  async checkIfUSALocation(location) {
+    try {
+      if (!location || location === 'Unknown') {
+        console.log(`${this.platform}: ⚠️ Unknown location - assuming USA`);
+        return true; // If location is unknown, proceed (might be remote)
+      }
+      
+      // Quick check for obvious USA indicators
+      const usaIndicators = [
+        'USA', 'U.S.A', 'US', 'United States',
+        // Common US state abbreviations
+        'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+        'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+        'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+        'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+        'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+      ];
+      
+      // Check if location contains USA indicators
+      const locationUpper = location.toUpperCase();
+      const hasUSAIndicator = usaIndicators.some(indicator => {
+        // Check for state abbreviations (must be at word boundary or after comma)
+        if (indicator.length === 2) {
+          return locationUpper.match(new RegExp(`\\b${indicator}\\b|,\\s*${indicator}\\b`));
+        }
+        return locationUpper.includes(indicator);
+      });
+      
+      if (hasUSAIndicator) {
+        console.log(`${this.platform}: ✅ USA location detected (contains USA indicator)`);
+        return true;
+      }
+      
+      // Use GPT to verify ambiguous locations
+      console.log(`${this.platform}: 🤔 Checking location with GPT: "${location}"`);
+      
+      const prompt = `Is this job location in the United States (USA)?
+
+Location: "${location}"
+
+Reply with ONLY "YES" if it's in the USA, or "NO" if it's not in the USA.
+Examples:
+- "Westlake, TX" → YES
+- "New York, NY" → YES
+- "Remote - USA" → YES
+- "Toronto, Canada" → NO
+- "London, UK" → NO
+- "Remote - Worldwide" → NO`;
+
+      const gptResponse = await this.gptExtractor.sendToGPT(prompt);
+      const isUSA = gptResponse && gptResponse.trim().toUpperCase().includes('YES');
+      
+      console.log(`${this.platform}: 🤖 GPT says: ${gptResponse ? gptResponse.trim() : 'No response'}`);
+      console.log(`${this.platform}: ${isUSA ? '✅' : '❌'} Location is ${isUSA ? 'in' : 'NOT in'} USA`);
+      
+      return isUSA;
+    } catch (error) {
+      console.error(`${this.platform}: ⚠️ Error checking USA location:`, error.message);
+      // On error, assume USA to avoid false negatives
+      return true;
+    }
+  }
+
   // Helper: Click "Not Interested" button and handle modal
   async clickNotInterestedButton(jobCard, options = {}) {
     const { highlight = false, showForDuration = 0 } = options;
@@ -307,6 +371,11 @@ class JobrightScraper extends BaseScraper {
             const isRemote = workLocationType === 'REMOTE';
             const isHybridOrOnsite = workLocationType === 'HYBRID' || workLocationType === 'ONSITE';
             
+            // Extract job location (city, state, country)
+            const locationEl = card.querySelector('.index_job-metadata-item__ThMv4 span') || 
+                              card.querySelector('[class*="job-metadata"] span');
+            const jobLocation = locationEl ? locationEl.textContent.trim() : 'Unknown';
+            
             return {
               index: index,
               title: titleEl ? titleEl.textContent.trim() : null,
@@ -317,7 +386,8 @@ class JobrightScraper extends BaseScraper {
               isDirectApply: isDirectApply,
               workLocationType: workLocationType,
               isRemote: isRemote,
-              isHybridOrOnsite: isHybridOrOnsite
+              isHybridOrOnsite: isHybridOrOnsite,
+              location: jobLocation
             };
           }).filter(job => job.title && job.company && job.hasApplyButton);
         });
@@ -449,6 +519,29 @@ class JobrightScraper extends BaseScraper {
       } else if (jobCard.isRemote) {
         console.log(`${this.platform}: ✅ REMOTE job confirmed - Will process this job`);
       }
+      
+      // CHECK: Job location - Must be USA
+      console.log(`${this.platform}: 📍 Job Location: ${jobCard.location}`);
+      
+      const isUSALocation = await this.checkIfUSALocation(jobCard.location);
+      
+      if (!isUSALocation) {
+        console.log(`${this.platform}: 🚫 SKIPPING - Non-USA location: "${jobCard.location}"`);
+        console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
+        
+        // Click "Not Interested" to remove it and reveal next card
+        try {
+          await this.clickNotInterestedButton(jobCard);
+          console.log(`${this.platform}: ✅ Marked as "Not Interested" and removed from feed`);
+        } catch (err) {
+          console.log(`${this.platform}: ⚠️ Could not remove job: ${err.message}`);
+        }
+        
+        await this.randomDelay(1000, 1500);
+        continue; // Get next card from refreshed list
+      }
+      
+      console.log(`${this.platform}: ✅ USA location confirmed - Will process this job`);
       
       // CHECK: Ignore keywords in job title
       const ignoreKeywords = this.db.getSetting('ignore_keywords') || [];
