@@ -322,7 +322,7 @@ class JobrightScraper extends BaseScraper {
       // SCENARIO 1: Dropdown menu is visible (new UI)
       // OR Modal exists but has 0 options (which means it's actually a dropdown)
       if (modalInfo.dropdownVisible || (modalInfo.modalVisible && modalInfo.radioCount === 0)) {
-        console.log(`${this.platform}: 📋 Dropdown menu detected! Clicking "Already Applied"...`);
+        console.log(`${this.platform}: 📋 Checking for dropdown menu...`);
         
         const dropdownClicked = await this.page.evaluate(() => {
           // Find "Already Applied" option in dropdown
@@ -331,11 +331,14 @@ class JobrightScraper extends BaseScraper {
           
           // Debug: Log all dropdown items
           if (dropdownItems.length > 0) {
+            console.log(`📋 Dropdown menu items:`);
             dropdownItems.forEach((item, idx) => {
               const menuId = item.getAttribute('data-menu-id');
               const text = item.textContent?.trim() || '';
               console.log(`  Item ${idx + 1}: text="${text}", menuId="${menuId}"`);
             });
+          } else {
+            console.log(`⚠️ No dropdown items found - button click may have worked directly`);
           }
           
           for (const item of dropdownItems) {
@@ -350,19 +353,24 @@ class JobrightScraper extends BaseScraper {
             }
           }
           
+          // If no dropdown items found, assume the button click worked directly
+          if (dropdownItems.length === 0) {
+            return { success: true, reason: 'No dropdown needed - button click worked directly' };
+          }
+          
           console.log('❌ "Already Applied" option not found in dropdown');
           return { success: false, reason: 'Dropdown option not found' };
         });
         
-        console.log(`${this.platform}: 📤 Dropdown click result:`, JSON.stringify(dropdownClicked));
+        console.log(`${this.platform}: 📤 Dropdown result:`, JSON.stringify(dropdownClicked));
         
         if (dropdownClicked.success) {
-          console.log(`${this.platform}: ✅ Clicked "Already Applied" from dropdown`);
-          console.log(`${this.platform}: ⏳ Waiting 2s for action to complete...`);
+          console.log(`${this.platform}: ✅ Action completed: ${dropdownClicked.reason}`);
+          console.log(`${this.platform}: ⏳ Waiting 2s for changes to take effect...`);
           await new Promise(r => setTimeout(r, 2000));
           return true;
         } else {
-          console.log(`${this.platform}: ⚠️ Could not click dropdown option - continuing anyway`);
+          console.log(`${this.platform}: ⚠️ Could not complete dropdown action - continuing anyway`);
           await new Promise(r => setTimeout(r, 2000));
           return true;
         }
