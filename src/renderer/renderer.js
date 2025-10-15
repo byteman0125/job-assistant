@@ -2775,28 +2775,33 @@ window.editResume = editResume;
 function renderEditExperiences() {
   const container = document.getElementById('editResumeExpList');
   
+  console.log('📝 Rendering edit experiences:', editResumeExperiences);
+  
   if (!editResumeExperiences || editResumeExperiences.length === 0) {
     container.innerHTML = '<p style="color: #999; font-size: 12px; text-align: center; padding: 10px;">No work experiences added yet</p>';
     return;
   }
   
-  container.innerHTML = editResumeExperiences.map((exp, index) => `
+  container.innerHTML = editResumeExperiences.map((exp, index) => {
+    console.log(`Experience ${index}:`, exp);
+    return `
     <div class="work-exp-card" style="background: #2a2a2a; padding: 10px; border-radius: 6px; border: 1px solid #3d3d3d;">
       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px;">
         <div>
-          <strong style="color: #4CAF50; font-size: 12px;">${exp.company}</strong>
-          <span style="color: #999; font-size: 11px; margin-left: 8px;">${exp.period}</span>
+          <strong style="color: #4CAF50; font-size: 12px;">${exp.company || 'No Company'}</strong>
+          <span style="color: #999; font-size: 11px; margin-left: 8px;">${exp.period || 'No Period'}</span>
         </div>
         <div style="display: flex; gap: 5px;">
           <button class="btn btn-sm" style="padding: 3px 8px; font-size: 10px; background: #3d3d3d;" onclick="editEditExperience(${index})">✏️ Edit</button>
           <button class="btn btn-sm" style="padding: 3px 8px; font-size: 10px; background: #d32f2f;" onclick="deleteEditExperience(${index})">🗑️</button>
         </div>
       </div>
-      <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">${exp.role}</div>
-      <div style="font-size: 10px; color: #aaa; margin-bottom: 4px;">📌 ${exp.field}</div>
+      <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">${exp.role || 'No Role'}</div>
+      <div style="font-size: 10px; color: #aaa; margin-bottom: 4px;">📌 ${exp.field || 'No Field'}</div>
       ${exp.description ? `<div style="font-size: 10px; color: #bbb; margin-top: 6px; padding-top: 6px; border-top: 1px solid #3d3d3d;">${exp.description}</div>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // Add experience in edit modal
