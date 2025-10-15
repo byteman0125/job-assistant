@@ -3065,7 +3065,7 @@ document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
 
 // Add event delegation for edit resume buttons
 document.addEventListener('click', async (e) => {
-  // console.log('Click detected on element:', e.target, 'Classes:', e.target.className);
+  console.log('🖱️ Click detected on element:', e.target.tagName, 'Classes:', e.target.className);
   
   // Edit resume button
   if (e.target.classList.contains('edit-resume-btn')) {
