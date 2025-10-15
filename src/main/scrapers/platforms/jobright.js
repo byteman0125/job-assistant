@@ -282,17 +282,21 @@ class JobrightScraper extends BaseScraper {
       
       console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
       
-      // STEP 3: Handle modal (select reason and submit)
-      console.log(`${this.platform}: ⏳ Waiting for reason modal to appear...`);
-      await new Promise(r => setTimeout(r, 1500)); // Wait a bit longer for modal
+      // STEP 3: Handle modal OR dropdown menu
+      console.log(`${this.platform}: ⏳ Waiting for reason modal or dropdown to appear...`);
+      await new Promise(r => setTimeout(r, 1500)); // Wait a bit longer for modal/dropdown
       
       // Check what's on the page and log it
       const modalInfo = await this.page.evaluate(() => {
-        // Check for modal
+        // Check for dropdown menu (new UI)
+        const dropdown = document.querySelector('.ant-dropdown.ant-dropdown-placement-bottom');
+        const dropdownVisible = dropdown && dropdown.offsetParent !== null;
+        
+        // Check for modal (old UI)
         const modal = document.querySelector('.ant-modal');
         const popup = document.querySelector('[class*="not-interest-popup"]');
         
-        // Get all radio options
+        // Get all radio options (for modal)
         const radios = document.querySelectorAll('input.ant-radio-input');
         const radioInfo = Array.from(radios).map(radio => ({
           value: radio.value,
@@ -300,10 +304,11 @@ class JobrightScraper extends BaseScraper {
           visible: radio.offsetParent !== null
         }));
         
-        // Check for submit button
+        // Check for submit button (for modal)
         const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
         
         return {
+          dropdownVisible: dropdownVisible,
           modalVisible: !!modal || !!popup,
           radioCount: radios.length,
           radioOptions: radioInfo,
@@ -312,10 +317,46 @@ class JobrightScraper extends BaseScraper {
         };
       });
       
-      console.log(`${this.platform}: 📋 Modal Info:`, JSON.stringify(modalInfo, null, 2));
+      console.log(`${this.platform}: 📋 UI Info:`, JSON.stringify(modalInfo, null, 2));
       
+      // SCENARIO 1: Dropdown menu is visible (new UI)
+      if (modalInfo.dropdownVisible) {
+        console.log(`${this.platform}: 📋 Dropdown menu detected! Clicking "Already Applied"...`);
+        
+        const dropdownClicked = await this.page.evaluate(() => {
+          // Find "Already Applied" option in dropdown
+          const dropdownItems = document.querySelectorAll('.ant-dropdown-menu-item');
+          for (const item of dropdownItems) {
+            const menuId = item.getAttribute('data-menu-id');
+            const text = item.textContent?.trim() || '';
+            
+            // Look for "Already Applied" or menu ID containing "applied"
+            if (text.includes('Already Applied') || (menuId && menuId.includes('applied'))) {
+              console.log('✅ Found "Already Applied" in dropdown, clicking...');
+              item.click();
+              return { success: true, reason: 'Dropdown "Already Applied" clicked' };
+            }
+          }
+          
+          console.log('❌ "Already Applied" option not found in dropdown');
+          return { success: false, reason: 'Dropdown option not found' };
+        });
+        
+        console.log(`${this.platform}: 📤 Dropdown click result:`, JSON.stringify(dropdownClicked));
+        
+        if (dropdownClicked.success) {
+          console.log(`${this.platform}: ✅ Clicked "Already Applied" from dropdown`);
+          await this.randomDelay(1000, 1500);
+          return true;
+        } else {
+          console.log(`${this.platform}: ⚠️ Could not click dropdown option`);
+          return false;
+        }
+      }
+      
+      // SCENARIO 2: Modal is visible (old UI)
       if (!modalInfo.modalVisible) {
-        console.log(`${this.platform}: ⚠️ Modal not found! Skipping modal handling...`);
+        console.log(`${this.platform}: ⚠️ Neither dropdown nor modal found! Skipping...`);
         await new Promise(r => setTimeout(r, 2000));
         return true;
       }
