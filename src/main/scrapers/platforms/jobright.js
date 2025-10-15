@@ -432,28 +432,43 @@ Examples:
             const buttonText = applyBtn ? applyBtn.textContent.trim().toUpperCase() : '';
             const isDirectApply = buttonText.includes('DIRECT') || buttonText.includes('EASY');
             
-            // Check work location type (Remote, Hybrid, Onsite)
-            const workLocationEl = card.querySelector('.keyword-highlight');
-            const workLocationType = workLocationEl ? workLocationEl.textContent.trim().toUpperCase() : 'UNKNOWN';
-            const isRemote = workLocationType === 'REMOTE';
-            const isHybridOrOnsite = workLocationType === 'HYBRID' || workLocationType === 'ONSITE';
-            
-            // Extract job location (city, state, country)
-            const metadataItems = card.querySelectorAll('.index_job-metadata-item__ThMv4 span');
+            // Extract metadata: location, salary, and work type (Remote/Hybrid/Onsite)
+            const metadataItems = card.querySelectorAll('.index_job-metadata-item__ThMv4');
             let jobLocation = 'Unknown';
             let salaryText = null;
+            let workLocationType = 'UNKNOWN';
             
-            // Loop through metadata items to find location and salary
+            // Loop through metadata items to identify each by icon or content
             metadataItems.forEach(item => {
-              const text = item.textContent.trim();
-              // Salary detection: contains $ or /yr or /hr or K
-              if (text.includes('$') || text.includes('/yr') || text.includes('/hr') || text.includes('K')) {
+              const img = item.querySelector('img');
+              const span = item.querySelector('span');
+              
+              if (!span) return;
+              
+              const text = span.textContent.trim();
+              const iconAlt = img ? img.getAttribute('alt') : '';
+              
+              // Check for Remote/Hybrid/Onsite by keyword-highlight
+              const highlightEl = span.querySelector('.keyword-highlight');
+              if (highlightEl) {
+                workLocationType = highlightEl.textContent.trim().toUpperCase();
+              }
+              // Location: has 'position' icon or contains state/country
+              else if (iconAlt === 'position' || iconAlt === 'location') {
+                jobLocation = text;
+              }
+              // Salary: contains $ or /yr or /hr or K
+              else if (text.includes('$') || text.includes('/yr') || text.includes('/hr') || text.includes('K')) {
                 salaryText = text;
-              } else if (!jobLocation || jobLocation === 'Unknown') {
-                // First non-salary text is likely location
+              }
+              // Fallback: if no icon matched and text looks like location (has comma or state)
+              else if ((text.includes(',') || text.match(/\b[A-Z]{2}\b/)) && jobLocation === 'Unknown') {
                 jobLocation = text;
               }
             });
+            
+            const isRemote = workLocationType === 'REMOTE';
+            const isHybridOrOnsite = workLocationType === 'HYBRID' || workLocationType === 'ONSITE';
             
             return {
               index: index,
