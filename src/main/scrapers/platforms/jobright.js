@@ -301,6 +301,12 @@ class JobrightScraper extends BaseScraper {
             const buttonText = applyBtn ? applyBtn.textContent.trim().toUpperCase() : '';
             const isDirectApply = buttonText.includes('DIRECT') || buttonText.includes('EASY');
             
+            // Check work location type (Remote, Hybrid, Onsite)
+            const workLocationEl = card.querySelector('.keyword-highlight');
+            const workLocationType = workLocationEl ? workLocationEl.textContent.trim().toUpperCase() : 'UNKNOWN';
+            const isRemote = workLocationType === 'REMOTE';
+            const isHybridOrOnsite = workLocationType === 'HYBRID' || workLocationType === 'ONSITE';
+            
             return {
               index: index,
               title: titleEl ? titleEl.textContent.trim() : null,
@@ -308,7 +314,10 @@ class JobrightScraper extends BaseScraper {
               postedTime: timeEl ? timeEl.textContent.trim() : null,
               hasApplyButton: !!applyBtn,
               buttonText: buttonText,
-              isDirectApply: isDirectApply
+              isDirectApply: isDirectApply,
+              workLocationType: workLocationType,
+              isRemote: isRemote,
+              isHybridOrOnsite: isHybridOrOnsite
             };
           }).filter(job => job.title && job.company && job.hasApplyButton);
         });
@@ -414,6 +423,31 @@ class JobrightScraper extends BaseScraper {
         
         await this.randomDelay(1000, 1500);
         continue; // Get next card from refreshed list
+      }
+      
+      // CHECK: Work location type - Only process REMOTE jobs
+      console.log(`${this.platform}: 📍 Work Location: ${jobCard.workLocationType}`);
+      
+      if (jobCard.isHybridOrOnsite) {
+        console.log(`${this.platform}: 🚫 SKIPPING - "${jobCard.workLocationType}" job (we only want REMOTE)`);
+        console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
+        
+        // Click "Not Interested" to remove it and reveal next card
+        try {
+          await this.clickNotInterestedButton(jobCard);
+          console.log(`${this.platform}: ✅ Marked as "Not Interested" and removed from feed`);
+        } catch (err) {
+          console.log(`${this.platform}: ⚠️ Could not remove job: ${err.message}`);
+        }
+        
+        await this.randomDelay(1000, 1500);
+        continue; // Get next card from refreshed list
+      }
+      
+      if (!jobCard.isRemote && jobCard.workLocationType !== 'UNKNOWN') {
+        console.log(`${this.platform}: ⚠️ Unknown work location type: "${jobCard.workLocationType}" - Processing anyway`);
+      } else if (jobCard.isRemote) {
+        console.log(`${this.platform}: ✅ REMOTE job confirmed - Will process this job`);
       }
       
       // CHECK: Ignore keywords in job title
