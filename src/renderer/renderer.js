@@ -326,6 +326,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupDragSelection();
   setupResumeListeners(); // Setup resume event listeners
   
+  // Load profile and resumes on startup (after DOM is ready)
+  await loadProfile();
+  await loadResumes();
+  
   // Setup GPT prompt modal buttons
   if (copyPromptBtn) {
     copyPromptBtn.addEventListener('click', async () => {
@@ -2845,10 +2849,6 @@ async function saveResumeExperiences() {
 document.querySelector('[data-tab="profile"]').addEventListener('click', () => {
   loadResumes();
 });
-
-// Load profile and resumes on startup
-loadProfile();
-loadResumes();
 
 // ========================================
 // BUG REPORTS TAB
