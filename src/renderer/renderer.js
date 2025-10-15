@@ -30,6 +30,7 @@ const jobsTabCount = document.getElementById('jobsTabCount');
 // Resume Management State
 let selectedNewResumeFile = null;
 let tempResumeExperiences = []; // Temporary storage for experiences before saving resume
+let editResumeExperiences = []; // Storage for experiences when editing existing resume
 
 // Pagination state
 let currentPage = 1;
@@ -2699,9 +2700,6 @@ window.setPrimaryResume = async function(resumeId) {
     showNotification('❌ Failed to set primary resume', 'error');
   }
 };
-
-// Store edit experiences globally
-let editResumeExperiences = [];
 
 // Edit resume - Make it globally accessible
 async function editResume(resumeId) {
