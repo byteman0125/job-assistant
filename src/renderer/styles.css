@@ -977,7 +977,7 @@ body {
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  gap: 10px;
 }
 
 .form-group {
@@ -1001,8 +1001,8 @@ body {
 .salary-filters-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-  margin-top: 10px;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .salary-filters-grid .form-group {
@@ -1010,14 +1010,14 @@ body {
 }
 
 .form-group {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .checkbox-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 5px;
 }
 
 .checkbox-label {
@@ -1052,32 +1052,32 @@ body {
   background: rgba(76, 175, 80, 0.05);
   border: 1px solid rgba(76, 175, 80, 0.2);
   border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 30px;
+  padding: 15px;
+  margin-bottom: 20px;
 }
 
 .resume-add-form h4 {
   color: #4CAF50;
-  font-size: 16px;
-  margin-bottom: 15px;
+  font-size: 14px;
+  margin-bottom: 10px;
 }
 
 .resumes-list {
-  margin-top: 30px;
+  margin-top: 20px;
 }
 
 .resumes-list h4 {
   color: #4CAF50;
-  font-size: 16px;
-  margin-bottom: 15px;
-  padding-bottom: 10px;
+  font-size: 14px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #3d3d3d;
 }
 
 .resumes-container {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 10px;
 }
 
 .resume-card {
@@ -1195,8 +1195,8 @@ body {
   background: rgba(76, 175, 80, 0.05);
   border: 1px solid rgba(76, 175, 80, 0.2);
   border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 12px;
+  margin-bottom: 15px;
 }
 
 .new-resume-exp-list {
@@ -1383,15 +1383,15 @@ input[type="month"]::-webkit-calendar-picker-indicator {
 .checkbox-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
-  padding: 8px;
+  padding: 6px;
   border-radius: 4px;
   transition: background 0.2s;
 }
