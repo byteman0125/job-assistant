@@ -41,6 +41,73 @@ class JobrightScraper extends BaseScraper {
     return false; // Default: assume fresh if can't determine
   }
 
+  // Helper: Check salary from job card text
+  checkSalaryFromCard(salaryText) {
+    try {
+      // Parse salary text like "$175K/yr - $210K/yr", "$120K", "120000/year", etc.
+      const minSalary = this.currentSalarySettings?.annual || 120000;
+      
+      if (!salaryText || salaryText === 'Unknown') {
+        return { meetsRequirement: true, reason: 'No salary info to check' };
+      }
+      
+      console.log(`${this.platform}: 🔍 Parsing salary: "${salaryText}"`);
+      
+      // Extract all numbers from salary text
+      const numbers = salaryText.match(/\d+/g);
+      if (!numbers || numbers.length === 0) {
+        return { meetsRequirement: true, reason: 'Could not parse salary - will check later' };
+      }
+      
+      // Determine if it's annual, monthly, or hourly
+      const isAnnual = salaryText.toLowerCase().includes('/yr') || 
+                      salaryText.toLowerCase().includes('year') ||
+                      salaryText.toLowerCase().includes('annual') ||
+                      (!salaryText.toLowerCase().includes('/mo') && !salaryText.toLowerCase().includes('/hr'));
+      const isMonthly = salaryText.toLowerCase().includes('/mo') || salaryText.toLowerCase().includes('month');
+      const isHourly = salaryText.toLowerCase().includes('/hr') || salaryText.toLowerCase().includes('hour');
+      
+      // Convert to annual salary for comparison
+      let annualSalaries = [];
+      
+      for (const numStr of numbers) {
+        let num = parseInt(numStr);
+        
+        // Handle K notation (e.g., "175K" = 175000)
+        if (salaryText.includes('K') || salaryText.includes('k')) {
+          num = num * 1000;
+        }
+        
+        // Convert to annual
+        if (isMonthly) {
+          num = num * 12;
+        } else if (isHourly) {
+          num = num * 2080; // 40 hours/week * 52 weeks
+        }
+        
+        annualSalaries.push(num);
+      }
+      
+      // Get maximum salary from range (e.g., "$120K - $150K" → use 150K)
+      const maxSalary = Math.max(...annualSalaries);
+      
+      console.log(`${this.platform}: 💵 Parsed max annual salary: $${maxSalary.toLocaleString()}`);
+      console.log(`${this.platform}: 📊 Minimum required: $${minSalary.toLocaleString()}`);
+      
+      const meetsRequirement = maxSalary >= minSalary;
+      
+      return {
+        meetsRequirement,
+        reason: meetsRequirement 
+          ? `Salary $${maxSalary.toLocaleString()} >= $${minSalary.toLocaleString()}`
+          : `Salary $${maxSalary.toLocaleString()} < $${minSalary.toLocaleString()}`
+      };
+    } catch (error) {
+      console.error(`${this.platform}: ⚠️ Error parsing salary:`, error.message);
+      return { meetsRequirement: true, reason: 'Error parsing - will check later' };
+    }
+  }
+
   // Helper: Check if location is in USA using GPT
   async checkIfUSALocation(location) {
     try {
@@ -372,9 +439,21 @@ Examples:
             const isHybridOrOnsite = workLocationType === 'HYBRID' || workLocationType === 'ONSITE';
             
             // Extract job location (city, state, country)
-            const locationEl = card.querySelector('.index_job-metadata-item__ThMv4 span') || 
-                              card.querySelector('[class*="job-metadata"] span');
-            const jobLocation = locationEl ? locationEl.textContent.trim() : 'Unknown';
+            const metadataItems = card.querySelectorAll('.index_job-metadata-item__ThMv4 span');
+            let jobLocation = 'Unknown';
+            let salaryText = null;
+            
+            // Loop through metadata items to find location and salary
+            metadataItems.forEach(item => {
+              const text = item.textContent.trim();
+              // Salary detection: contains $ or /yr or /hr or K
+              if (text.includes('$') || text.includes('/yr') || text.includes('/hr') || text.includes('K')) {
+                salaryText = text;
+              } else if (!jobLocation || jobLocation === 'Unknown') {
+                // First non-salary text is likely location
+                jobLocation = text;
+              }
+            });
             
             return {
               index: index,
@@ -387,7 +466,8 @@ Examples:
               workLocationType: workLocationType,
               isRemote: isRemote,
               isHybridOrOnsite: isHybridOrOnsite,
-              location: jobLocation
+              location: jobLocation,
+              salaryFromCard: salaryText
             };
           }).filter(job => job.title && job.company && job.hasApplyButton);
         });
@@ -542,6 +622,34 @@ Examples:
       }
       
       console.log(`${this.platform}: ✅ USA location confirmed - Will process this job`);
+      
+      // CHECK: Primary salary check from job card (if available)
+      if (jobCard.salaryFromCard) {
+        console.log(`${this.platform}: 💰 Salary from card: ${jobCard.salaryFromCard}`);
+        
+        const salaryCheckResult = this.checkSalaryFromCard(jobCard.salaryFromCard);
+        
+        if (!salaryCheckResult.meetsRequirement) {
+          console.log(`${this.platform}: 🚫 SKIPPING - Salary too low: ${jobCard.salaryFromCard}`);
+          console.log(`${this.platform}: ${salaryCheckResult.reason}`);
+          console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
+          
+          // Click "Not Interested" to remove it and reveal next card
+          try {
+            await this.clickNotInterestedButton(jobCard);
+            console.log(`${this.platform}: ✅ Marked as "Not Interested" and removed from feed`);
+          } catch (err) {
+            console.log(`${this.platform}: ⚠️ Could not remove job: ${err.message}`);
+          }
+          
+          await this.randomDelay(1000, 1500);
+          continue; // Get next card from refreshed list
+        }
+        
+        console.log(`${this.platform}: ✅ Salary meets requirement: ${salaryCheckResult.reason}`);
+      } else {
+        console.log(`${this.platform}: 💰 No salary info on card - will check after opening job`);
+      }
       
       // CHECK: Ignore keywords in job title
       const ignoreKeywords = this.db.getSetting('ignore_keywords') || [];
