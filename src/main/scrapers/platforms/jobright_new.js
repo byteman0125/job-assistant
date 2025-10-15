@@ -249,26 +249,27 @@ class JobrightScraper extends BaseScraper {
         });
       }
       
-      console.log(`${this.platform}: 🖱️ Clicking "Not Interested" button...`);
+      console.log(`${this.platform}: 🖱️ Clicking "More Options" button to open dropdown...`);
       const clicked = await this.page.evaluate((company, title) => {
         const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
         for (const card of cards) {
           const companyEl = card.querySelector('div.index_company-name__gKiOY');
           const titleEl = card.querySelector('h2.index_job-title__UjuEY');
           if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
-            // Try multiple selectors for "Not Interested" button (cross-platform compatibility)
-            const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
-                                     card.querySelector('button[id*="not-interest"]') ||
-                                     card.querySelector('button[class*="not-interest"]') ||
-                                     card.querySelector('button[aria-label*="Not interested"]') ||
-                                     card.querySelector('button[aria-label*="not interested"]') ||
-                               card.querySelector('button[id*="not-interest"]') ||
-                               card.querySelector('button[class*="not-interest"]') ||
-                               card.querySelector('button[aria-label*="Not interested"]') ||
-                               card.querySelector('button[aria-label*="not interested"]');
-            if (dislikeBtn) {
-              dislikeBtn.click();
+            // Find "More Options" button (three dots)
+            const moreBtn = card.querySelector('img[alt="more-options"]') ||
+                           card.querySelector('[class*="job-more-button"]') ||
+                           card.querySelector('.ant-dropdown-trigger');
+            
+            if (moreBtn) {
+              console.log('✅ Found "More Options" button, clicking...');
+              // Click the parent element if it's an img
+              const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
+              clickTarget.click();
               return true;
+            } else {
+              console.log('❌ "More Options" button not found on card');
+              return false;
             }
           }
         }
@@ -276,18 +277,18 @@ class JobrightScraper extends BaseScraper {
       }, jobCard.company, jobCard.title);
       
       if (!clicked) {
-        console.log(`${this.platform}: ⚠️ Not Interested button not found - card may have been auto-removed`);
+        console.log(`${this.platform}: ⚠️ More Options button not found - card may have been auto-removed`);
         return false;
       }
       
-      console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+      console.log(`${this.platform}: ✅ Clicked "More Options" button`);
       
-      // STEP 3: Handle modal OR dropdown menu
-      console.log(`${this.platform}: ⏳ Waiting for UI to appear...`);
+      // STEP 3: Handle modal OR dropdown menu [V2]
+      console.log(`${this.platform}: ⏳ Waiting for UI to appear... [V2]`);
       await new Promise(r => setTimeout(r, 1500)); // Wait for modal/dropdown
       
       // FIRST: Check if dropdown exists
-      console.log(`${this.platform}: 🔍 Checking for dropdown menu...`);
+      console.log(`${this.platform}: 🔍 Checking for dropdown menu... [V2]`);
       const dropdownCheck = await this.page.evaluate(() => {
         const dropdownItems = document.querySelectorAll('.ant-dropdown-menu-item');
         return {

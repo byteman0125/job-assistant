@@ -2,7 +2,7 @@ const HimalayasScraper = require('./platforms/himalayas');
 const JobgetherScraper = require('./platforms/jobgether');
 const BuiltInScraper = require('./platforms/builtin');
 const ZipRecruiterScraper = require('./platforms/ziprecruiter');
-const JobrightScraper = require('./platforms/jobright');
+const JobrightScraper = require('./platforms/jobright_new');
 const RemoteOKScraper = require('./platforms/remoteok');
 const WeWorkRemotelyScraper = require('./platforms/weworkremotely');
 const GPTExtractor = require('../gptExtractor');
@@ -36,7 +36,7 @@ class ScraperManager {
     this.isRunning = true;
     this.onJobFoundCallback = onJobFound;
 
-    console.log('Starting all scrapers...');
+    console.log('Starting all scrapers... [V2-NEW-FILE]');
     console.log('🤖 GPT Extractor: Mandatory AI extraction enabled');
     console.log('📹 Action Recorder: Ready to learn from you');
     await this.gptExtractor.initialize();

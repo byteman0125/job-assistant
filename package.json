@@ -4,7 +4,7 @@
   "description": "Automated Job Search Application for Remote Positions",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "set NODE_OPTIONS=--no-deprecation && electron . --no-cache",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
