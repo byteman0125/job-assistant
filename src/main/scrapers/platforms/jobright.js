@@ -335,7 +335,37 @@ class JobrightScraper extends BaseScraper {
       
       if (submitted.success) {
         console.log(`${this.platform}: ✅ Submitted "I already applied" - waiting for card to disappear...`);
-        await this.randomDelay(3000, 4000);
+        
+        // Wait and verify card actually disappeared
+        let disappeared = false;
+        for (let i = 0; i < 5; i++) {
+          await this.randomDelay(1000, 1500);
+          
+          // Check if card is gone
+          const cardStillExists = await this.page.evaluate((company, title) => {
+            const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+            for (const card of cards) {
+              const companyEl = card.querySelector('div.index_company-name__gKiOY');
+              const titleEl = card.querySelector('h2.index_job-title__UjuEY');
+              if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
+                return true; // Card still exists
+              }
+            }
+            return false; // Card is gone
+          }, jobCard.company, jobCard.title);
+          
+          if (!cardStillExists) {
+            console.log(`${this.platform}: ✅ Card disappeared after ${i + 1}s`);
+            disappeared = true;
+            break;
+          }
+        }
+        
+        if (!disappeared) {
+          console.log(`${this.platform}: ⚠️ Card didn't disappear after 5s - forcing page refresh`);
+          await this.page.reload({ waitUntil: 'networkidle2' });
+          await this.randomDelay(2000, 3000);
+        }
       } else {
         console.log(`${this.platform}: ⚠️ Submit failed (${submitted.reason}), waiting anyway...`);
         await new Promise(r => setTimeout(r, 3000));
