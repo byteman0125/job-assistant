@@ -347,7 +347,8 @@ class JobrightScraper extends BaseScraper {
         
         if (dropdownClicked.success) {
           console.log(`${this.platform}: ✅ Clicked "Already Applied" from dropdown`);
-          await this.randomDelay(1000, 1500);
+          console.log(`${this.platform}: ⏳ Waiting 2s for action to complete...`);
+          await new Promise(r => setTimeout(r, 2000));
           return true;
         } else {
           console.log(`${this.platform}: ⚠️ Could not click dropdown option`);
