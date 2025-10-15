@@ -267,8 +267,26 @@ class JobrightScraper extends BaseScraper {
               console.log(`✅ Found "More Options" button (tag: ${moreBtn.tagName}, alt: ${moreBtn.alt || 'N/A'})`);
               // Click the parent element if it's an img
               const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
-              console.log(`🖱️ Clicking ${clickTarget.tagName} element...`);
-              clickTarget.click();
+              console.log(`🖱️ Simulating real click on ${clickTarget.tagName} element...`);
+              
+              // Simulate real mouse events (not just click())
+              const rect = clickTarget.getBoundingClientRect();
+              const x = rect.left + rect.width / 2;
+              const y = rect.top + rect.height / 2;
+              
+              // Dispatch mousedown, mouseup, and click events
+              ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                const event = new MouseEvent(eventType, {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: x,
+                  clientY: y,
+                  button: 0
+                });
+                clickTarget.dispatchEvent(event);
+              });
+              
               return true;
             } else {
               console.log('❌ "More Options" button not found on card');
@@ -1133,8 +1151,26 @@ class JobrightScraper extends BaseScraper {
                   console.log(`✅ Found "More Options" button (tag: ${moreBtn.tagName}, alt: ${moreBtn.alt || 'N/A'})`);
                   // Click the parent element if it's an img
                   const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
-                  console.log(`🖱️ Clicking ${clickTarget.tagName} element...`);
-                  clickTarget.click();
+                  console.log(`🖱️ Simulating real click on ${clickTarget.tagName} element...`);
+                  
+                  // Simulate real mouse events (not just click())
+                  const rect = clickTarget.getBoundingClientRect();
+                  const x = rect.left + rect.width / 2;
+                  const y = rect.top + rect.height / 2;
+                  
+                  // Dispatch mousedown, mouseup, and click events
+                  ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                    const event = new MouseEvent(eventType, {
+                      view: window,
+                      bubbles: true,
+                      cancelable: true,
+                      clientX: x,
+                      clientY: y,
+                      button: 0
+                    });
+                    clickTarget.dispatchEvent(event);
+                  });
+                  
                   return true;
                 } else {
                   console.log('❌ "More Options" button not found on card');
