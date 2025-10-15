@@ -2913,7 +2913,7 @@ window.saveEditedResume = async function() {
   }
 };
 
-// Delete resume with confirmation
+// Delete resume - Direct delete without confirmation
 window.deleteResume = async function(resumeId) {
   console.log('🗑️ Delete resume called for ID:', resumeId);
   
@@ -2925,25 +2925,19 @@ window.deleteResume = async function(resumeId) {
       return;
     }
     
-    // Show custom confirmation (since confirm() doesn't work in Electron)
-    const confirmed = window.confirm(`Are you sure you want to delete "${resume.label}"?\n\nThis will also delete all associated work experiences.\n\nThis action cannot be undone.`);
-    
-    if (!confirmed) {
-      console.log('Delete cancelled by user');
-      return;
-    }
-    
     console.log('Deleting resume:', resume.label);
+    
+    // Direct delete without confirmation
     const result = await ipcRenderer.invoke('delete-resume', resumeId);
     
-    if (result.success) {
-      showNotification('✅ Resume deleted successfully!', 'success');
+    if (result && result.success) {
+      showNotification(`✅ Resume "${resume.label}" deleted successfully!`, 'success');
       await loadResumes();
     } else {
       showNotification('❌ Failed to delete resume', 'error');
     }
   } catch (error) {
-    console.error('Error deleting resume:', error);
+    console.error('❌ Error deleting resume:', error);
     showNotification('❌ Failed to delete resume: ' + error.message, 'error');
   }
 };
