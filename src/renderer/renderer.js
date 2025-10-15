@@ -2711,76 +2711,83 @@ async function editResume(resumeId) {
     
     if (!resume) {
       console.error('❌ Resume not found in database');
-      alert('Resume not found');
+      showNotification('❌ Resume not found', 'error');
       return;
     }
     
-    console.log('✅ Resume found, showing prompts...');
+    console.log('✅ Resume found, showing edit modal...');
     
-    // Prompt for new values
-    const newLabel = prompt('Resume Label:', resume.label || '');
-    console.log('✏️ User entered label:', newLabel);
+    // Fill modal with current values
+    document.getElementById('editResumeId').value = resumeId;
+    document.getElementById('editResumeLabel').value = resume.label || '';
+    document.getElementById('editResumeTechStack').value = resume.tech_stack || '';
+    document.getElementById('editResumeIsPrimary').checked = resume.is_primary === 1;
     
-    if (newLabel === null) {
-      console.log('⚠️ User cancelled at label prompt');
-      return; // User cancelled
-    }
-    
-    if (!newLabel || newLabel.trim() === '') {
-      console.warn('⚠️ Empty label provided');
-      alert('Label cannot be empty');
-      return;
-    }
-    
-    const newTechStack = prompt('Tech Stack (comma-separated):', resume.tech_stack || '');
-    console.log('🔧 User entered tech stack:', newTechStack);
-    
-    if (newTechStack === null) {
-      console.log('⚠️ User cancelled at tech stack prompt');
-      return; // User cancelled
-    }
-    
-    const newIsPrimary = confirm('Set as primary resume?');
-    console.log('⭐ Set as primary?', newIsPrimary);
-    
-    // Update resume
-    const updateData = {
-      label: newLabel.trim(),
-      tech_stack: newTechStack ? newTechStack.trim() : '',
-      description: resume.description || '',
-      work_experiences_json: resume.work_experiences_json || '[]',
-      is_primary: newIsPrimary ? 1 : 0
-    };
-    
-    console.log('💾 Updating resume with data:', JSON.stringify(updateData));
-    console.log('📞 Calling update-resume...');
-    
-    const result = await ipcRenderer.invoke('update-resume', resumeId, updateData);
-    
-    console.log('📝 Update result:', JSON.stringify(result));
-    
-    if (result && result.success) {
-      console.log('✅ Resume updated successfully');
-      alert('Resume updated successfully!');
-      await loadResumes();
-    } else {
-      console.error('❌ Update failed:', result);
-      alert('Failed to update resume: ' + (result ? result.error : 'Unknown error'));
-    }
+    // Show modal
+    document.getElementById('editResumeModal').style.display = 'flex';
   } catch (error) {
-    console.error('❌ Error editing resume:', error);
-    console.error('Error stack:', error.stack);
-    alert('Failed to edit resume: ' + error.message);
+    console.error('❌ Error opening edit modal:', error);
+    showNotification('❌ Failed to open edit dialog', 'error');
   }
 }
 
 // Make it globally accessible
 window.editResume = editResume;
 
-// Delete resume
+// Close edit resume modal
+window.closeEditResumeModal = function() {
+  document.getElementById('editResumeModal').style.display = 'none';
+};
+
+// Save edited resume
+window.saveEditedResume = async function() {
+  try {
+    const resumeId = parseInt(document.getElementById('editResumeId').value);
+    const newLabel = document.getElementById('editResumeLabel').value.trim();
+    const newTechStack = document.getElementById('editResumeTechStack').value.trim();
+    const newIsPrimary = document.getElementById('editResumeIsPrimary').checked;
+    
+    console.log('💾 Saving resume changes:', { resumeId, newLabel, newTechStack, newIsPrimary });
+    
+    if (!newLabel) {
+      showNotification('⚠️ Label cannot be empty', 'warning');
+      return;
+    }
+    
+    // Get current resume to preserve other fields
+    const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
+    
+    // Update resume
+    const updateData = {
+      label: newLabel,
+      tech_stack: newTechStack,
+      description: resume.description || '',
+      work_experiences_json: resume.work_experiences_json || '[]',
+      is_primary: newIsPrimary ? 1 : 0
+    };
+    
+    console.log('📞 Calling update-resume with data:', JSON.stringify(updateData));
+    const result = await ipcRenderer.invoke('update-resume', resumeId, updateData);
+    
+    console.log('📝 Update result:', JSON.stringify(result));
+    
+    if (result && result.success) {
+      console.log('✅ Resume updated successfully');
+      showNotification('✅ Resume updated successfully!', 'success');
+      closeEditResumeModal();
+      await loadResumes();
+    } else {
+      console.error('❌ Update failed:', result);
+      showNotification('❌ Failed to update resume: ' + (result ? result.error : 'Unknown error'), 'error');
+    }
+  } catch (error) {
+    console.error('❌ Error saving resume:', error);
+    showNotification('❌ Failed to save changes', 'error');
+  }
+};
+
+// Delete resume - Direct delete without confirmation for now
 window.deleteResume = async function(resumeId) {
-  if (!confirm('Are you sure you want to delete this resume?')) return;
-  
   try {
     const result = await ipcRenderer.invoke('delete-resume', resumeId);
     
