@@ -2612,6 +2612,7 @@ async function loadResumes() {
             ${resume.is_primary ? '<span class="primary-badge">★ Primary</span>' : ''}
           </div>
           <div class="resume-card-actions">
+            <button class="btn btn-primary btn-sm" onclick="editResume(${resume.id})">✏️ Edit</button>
             <button class="btn btn-secondary btn-sm" onclick="manageResumeExperiences(${resume.id}, '${resume.label.replace(/'/g, "\\'")}')">💼 Work Experience</button>
             ${!resume.is_primary ? `<button class="btn btn-secondary btn-sm" onclick="setPrimaryResume(${resume.id})">Set as Primary</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteResume(${resume.id})">🗑️ Delete</button>
@@ -2696,6 +2697,48 @@ window.setPrimaryResume = async function(resumeId) {
   } catch (error) {
     console.error('Error setting primary resume:', error);
     showNotification('❌ Failed to set primary resume', 'error');
+  }
+};
+
+// Edit resume
+window.editResume = async function(resumeId) {
+  try {
+    const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
+    if (!resume) {
+      showNotification('❌ Resume not found', 'error');
+      return;
+    }
+    
+    // Prompt for new values
+    const newLabel = prompt('Resume Label:', resume.label);
+    if (!newLabel || newLabel.trim() === '') {
+      showNotification('⚠️ Label cannot be empty', 'warning');
+      return;
+    }
+    
+    const newTechStack = prompt('Tech Stack (comma-separated):', resume.tech_stack);
+    if (newTechStack === null) return; // User cancelled
+    
+    const newIsPrimary = confirm('Set as primary resume?');
+    
+    // Update resume
+    const result = await ipcRenderer.invoke('update-resume', resumeId, {
+      label: newLabel.trim(),
+      tech_stack: newTechStack.trim(),
+      description: resume.description,
+      work_experiences_json: resume.work_experiences_json,
+      is_primary: newIsPrimary ? 1 : 0
+    });
+    
+    if (result.success) {
+      showNotification('✅ Resume updated successfully!', 'success');
+      await loadResumes();
+    } else {
+      showNotification('❌ Failed to update resume: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error editing resume:', error);
+    showNotification('❌ Failed to edit resume', 'error');
   }
 };
 
