@@ -1606,6 +1606,9 @@ async function loadProfile() {
 
 // Save profile
 async function saveProfile() {
+  // Auto-save current step first
+  await autoSaveCurrentStep();
+  
   const profileData = {
     first_name: document.getElementById('profileFirstName').value,
     last_name: document.getElementById('profileLastName').value,
@@ -1813,18 +1816,136 @@ function goToWizardPage(pageNum) {
   }
 }
 
+// Auto-save profile data for current step
+async function autoSaveCurrentStep() {
+  try {
+    // Show saving indicator
+    const saveIndicator = document.createElement('div');
+    saveIndicator.id = 'autoSaveIndicator';
+    saveIndicator.textContent = '💾 Saving...';
+    saveIndicator.style.cssText = `
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: rgba(76, 175, 80, 0.9);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 10000;
+      animation: slideIn 0.3s ease;
+    `;
+    document.body.appendChild(saveIndicator);
+    
+    let saveData = {};
+    
+    switch (currentWizardPage) {
+      case 1: // Personal Information & Resume Management
+        saveData = {
+          first_name: document.getElementById('profileFirstName').value.trim(),
+          last_name: document.getElementById('profileLastName').value.trim(),
+          email: document.getElementById('profileEmail').value.trim(),
+          phone: document.getElementById('profilePhone').value.trim(),
+          linkedin_url: document.getElementById('profileLinkedIn').value.trim(),
+          github_url: document.getElementById('profileGithub').value.trim(),
+          portfolio_url: document.getElementById('profilePortfolio').value.trim()
+        };
+        break;
+        
+      case 2: // Location
+        saveData = {
+          address: document.getElementById('profileAddress').value.trim(),
+          city: document.getElementById('profileCity').value.trim(),
+          state: document.getElementById('profileState').value.trim(),
+          zip_code: document.getElementById('profileZipCode').value.trim(),
+          country: document.getElementById('profileCountry').value.trim()
+        };
+        break;
+        
+      case 3: // Professional Info
+        saveData = {
+          job_title: document.getElementById('profileJobTitle').value.trim(),
+          years_experience: document.getElementById('profileYearsExperience').value,
+          skills: document.getElementById('profileSkills').value.trim(),
+          summary: document.getElementById('profileSummary').value.trim()
+        };
+        break;
+        
+      case 4: // Education
+        saveData = {
+          education: document.getElementById('profileEducation').value.trim(),
+          certifications: document.getElementById('profileCertifications').value.trim()
+        };
+        break;
+        
+      case 5: // Job Preferences
+        saveData = {
+          desired_job_title: document.getElementById('profileDesiredJobTitle').value.trim(),
+          desired_salary_min: document.getElementById('profileDesiredSalaryMin').value,
+          desired_salary_max: document.getElementById('profileDesiredSalaryMax').value,
+          desired_locations: document.getElementById('profileDesiredLocations').value.trim(),
+          work_authorization: document.getElementById('profileWorkAuthorization').value,
+          willing_to_relocate: document.getElementById('profileWillingToRelocate').checked ? 1 : 0,
+          resume_path: document.getElementById('profileResumePath').value.trim(),
+          cover_letter_path: document.getElementById('profileCoverLetterPath').value.trim(),
+          min_salary_annual: document.getElementById('profileMinSalaryAnnual')?.value || null,
+          min_salary_monthly: document.getElementById('profileMinSalaryMonthly')?.value || null,
+          min_salary_hourly: document.getElementById('profileMinSalaryHourly')?.value || null,
+          notice_period: document.getElementById('profileNoticePeriod')?.value || null,
+          work_type: document.getElementById('profileWorkType')?.value || null,
+          sponsorship_required: document.getElementById('profileSponsorshipRequired')?.value || null
+        };
+        break;
+    }
+    
+    // Only save if there's data to save
+    if (Object.keys(saveData).length > 0) {
+      const result = await ipcRenderer.invoke('save-profile', saveData);
+      if (result.success) {
+        console.log('✅ Step', currentWizardPage, 'auto-saved');
+        saveIndicator.textContent = '✅ Saved';
+        saveIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
+        
+        // Remove indicator after 1.5 seconds
+        setTimeout(() => {
+          if (saveIndicator.parentNode) {
+            saveIndicator.remove();
+          }
+        }, 1500);
+      } else {
+        saveIndicator.textContent = '⚠️ Save failed';
+        saveIndicator.style.background = 'rgba(244, 67, 54, 0.9)';
+        setTimeout(() => {
+          if (saveIndicator.parentNode) {
+            saveIndicator.remove();
+          }
+        }, 2000);
+      }
+    } else {
+      saveIndicator.remove();
+    }
+  } catch (error) {
+    console.error('Error auto-saving step:', error);
+    const indicator = document.getElementById('autoSaveIndicator');
+    if (indicator) indicator.remove();
+  }
+}
+
 // Wizard navigation event listeners
-document.getElementById('wizardPrevBtn').addEventListener('click', () => {
+document.getElementById('wizardPrevBtn').addEventListener('click', async () => {
+  await autoSaveCurrentStep(); // Save before going back
   goToWizardPage(currentWizardPage - 1);
 });
 
-document.getElementById('wizardNextBtn').addEventListener('click', () => {
+document.getElementById('wizardNextBtn').addEventListener('click', async () => {
+  await autoSaveCurrentStep(); // Save before going forward
   goToWizardPage(currentWizardPage + 1);
 });
 
 // Allow clicking on wizard steps
 document.querySelectorAll('.wizard-step').forEach((step, index) => {
-  step.addEventListener('click', () => {
+  step.addEventListener('click', async () => {
+    await autoSaveCurrentStep(); // Save before switching steps
     goToWizardPage(index + 1);
   });
 });
