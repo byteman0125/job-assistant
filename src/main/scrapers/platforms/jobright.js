@@ -327,6 +327,17 @@ class JobrightScraper extends BaseScraper {
         const dropdownClicked = await this.page.evaluate(() => {
           // Find "Already Applied" option in dropdown
           const dropdownItems = document.querySelectorAll('.ant-dropdown-menu-item');
+          console.log(`🔍 Found ${dropdownItems.length} dropdown items`);
+          
+          // Debug: Log all dropdown items
+          if (dropdownItems.length > 0) {
+            dropdownItems.forEach((item, idx) => {
+              const menuId = item.getAttribute('data-menu-id');
+              const text = item.textContent?.trim() || '';
+              console.log(`  Item ${idx + 1}: text="${text}", menuId="${menuId}"`);
+            });
+          }
+          
           for (const item of dropdownItems) {
             const menuId = item.getAttribute('data-menu-id');
             const text = item.textContent?.trim() || '';
@@ -351,8 +362,9 @@ class JobrightScraper extends BaseScraper {
           await new Promise(r => setTimeout(r, 2000));
           return true;
         } else {
-          console.log(`${this.platform}: ⚠️ Could not click dropdown option`);
-          return false;
+          console.log(`${this.platform}: ⚠️ Could not click dropdown option - continuing anyway`);
+          await new Promise(r => setTimeout(r, 2000));
+          return true;
         }
       }
       
