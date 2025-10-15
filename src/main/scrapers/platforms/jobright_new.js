@@ -1098,8 +1098,8 @@ class JobrightScraper extends BaseScraper {
         // Step 2: Click "Not Interested"
         this.updateStatus(`[2/5] ⚡ Removing from feed...`, `Processed: ${totalProcessedCount}`);
         
-        // ⚡ IMMEDIATELY click "Not Interested" while card still exists!
-        console.log(`${this.platform}: ⚡ QUICK ACTION: Clicking "Not Interested" immediately...`);
+        // ⚡ IMMEDIATELY click "More Options" while card still exists!
+        console.log(`${this.platform}: ⚡ QUICK ACTION: Clicking "More Options" to open dropdown...`);
         try {
           const quickClicked = await this.page.evaluate((company, title) => {
             const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
@@ -1111,14 +1111,20 @@ class JobrightScraper extends BaseScraper {
               const cardTitle = titleEl?.textContent?.trim();
               
               if (cardCompany === company && cardTitle === title) {
-                const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
-                                     card.querySelector('button[id*="not-interest"]') ||
-                                     card.querySelector('button[class*="not-interest"]') ||
-                                     card.querySelector('button[aria-label*="Not interested"]') ||
-                                     card.querySelector('button[aria-label*="not interested"]');
-                if (dislikeBtn) {
-                  dislikeBtn.click();
+                // Find "More Options" button (three dots)
+                const moreBtn = card.querySelector('img[alt="more-options"]') ||
+                               card.querySelector('[class*="job-more-button"]') ||
+                               card.querySelector('.ant-dropdown-trigger');
+                
+                if (moreBtn) {
+                  console.log('✅ Found "More Options" button on card');
+                  // Click the parent element if it's an img
+                  const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
+                  clickTarget.click();
                   return true;
+                } else {
+                  console.log('❌ "More Options" button not found on card');
+                  return false;
                 }
               }
             }
@@ -1126,68 +1132,68 @@ class JobrightScraper extends BaseScraper {
           }, jobCard.company, jobCard.title);
           
           if (quickClicked) {
-            console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
+            console.log(`${this.platform}: ✅ Clicked "More Options" button`);
             
-            // Wait for modal and submit reason
-            console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
+            // Wait for dropdown and click "Already Applied"
+            console.log(`${this.platform}: ⏳ Waiting for dropdown to appear...`);
             await new Promise(r => setTimeout(r, 1500));
             
-            const modalInfo = await this.page.evaluate(() => {
-              const modal = document.querySelector('div.ant-modal[role="dialog"]');
-              if (!modal) return { modalVisible: false };
-              
-              const radioInputs = modal.querySelectorAll('input.ant-radio-input');
-              const submitBtn = modal.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
-              
+            // Check for dropdown
+            const dropdownCheck = await this.page.evaluate(() => {
+              const dropdownItems = document.querySelectorAll('.ant-dropdown-menu-item');
               return {
-                modalVisible: true,
-                radioCount: radioInputs.length,
-                radioOptions: Array.from(radioInputs).map(input => ({
-                  value: input.value,
-                  text: input.parentElement?.parentElement?.textContent?.trim(),
-                  visible: true
-                })),
-                submitButtonExists: !!submitBtn,
-                submitButtonDisabled: submitBtn?.disabled
+                exists: dropdownItems.length > 0,
+                count: dropdownItems.length,
+                items: Array.from(dropdownItems).map(item => ({
+                  text: item.textContent?.trim() || '',
+                  menuId: item.getAttribute('data-menu-id')
+                }))
               };
             });
             
-            console.log(`${this.platform}: 📋 Modal Info:`, JSON.stringify(modalInfo, null, 2));
+            console.log(`${this.platform}: 📋 Dropdown check: Found ${dropdownCheck.count} items`);
             
-            if (modalInfo.modalVisible) {
-              console.log(`${this.platform}: ✅ Modal detected with ${modalInfo.radioCount} options`);
-              
-              const submitted = await this.page.evaluate(() => {
-                const radio = document.querySelector('input.ant-radio-input[value="5"]'); // "I already applied"
-                if (radio) radio.click();
-                return new Promise(resolve => {
-                  setTimeout(() => {
-                    const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
-                    if (submitBtn && !submitBtn.disabled) {
-                      submitBtn.click();
-                      resolve({ success: true, reason: 'Submitted' });
-                    } else {
-                      resolve({ success: false, reason: 'Button disabled or not found' });
-                    }
-                  }, 500);
-                });
+            if (dropdownCheck.exists) {
+              console.log(`${this.platform}: ✅ Dropdown menu appeared!`);
+              dropdownCheck.items.forEach((item, idx) => {
+                console.log(`${this.platform}:   ${idx + 1}. "${item.text}"`);
               });
               
-              console.log(`${this.platform}: 📤 Modal submit result:`, JSON.stringify(submitted));
+              // Click "Already Applied"
+              const dropdownClicked = await this.page.evaluate(() => {
+                const dropdownItems = document.querySelectorAll('.ant-dropdown-menu-item');
+                
+                for (const item of dropdownItems) {
+                  const menuId = item.getAttribute('data-menu-id');
+                  const text = item.textContent?.trim() || '';
+                  
+                  // Look for "Already Applied" or menu ID containing "applied"
+                  if (text.includes('Already Applied') || (menuId && menuId.includes('applied'))) {
+                    console.log('✅ Clicking "Already Applied" option');
+                    item.click();
+                    return { success: true };
+                  }
+                }
+                
+                console.log('❌ "Already Applied" option not found');
+                return { success: false };
+              });
               
-              if (submitted.success) {
-                console.log(`${this.platform}: ✅ Submitted "I already applied" - card will disappear`);
+              if (dropdownClicked.success) {
+                console.log(`${this.platform}: ✅ Clicked "Already Applied" from dropdown`);
+                console.log(`${this.platform}: ⏳ Waiting 2s...`);
+                await new Promise(r => setTimeout(r, 2000));
               } else {
-                console.log(`${this.platform}: ⚠️ Submit may have failed: ${submitted.reason}`);
+                console.log(`${this.platform}: ⚠️ Could not click dropdown option`);
               }
             } else {
-              console.log(`${this.platform}: ⚠️ Modal not visible - card may have disappeared already`);
+              console.log(`${this.platform}: ⚠️ No dropdown appeared - continuing anyway`);
             }
           } else {
-            console.log(`${this.platform}: ⚠️ "Not Interested" button not found - card may have disappeared`);
+            console.log(`${this.platform}: ⚠️ "More Options" button not found - card may have disappeared`);
           }
         } catch (quickErr) {
-          console.log(`${this.platform}: ⚠️ Error clicking "Not Interested": ${quickErr.message}`);
+          console.log(`${this.platform}: ⚠️ Error clicking "More Options": ${quickErr.message}`);
         }
         
         console.log(`${this.platform}: ✅ Card removed from feed, now processing job...`);
