@@ -256,19 +256,30 @@ class JobrightScraper extends BaseScraper {
           const companyEl = card.querySelector('div.index_company-name__gKiOY');
           const titleEl = card.querySelector('h2.index_job-title__UjuEY');
           if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
+            console.log(`✅ Found matching card in helper: "${company}" - "${title}"`);
+            
             // Find "More Options" button (three dots)
             const moreBtn = card.querySelector('img[alt="more-options"]') ||
                            card.querySelector('[class*="job-more-button"]') ||
                            card.querySelector('.ant-dropdown-trigger');
             
             if (moreBtn) {
-              console.log('✅ Found "More Options" button, clicking...');
+              console.log(`✅ Found "More Options" button (tag: ${moreBtn.tagName}, alt: ${moreBtn.alt || 'N/A'})`);
               // Click the parent element if it's an img
               const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
+              console.log(`🖱️ Clicking ${clickTarget.tagName} element...`);
               clickTarget.click();
               return true;
             } else {
               console.log('❌ "More Options" button not found on card');
+              
+              // Debug: Log all images on the card
+              const allImgs = card.querySelectorAll('img');
+              console.log(`📊 Card has ${allImgs.length} images`);
+              allImgs.forEach((img, idx) => {
+                console.log(`  Img ${idx + 1}: alt="${img.alt || 'none'}"`);
+              });
+              
               return false;
             }
           }
@@ -1111,19 +1122,31 @@ class JobrightScraper extends BaseScraper {
               const cardTitle = titleEl?.textContent?.trim();
               
               if (cardCompany === company && cardTitle === title) {
+                console.log(`✅ Found matching card: "${company}" - "${title}"`);
+                
                 // Find "More Options" button (three dots)
                 const moreBtn = card.querySelector('img[alt="more-options"]') ||
                                card.querySelector('[class*="job-more-button"]') ||
                                card.querySelector('.ant-dropdown-trigger');
                 
                 if (moreBtn) {
-                  console.log('✅ Found "More Options" button on card');
+                  console.log(`✅ Found "More Options" button (tag: ${moreBtn.tagName}, alt: ${moreBtn.alt || 'N/A'})`);
                   // Click the parent element if it's an img
                   const clickTarget = moreBtn.tagName === 'IMG' ? moreBtn.parentElement : moreBtn;
+                  console.log(`🖱️ Clicking ${clickTarget.tagName} element...`);
                   clickTarget.click();
                   return true;
                 } else {
                   console.log('❌ "More Options" button not found on card');
+                  
+                  // Debug: Log all buttons/imgs on the card
+                  const allButtons = card.querySelectorAll('button');
+                  const allImgs = card.querySelectorAll('img');
+                  console.log(`📊 Card has ${allButtons.length} buttons, ${allImgs.length} images`);
+                  allImgs.forEach((img, idx) => {
+                    console.log(`  Img ${idx + 1}: alt="${img.alt || 'none'}"`);
+                  });
+                  
                   return false;
                 }
               }
