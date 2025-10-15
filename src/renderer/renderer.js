@@ -2705,9 +2705,14 @@ let editResumeExperiences = [];
 
 // Edit resume - Make it globally accessible
 async function editResume(resumeId) {
-  console.log('🔧 Edit resume called with ID:', resumeId);
+  console.log('🔧🔧🔧 Edit resume called with ID:', resumeId);
+  console.log('Type of resumeId:', typeof resumeId);
   
   try {
+    // Check if modal element exists
+    const modalEl = document.getElementById('editResumeModal');
+    console.log('Modal element exists?', !!modalEl);
+    
     console.log('📞 Calling get-resume-by-id...');
     const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
     console.log('📄 Resume fetched:', JSON.stringify(resume));
@@ -2721,20 +2726,26 @@ async function editResume(resumeId) {
     console.log('✅ Resume found, showing edit modal...');
     
     // Fill modal with current values
+    console.log('Setting editResumeId...');
     document.getElementById('editResumeId').value = resumeId;
+    console.log('Setting editResumeLabel...');
     document.getElementById('editResumeLabel').value = resume.label || '';
+    console.log('Setting editResumeTechStack...');
     document.getElementById('editResumeTechStack').value = resume.tech_stack || '';
+    console.log('Setting editResumeIsPrimary...');
     document.getElementById('editResumeIsPrimary').checked = resume.is_primary === 1;
     
     // Load work experiences
     try {
       editResumeExperiences = JSON.parse(resume.work_experiences_json || '[]');
+      console.log('Loaded experiences:', editResumeExperiences.length);
     } catch (e) {
       console.error('Error parsing work experiences:', e);
       editResumeExperiences = [];
     }
     
     // Clear the add experience form
+    console.log('Clearing experience form fields...');
     document.getElementById('editExpCompany').value = '';
     document.getElementById('editExpRole').value = '';
     document.getElementById('editExpPeriod').value = '';
@@ -2742,13 +2753,20 @@ async function editResume(resumeId) {
     document.getElementById('editExpDescription').value = '';
     
     // Render experiences
+    console.log('Rendering experiences...');
     renderEditExperiences();
     
     // Show modal
-    document.getElementById('editResumeModal').style.display = 'flex';
+    console.log('Showing modal...');
+    const modal = document.getElementById('editResumeModal');
+    console.log('Modal display before:', modal.style.display);
+    modal.style.display = 'flex';
+    console.log('Modal display after:', modal.style.display);
+    console.log('✅✅✅ Modal should be visible now!');
   } catch (error) {
     console.error('❌ Error opening edit modal:', error);
-    showNotification('❌ Failed to open edit dialog', 'error');
+    console.error('Error stack:', error.stack);
+    showNotification('❌ Failed to open edit dialog: ' + error.message, 'error');
   }
 }
 
