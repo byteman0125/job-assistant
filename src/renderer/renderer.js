@@ -1846,66 +1846,87 @@ async function autoSaveCurrentStep() {
     `;
     document.body.appendChild(saveIndicator);
     
-    let saveData = {};
+    // Collect data from ALL profile fields (not just current step)
+    const saveData = {};
     
-    switch (currentWizardPage) {
-      case 1: // Personal Information & Resume Management
-        saveData = {
-          first_name: document.getElementById('profileFirstName').value.trim(),
-          last_name: document.getElementById('profileLastName').value.trim(),
-          email: document.getElementById('profileEmail').value.trim(),
-          phone: document.getElementById('profilePhone').value.trim(),
-          linkedin_url: document.getElementById('profileLinkedIn').value.trim(),
-          github_url: document.getElementById('profileGithub').value.trim(),
-          portfolio_url: document.getElementById('profilePortfolio').value.trim()
-        };
-        break;
-        
-      case 2: // Location
-        saveData = {
-          address: document.getElementById('profileAddress').value.trim(),
-          city: document.getElementById('profileCity').value.trim(),
-          state: document.getElementById('profileState').value.trim(),
-          zip_code: document.getElementById('profileZipCode').value.trim(),
-          country: document.getElementById('profileCountry').value.trim()
-        };
-        break;
-        
-      case 3: // Professional Info
-        saveData = {
-          job_title: document.getElementById('profileJobTitle').value.trim(),
-          years_experience: document.getElementById('profileYearsExperience').value,
-          skills: document.getElementById('profileSkills').value.trim(),
-          summary: document.getElementById('profileSummary').value.trim()
-        };
-        break;
-        
-      case 4: // Education
-        saveData = {
-          education: document.getElementById('profileEducation').value.trim(),
-          certifications: document.getElementById('profileCertifications').value.trim()
-        };
-        break;
-        
-      case 5: // Job Preferences
-        saveData = {
-          desired_job_title: document.getElementById('profileDesiredJobTitle').value.trim(),
-          desired_salary_min: document.getElementById('profileDesiredSalaryMin').value,
-          desired_salary_max: document.getElementById('profileDesiredSalaryMax').value,
-          desired_locations: document.getElementById('profileDesiredLocations').value.trim(),
-          work_authorization: document.getElementById('profileWorkAuthorization').value,
-          willing_to_relocate: document.getElementById('profileWillingToRelocate').checked ? 1 : 0,
-          resume_path: document.getElementById('profileResumePath').value.trim(),
-          cover_letter_path: document.getElementById('profileCoverLetterPath').value.trim(),
-          min_salary_annual: document.getElementById('profileMinSalaryAnnual')?.value || null,
-          min_salary_monthly: document.getElementById('profileMinSalaryMonthly')?.value || null,
-          min_salary_hourly: document.getElementById('profileMinSalaryHourly')?.value || null,
-          notice_period: document.getElementById('profileNoticePeriod')?.value || null,
-          work_type: document.getElementById('profileWorkType')?.value || null,
-          sponsorship_required: document.getElementById('profileSponsorshipRequired')?.value || null
-        };
-        break;
-    }
+    // Helper function to safely get field value
+    const getFieldValue = (id) => {
+      const field = document.getElementById(id);
+      if (!field) return null;
+      if (field.type === 'checkbox') return field.checked ? 1 : 0;
+      return field.value ? field.value.trim() : null;
+    };
+    
+    // Step 1: Personal Information
+    const firstName = getFieldValue('profileFirstName');
+    const lastName = getFieldValue('profileLastName');
+    const email = getFieldValue('profileEmail');
+    const phone = getFieldValue('profilePhone');
+    const linkedin = getFieldValue('profileLinkedIn');
+    const github = getFieldValue('profileGithub');
+    const portfolio = getFieldValue('profilePortfolio');
+    
+    if (firstName !== null) saveData.first_name = firstName;
+    if (lastName !== null) saveData.last_name = lastName;
+    if (email !== null) saveData.email = email;
+    if (phone !== null) saveData.phone = phone;
+    if (linkedin !== null) saveData.linkedin_url = linkedin;
+    if (github !== null) saveData.github_url = github;
+    if (portfolio !== null) saveData.portfolio_url = portfolio;
+    
+    // Step 2: Location
+    const address = getFieldValue('profileAddress');
+    const city = getFieldValue('profileCity');
+    const state = getFieldValue('profileState');
+    const zipCode = getFieldValue('profileZipCode');
+    const country = getFieldValue('profileCountry');
+    
+    if (address !== null) saveData.address = address;
+    if (city !== null) saveData.city = city;
+    if (state !== null) saveData.state = state;
+    if (zipCode !== null) saveData.zip_code = zipCode;
+    if (country !== null) saveData.country = country;
+    
+    // Step 3: Professional Information
+    const jobTitle = getFieldValue('profileJobTitle');
+    const yearsExp = getFieldValue('profileYearsExperience');
+    const skills = getFieldValue('profileSkills');
+    const summary = getFieldValue('profileSummary');
+    
+    if (jobTitle !== null) saveData.job_title = jobTitle;
+    if (yearsExp !== null) saveData.years_experience = yearsExp;
+    if (skills !== null) saveData.skills = skills;
+    if (summary !== null) saveData.summary = summary;
+    
+    // Step 5: Preferences
+    const workAuth = getFieldValue('profileWorkAuthorization');
+    const sponsorship = getFieldValue('profileSponsorshipRequired');
+    const desiredSalary = getFieldValue('profileDesiredSalary');
+    const minSalaryAnnual = getFieldValue('profileMinSalaryAnnual');
+    const minSalaryMonthly = getFieldValue('profileMinSalaryMonthly');
+    const minSalaryHourly = getFieldValue('profileMinSalaryHourly');
+    const noticePeriod = getFieldValue('profileNoticePeriod');
+    const workType = getFieldValue('profileWorkType');
+    
+    if (workAuth !== null) saveData.work_authorization = workAuth;
+    if (sponsorship !== null) saveData.sponsorship_required = sponsorship;
+    if (desiredSalary !== null) saveData.desired_salary = desiredSalary;
+    if (minSalaryAnnual !== null) saveData.min_salary_annual = minSalaryAnnual;
+    if (minSalaryMonthly !== null) saveData.min_salary_monthly = minSalaryMonthly;
+    if (minSalaryHourly !== null) saveData.min_salary_hourly = minSalaryHourly;
+    if (noticePeriod !== null) saveData.notice_period = noticePeriod;
+    if (workType !== null) saveData.work_type = workType;
+    
+    // Employment type checkboxes
+    const fullTime = getFieldValue('profileEmploymentFullTime');
+    const contract = getFieldValue('profileEmploymentContract');
+    const partTime = getFieldValue('profileEmploymentPartTime');
+    const freelance = getFieldValue('profileEmploymentFreelance');
+    
+    if (fullTime !== null) saveData.employment_full_time = fullTime;
+    if (contract !== null) saveData.employment_contract = contract;
+    if (partTime !== null) saveData.employment_part_time = partTime;
+    if (freelance !== null) saveData.employment_freelance = freelance;
     
     // Only save if there's data to save
     if (Object.keys(saveData).length > 0) {
@@ -1957,6 +1978,69 @@ document.querySelectorAll('.wizard-step').forEach((step, index) => {
     await autoSaveCurrentStep(); // Save before switching steps
     goToWizardPage(index + 1);
   });
+});
+
+// Auto-save for individual input fields
+function setupAutoSaveForInputs() {
+  // Debounce function to avoid too frequent saves
+  let saveTimeout;
+  const debouncedAutoSave = () => {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(async () => {
+      await autoSaveCurrentStep();
+    }, 1000); // Save 1 second after user stops typing
+  };
+
+  // Get all profile input fields
+  const profileInputs = [
+    // Step 1: Personal Information
+    'profileFirstName', 'profileLastName', 'profileEmail', 'profilePhone', 
+    'profileLinkedIn', 'profileGithub', 'profilePortfolio',
+    
+    // Step 2: Location
+    'profileAddress', 'profileCity', 'profileState', 'profileZipCode', 'profileCountry',
+    
+    // Step 3: Professional Information
+    'profileJobTitle', 'profileYearsExperience', 'profileSkills', 'profileSummary',
+    
+    // Step 5: Preferences
+    'profileWorkAuthorization', 'profileSponsorshipRequired', 'profileDesiredSalary',
+    'profileMinSalaryAnnual', 'profileMinSalaryMonthly', 'profileMinSalaryHourly',
+    'profileNoticePeriod', 'profileWorkType',
+    
+    // Employment type checkboxes
+    'profileEmploymentFullTime', 'profileEmploymentContract', 
+    'profileEmploymentPartTime', 'profileEmploymentFreelance'
+  ];
+
+  // Add auto-save listeners to all input fields
+  profileInputs.forEach(inputId => {
+    const input = document.getElementById(inputId);
+    if (input) {
+      // For text inputs, textareas, and number inputs
+      if (input.type === 'text' || input.type === 'email' || input.type === 'tel' || 
+          input.type === 'url' || input.type === 'number' || input.tagName === 'TEXTAREA') {
+        input.addEventListener('input', debouncedAutoSave);
+      }
+      
+      // For select dropdowns
+      if (input.tagName === 'SELECT') {
+        input.addEventListener('change', debouncedAutoSave);
+      }
+      
+      // For checkboxes
+      if (input.type === 'checkbox') {
+        input.addEventListener('change', debouncedAutoSave);
+      }
+    }
+  });
+
+  console.log('✅ Auto-save enabled for all profile input fields');
+}
+
+// Initialize auto-save when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  setupAutoSaveForInputs();
 });
 
 // Resume parse button enable
