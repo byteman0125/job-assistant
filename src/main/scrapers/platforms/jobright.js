@@ -260,17 +260,33 @@ class JobrightScraper extends BaseScraper {
       while (continueScraping && this.isRunning) {
         // Get FIRST job card from the current list (it will change as we process)
         const jobCards = await this.page.evaluate(() => {
-          const listContainer = document.querySelector('.ant-list-items');
-          if (!listContainer) return [];
+          // Try multiple container selectors (Jobright may update their HTML)
+          let cards = [];
           
-          const cards = Array.from(listContainer.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC'));
+          // Method 1: Try with ant-list-items container
+          const listContainer = document.querySelector('.ant-list-items');
+          if (listContainer) {
+            cards = Array.from(listContainer.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC'));
+          }
+          
+          // Method 2: If no cards found, try direct query (container might have changed)
+          if (cards.length === 0) {
+            cards = Array.from(document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC'));
+          }
+          
+          // Method 3: If still no cards, try alternative class names
+          if (cards.length === 0) {
+            cards = Array.from(document.querySelectorAll('[class*="job-card"]'));
+          }
+          
+          console.log(`🔍 Found ${cards.length} potential job cards on page`);
           
           // Get only the FIRST card
           return cards.slice(0, 1).map((card, index) => {
-            const titleEl = card.querySelector('h2.index_job-title__UjuEY');
-            const companyEl = card.querySelector('div.index_company-name__gKiOY');
-            const timeEl = card.querySelector('span.index_publish-time__cMfCi');
-            const applyBtn = card.querySelector('button.index_apply-button__kp79C');
+            const titleEl = card.querySelector('h2.index_job-title__UjuEY') || card.querySelector('[class*="job-title"]');
+            const companyEl = card.querySelector('div.index_company-name__gKiOY') || card.querySelector('[class*="company-name"]');
+            const timeEl = card.querySelector('span.index_publish-time__cMfCi') || card.querySelector('[class*="publish-time"]');
+            const applyBtn = card.querySelector('button.index_apply-button__kp79C') || card.querySelector('button[class*="apply-button"]');
             
             return {
               index: index,
