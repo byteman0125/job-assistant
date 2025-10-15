@@ -1811,6 +1811,9 @@ class JobrightScraper extends BaseScraper {
               skipReason = 'Salary below minimum';
             }
             
+            // Send skip notification to UI
+            this.sendSkipNotification(jobCard, `GPT Analysis: ${skipReason}`);
+            
             // Save job to database as "applied by Bot"
             try {
               const skippedJob = {
