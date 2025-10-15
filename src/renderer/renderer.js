@@ -2702,8 +2702,10 @@ window.setPrimaryResume = async function(resumeId) {
 
 // Edit resume
 window.editResume = async function(resumeId) {
+  console.log('Edit resume called with ID:', resumeId);
   try {
     const resume = await ipcRenderer.invoke('get-resume-by-id', resumeId);
+    console.log('Resume fetched:', resume);
     if (!resume) {
       showNotification('❌ Resume not found', 'error');
       return;
@@ -2711,6 +2713,8 @@ window.editResume = async function(resumeId) {
     
     // Prompt for new values
     const newLabel = prompt('Resume Label:', resume.label);
+    console.log('New label:', newLabel);
+    if (newLabel === null) return; // User cancelled
     if (!newLabel || newLabel.trim() === '') {
       showNotification('⚠️ Label cannot be empty', 'warning');
       return;
