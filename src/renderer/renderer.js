@@ -27,6 +27,10 @@ const pageInfo = document.getElementById('pageInfo');
 const pageSize = document.getElementById('pageSize');
 const jobsTabCount = document.getElementById('jobsTabCount');
 
+// Resume Management State
+let selectedNewResumeFile = null;
+let tempResumeExperiences = []; // Temporary storage for experiences before saving resume
+
 // Pagination state
 let currentPage = 1;
 let totalPages = 1;
@@ -2312,9 +2316,6 @@ document.getElementById('clearProfileBtn').addEventListener('click', clearProfil
 /* ========================================
    Resume Management Functions
    ======================================== */
-
-let selectedNewResumeFile = null;
-let tempResumeExperiences = []; // Temporary storage for experiences before saving resume
 
 // Setup resume event listeners (called after DOM ready)
 function setupResumeListeners() {
