@@ -433,53 +433,62 @@ Examples:
             const isDirectApply = buttonText.includes('DIRECT') || buttonText.includes('EASY');
             
             // Extract metadata: location, salary, and work type (Remote/Hybrid/Onsite)
-            const metadataItems = card.querySelectorAll('.index_job-metadata-item__ThMv4');
+            // Try multiple selectors for metadata items
+            let metadataItems = card.querySelectorAll('.index_job-metadata-item__ThMv4');
+            if (metadataItems.length === 0) {
+              metadataItems = card.querySelectorAll('[class*="job-metadata-item"]');
+            }
+            if (metadataItems.length === 0) {
+              metadataItems = card.querySelectorAll('.ant-col');
+            }
+            
             let jobLocation = 'Unknown';
             let salaryText = null;
             let workLocationType = 'UNKNOWN';
             
-            // DEBUG: Log what we find
-            console.log(`🔍 Found ${metadataItems.length} metadata items on card`);
-            
             // Loop through metadata items to identify each by icon or content
-            metadataItems.forEach((item, idx) => {
+            metadataItems.forEach((item) => {
               const img = item.querySelector('img');
               const span = item.querySelector('span');
               
-              if (!span) {
-                console.log(`  Item ${idx}: NO SPAN FOUND`);
-                return;
-              }
+              if (!span) return;
               
               const text = span.textContent.trim();
               const iconAlt = img ? img.getAttribute('alt') : '';
-              
-              console.log(`  Item ${idx}: icon="${iconAlt}" text="${text}"`);
               
               // Check for Remote/Hybrid/Onsite by keyword-highlight
               const highlightEl = span.querySelector('.keyword-highlight');
               if (highlightEl) {
                 workLocationType = highlightEl.textContent.trim().toUpperCase();
-                console.log(`    ✅ Found work type: ${workLocationType}`);
               }
-              // Location: has 'position' icon or contains state/country
+              // Remote icon check
+              else if (iconAlt === 'remote') {
+                // If it has keyword-highlight inside, that's the work type
+                const keywordEl = item.querySelector('.keyword-highlight');
+                if (keywordEl) {
+                  workLocationType = keywordEl.textContent.trim().toUpperCase();
+                }
+              }
+              // Location: has 'position' icon
               else if (iconAlt === 'position' || iconAlt === 'location') {
                 jobLocation = text;
-                console.log(`    ✅ Found location by icon: ${jobLocation}`);
               }
-              // Salary: contains $ or /yr or /hr or K
-              else if (text.includes('$') || text.includes('/yr') || text.includes('/hr') || text.includes('K')) {
+              // Salary: contains $ or /yr or /hr or K (but not Remote/Hybrid/Onsite)
+              else if ((text.includes('$') || text.includes('/yr') || text.includes('/hr') || (text.includes('K') && text.match(/\d/))) && 
+                       !text.toUpperCase().includes('REMOTE') && 
+                       !text.toUpperCase().includes('HYBRID') && 
+                       !text.toUpperCase().includes('ONSITE')) {
                 salaryText = text;
-                console.log(`    ✅ Found salary: ${salaryText}`);
               }
               // Fallback: if no icon matched and text looks like location (has comma or state)
-              else if ((text.includes(',') || text.match(/\b[A-Z]{2}\b/)) && jobLocation === 'Unknown') {
+              else if ((text.includes(',') || text.match(/\b[A-Z]{2}\b/)) && 
+                       jobLocation === 'Unknown' &&
+                       !text.toUpperCase().includes('REMOTE') && 
+                       !text.toUpperCase().includes('HYBRID') && 
+                       !text.toUpperCase().includes('ONSITE')) {
                 jobLocation = text;
-                console.log(`    ✅ Found location by pattern: ${jobLocation}`);
               }
             });
-            
-            console.log(`📊 Final extraction: workType="${workLocationType}" location="${jobLocation}" salary="${salaryText}"`);
             
             const isRemote = workLocationType === 'REMOTE';
             const isHybridOrOnsite = workLocationType === 'HYBRID' || workLocationType === 'ONSITE';
