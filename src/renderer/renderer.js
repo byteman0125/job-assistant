@@ -2792,8 +2792,8 @@ function renderEditExperiences() {
           <span style="color: #999; font-size: 11px; margin-left: 8px;">${exp.period || 'No Period'}</span>
         </div>
         <div style="display: flex; gap: 5px;">
-          <button class="btn btn-sm" style="padding: 3px 8px; font-size: 10px; background: #3d3d3d;" onclick="editEditExperience(${index})">✏️ Edit</button>
-          <button class="btn btn-sm" style="padding: 3px 8px; font-size: 10px; background: #d32f2f;" onclick="deleteEditExperience(${index})">🗑️</button>
+          <button class="btn btn-sm edit-exp-btn" data-exp-index="${index}" style="padding: 3px 8px; font-size: 10px; background: #3d3d3d;">✏️ Edit</button>
+          <button class="btn btn-sm delete-exp-btn" data-exp-index="${index}" style="padding: 3px 8px; font-size: 10px; background: #d32f2f;">🗑️</button>
         </div>
       </div>
       <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">${exp.role || 'No Role'}</div>
@@ -2802,6 +2802,23 @@ function renderEditExperiences() {
     </div>
   `;
   }).join('');
+  
+  // Add event listeners after rendering
+  document.querySelectorAll('.edit-exp-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-exp-index'));
+      console.log('Edit experience clicked:', index);
+      editEditExperience(index);
+    });
+  });
+  
+  document.querySelectorAll('.delete-exp-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-exp-index'));
+      console.log('Delete experience clicked:', index);
+      deleteEditExperience(index);
+    });
+  });
 }
 
 // Add experience in edit modal
