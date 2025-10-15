@@ -1,5 +1,6 @@
 const BaseScraper = require('../baseScraper');
 const path = require('path');
+const { BrowserWindow } = require('electron');
 
 class JobrightScraper extends BaseScraper {
   constructor(database, gptExtractor) {
@@ -10,6 +11,23 @@ class JobrightScraper extends BaseScraper {
   
   getBaseDomain() {
     return 'jobright.ai';
+  }
+  
+  // Helper: Send skip notification to UI
+  sendSkipNotification(job, reason) {
+    try {
+      const mainWindow = BrowserWindow.getAllWindows()[0];
+      if (mainWindow) {
+        mainWindow.webContents.send('job-skipped', {
+          company: job.company,
+          title: job.title,
+          reason: reason,
+          platform: this.platform
+        });
+      }
+    } catch (error) {
+      // Silently fail if can't send notification
+    }
   }
   
   // Helper: Check if a job is older than 7 days
@@ -634,6 +652,8 @@ class JobrightScraper extends BaseScraper {
         console.log(`${this.platform}: 🚫 SKIPPING - "DIRECT APPLY" or "EASY APPLY" job (button text: "${jobCard.buttonText}")`);
         console.log(`${this.platform}: These jobs use simplified application forms - avoiding as requested`);
         
+        this.sendSkipNotification(jobCard, `Direct Apply - Button: "${jobCard.buttonText}"`);
+        
         // Click "Not Interested" to remove it and reveal next card
         try {
           await this.clickNotInterestedButton(jobCard);
@@ -652,6 +672,8 @@ class JobrightScraper extends BaseScraper {
       if (jobCard.isHybridOrOnsite) {
         console.log(`${this.platform}: 🚫 SKIPPING - "${jobCard.workLocationType}" job (we only want REMOTE)`);
         console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
+        
+        this.sendSkipNotification(jobCard, `${jobCard.workLocationType} - Only Remote jobs wanted`);
         
         // Click "Not Interested" to remove it and reveal next card
         try {
@@ -680,6 +702,8 @@ class JobrightScraper extends BaseScraper {
         console.log(`${this.platform}: 🚫 SKIPPING - Non-USA location: "${jobCard.location}"`);
         console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
         
+        this.sendSkipNotification(jobCard, `Non-USA Location: ${jobCard.location}`);
+        
         // Click "Not Interested" to remove it and reveal next card
         try {
           await this.clickNotInterestedButton(jobCard);
@@ -704,6 +728,8 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: 🚫 SKIPPING - Salary too low: ${jobCard.salaryFromCard}`);
           console.log(`${this.platform}: ${salaryCheckResult.reason}`);
           console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
+          
+          this.sendSkipNotification(jobCard, `Salary Too Low: ${jobCard.salaryFromCard} (${salaryCheckResult.reason})`);
           
           // Click "Not Interested" to remove it and reveal next card
           try {
@@ -733,6 +759,8 @@ class JobrightScraper extends BaseScraper {
         console.log(`${this.platform}: 🚫 Ignored - Title contains keyword "${matchedKeyword}"`);
         console.log(`${this.platform}: Title: "${jobCard.title}"`);
         console.log(`${this.platform}: Saving to database and marking as applied by Bot...`);
+        
+        this.sendSkipNotification(jobCard, `Ignored Keyword: "${matchedKeyword}" in title`);
         
         // Save job to database with minimal info (no GPT extraction needed)
         try {

@@ -160,6 +160,12 @@ ipcRenderer.on('gpt-response-timeout', () => {
   console.log('⏱️ ChatGPT response timeout - using basic extraction');
 });
 
+// Listen for job skip notifications
+ipcRenderer.on('job-skipped', (event, data) => {
+  const message = `${data.company} - ${data.title}`;
+  showNotification(`⏭️ Skipped: ${message}\nReason: ${data.reason}`, 'warning');
+});
+
 // Listen for scraper status changes
 ipcRenderer.on('scraper-status-changed', (event, data) => {
   console.log('📡 Scraper status changed:', data.running ? 'RUNNING' : 'STOPPED');
