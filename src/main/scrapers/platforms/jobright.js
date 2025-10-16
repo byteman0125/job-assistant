@@ -2258,7 +2258,11 @@ class JobrightScraper extends BaseScraper {
             const pages = await this.browser.pages();
             this.page = pages[0];
           }
-          await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          try {
+            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          } catch (gotoErr) {
+            console.log(`${this.platform}: ⚠️ Recovery goto timeout - continuing anyway`);
+          }
           await this.randomDelay(1500, 2000);
         } catch (recoverErr) {
           console.error(`${this.platform}: ❌ Failed to recover, stopping...`);
@@ -2270,10 +2274,19 @@ class JobrightScraper extends BaseScraper {
       scrollAttempts++;
       if (scrollAttempts >= 5) {
         console.log(`${this.platform}: 📜 Scrolling to load more cards (every 5 jobs)...`);
-        await this.page.evaluate(() => {
-          window.scrollTo(0, document.body.scrollHeight);
-        });
-        await this.randomDelay(1500, 2000);
+        try {
+          // Check if page is still valid before scrolling
+          if (!this.page || this.page.isClosed()) {
+            console.log(`${this.platform}: ⚠️ Page closed, skipping scroll`);
+          } else {
+            await this.page.evaluate(() => {
+              window.scrollTo(0, document.body.scrollHeight);
+            });
+            await this.randomDelay(1500, 2000);
+          }
+        } catch (scrollErr) {
+          console.log(`${this.platform}: ⚠️ Scroll error: ${scrollErr.message}`);
+        }
         scrollAttempts = 0; // Reset counter
       }
       
