@@ -790,7 +790,11 @@ class JobrightScraper extends BaseScraper {
         
         // Refresh page after skip to ensure clean state
         console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-        await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        try {
+          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        } catch (reloadErr) {
+          console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
+        }
         await this.randomDelay(1000, 1500);
         continue; // Get next card from refreshed list
       }
@@ -814,7 +818,11 @@ class JobrightScraper extends BaseScraper {
         
         // Refresh page after skip to ensure clean state
         console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-        await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        try {
+          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        } catch (reloadErr) {
+          console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
+        }
         await this.randomDelay(1000, 1500);
         continue; // Get next card from refreshed list
       }
@@ -846,7 +854,11 @@ class JobrightScraper extends BaseScraper {
         
         // Refresh page after skip to ensure clean state
         console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-        await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        try {
+          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        } catch (reloadErr) {
+          console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
+        }
         await this.randomDelay(1000, 1500);
         continue; // Get next card from refreshed list
       }
@@ -876,7 +888,11 @@ class JobrightScraper extends BaseScraper {
           
           // Refresh page after skip to ensure clean state
           console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+          try {
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+          } catch (reloadErr) {
+            console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
+          }
           await this.randomDelay(1000, 1500);
           continue; // Get next card from refreshed list
         }
@@ -967,7 +983,12 @@ class JobrightScraper extends BaseScraper {
         
         // Refresh page after skip to ensure clean state
         console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-        await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        try {
+          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        } catch (reloadErr) {
+          console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
+          // Page might still be usable, continue
+        }
         await this.randomDelay(1000, 1500);
         continue; // Skip to next job
       }
