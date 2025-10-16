@@ -2161,10 +2161,30 @@ class JobrightScraper extends BaseScraper {
             // Step 5: Save job
             this.updateStatus(`[5/5] 💾 Saving job to database...`, `Processed: ${totalProcessedCount}`);
             
-            // Save job - Use Jobright card data for company/title, ChatGPT for other fields
+            // Use ChatGPT-extracted company/title if available, otherwise fall back to job card
+            const finalCompany = (gptResult.company && gptResult.company !== 'Unknown') 
+              ? gptResult.company 
+              : jobCard.company;
+            const finalTitle = (gptResult.title && gptResult.title !== 'Unknown') 
+              ? gptResult.title 
+              : jobCard.title;
+            
+            // Log which source we're using
+            if (gptResult.company && gptResult.company !== 'Unknown') {
+              console.log(`${this.platform}: 📝 Using ChatGPT-extracted company: "${finalCompany}"`);
+            } else {
+              console.log(`${this.platform}: 📝 Using job card company: "${finalCompany}"`);
+            }
+            if (gptResult.title && gptResult.title !== 'Unknown') {
+              console.log(`${this.platform}: 📝 Using ChatGPT-extracted title: "${finalTitle}"`);
+            } else {
+              console.log(`${this.platform}: 📝 Using job card title: "${finalTitle}"`);
+            }
+            
+            // Save job - Use ChatGPT data when available, fall back to card data
             const saved = this.saveJob({
-              company: jobCard.company,  // Always use card data
-              title: jobCard.title,      // Always use card data
+              company: finalCompany,
+              title: finalTitle,
               url: finalJobUrl,
               is_remote: gptResult.isRemote,
               is_startup: gptResult.isStartup,
@@ -2177,7 +2197,7 @@ class JobrightScraper extends BaseScraper {
 
             if (saved) {
               newJobsCount++;
-              console.log(`${this.platform}: ✅ Saved job - ${jobCard.company} - ${jobCard.title}`);
+              console.log(`${this.platform}: ✅ Saved job - ${finalCompany} - ${finalTitle}`);
               
               // Send toast notification and update job count
               const path = require('path');
