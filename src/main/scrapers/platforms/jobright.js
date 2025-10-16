@@ -1887,6 +1887,7 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: Using basic extraction`);
           gptResult = {
             isVerificationPage: false,
+            isExpired: false,
             company: jobCard.company,
             title: jobCard.title,
             isRemote: true,
@@ -1911,111 +1912,48 @@ class JobrightScraper extends BaseScraper {
             console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
           }
           
-          // Memory cleanup
-          const pages = await this.browser.pages();
-          if (pages.length > 1) {
-            for (let i = 1; i < pages.length; i++) {
-              try { await pages[i].close(); } catch (err) {}
-            }
-          }
-          this.page = pages[0];
-          
-          // INSTANT MIRROR: Show Jobright.ai immediately
-          this.mirrorToWebview(this.baseUrl);
-          
-          await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-          console.log(`${this.platform}: ✅ Back on job list`);
-          
-          // Refresh and wait for cards
-          console.log(`${this.platform}: 🔄 Refreshing page...`);
-          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-          
-          console.log(`${this.platform}: ⏳ Waiting for cards...`);
-          for (let attempt = 0; attempt < 10; attempt++) {
-            await new Promise(r => setTimeout(r, 1000));
-            const cardCount = await this.page.evaluate(() => document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC').length);
-            if (cardCount > 0) {
-              console.log(`${this.platform}: ✅ ${cardCount} cards loaded`);
-              break;
-            }
-          }
-          
-          this.mirrorToWebview(this.baseUrl);
-          
-          // Click "Not Interested"
-          console.log(`${this.platform}: 🚀 Clicking "Not Interested" button...`);
+          // Navigate back and continue
           try {
-            // Highlight
-            await this.page.evaluate((company, title) => {
-              const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-              for (const card of cards) {
-                const companyEl = card.querySelector('div.index_company-name__gKiOY');
-                const titleEl = card.querySelector('h2.index_job-title__UjuEY');
-                if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
-                  card.style.border = '4px solid #ff0000';
-                  card.style.backgroundColor = '#ffe6e6';
-                  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-              }
-            }, jobCard.company, jobCard.title);
-            
-            console.log(`${this.platform}: 👀 Showing for 2s...`);
-            await new Promise(r => setTimeout(r, 2000));
-            
-            // Click
-            const clicked = await this.page.evaluate((company, title) => {
-              const cards = document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-              for (const card of cards) {
-                const companyEl = card.querySelector('div.index_company-name__gKiOY');
-                const titleEl = card.querySelector('h2.index_job-title__UjuEY');
-                if (companyEl?.textContent?.trim() === company && titleEl?.textContent?.trim() === title) {
-                  const dislikeBtn = card.querySelector('button#index_not-interest-button__9OtWF') ||
-                                     card.querySelector('button[id*="not-interest"]') ||
-                                     card.querySelector('button[class*="not-interest"]') ||
-                                     card.querySelector('button[aria-label*="Not interested"]') ||
-                                     card.querySelector('button[aria-label*="not interested"]');
-                  if (dislikeBtn) {
-                    dislikeBtn.click();
-                    return true;
-                  }
-                }
-              }
-              return false;
-            }, jobCard.company, jobCard.title);
-            
-            if (clicked) {
-              console.log(`${this.platform}: ✅ Clicked "Not Interested" button`);
-              
-              // Wait for modal and submit reason
-              console.log(`${this.platform}: ⏳ Waiting for reason modal...`);
-              await new Promise(r => setTimeout(r, 1000));
-              
-              const submitted = await this.page.evaluate(() => {
-                const radio = document.querySelector('input.ant-radio-input[value="2"]');
-                if (radio) radio.click();
-                return new Promise(resolve => {
-                  setTimeout(() => {
-                    const submitBtn = document.querySelector('button.index_not-interest-popup-button-submit__x6ojj');
-                    if (submitBtn && !submitBtn.disabled) {
-                      submitBtn.click();
-                      resolve(true);
-                    } else {
-                      resolve(false);
-                    }
-                  }, 500);
-                });
-              });
-              
-              if (submitted) {
-                console.log(`${this.platform}: ✅ Submitted - waiting for card to disappear...`);
-                await this.randomDelay(3000, 4000);
-              } else {
-                await new Promise(r => setTimeout(r, 3000));
-              }
-            }
-          } catch (err) {
-            console.log(`${this.platform}: ⚠️ Error: ${err.message}`);
+            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+            console.log(`${this.platform}: ✅ Back on job list`);
+          } catch (navErr) {
+            console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
           }
+          
+          continue; // Skip to next job
+        }
+        
+        // CHECK: Is this an EXPIRED or NO LONGER AVAILABLE page?
+        if (gptResult.isExpired) {
+          console.log(`${this.platform}: ⏰ ChatGPT confirmed: Job posting is EXPIRED or NO LONGER AVAILABLE - SKIPPING`);
+          
+          // Send skip notification
+          this.sendSkipNotification(jobCard, 'Expired/No Longer Available');
+          
+          // Close tab
+          try {
+            await newPage.close();
+            console.log(`${this.platform}: ✅ Tab closed`);
+          } catch (closeErr) {
+            console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+          }
+          
+          // Navigate back to job list
+          try {
+            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+            console.log(`${this.platform}: ✅ Back on job list`);
+          } catch (navErr) {
+            console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
+          }
+          
+          // Refresh page to reload cards
+          console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
+          try {
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+          } catch (reloadErr) {
+            console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
+          }
+          await this.randomDelay(1000, 1500);
           
           continue;
         }

@@ -148,14 +148,19 @@ STEP 1: Check if this is a verification/bot check page
 - If YES → Set is_verification_page: true and skip other fields
 - If NO → Continue to step 2
 
-STEP 2: Check if this is a SOFTWARE/TECH job
+STEP 2: Check if this job posting is EXPIRED or NO LONGER AVAILABLE
+- Look for: "no longer available", "expired", "position has been filled", "job posting closed", "this job is no longer accepting applications", "removed", "404", "not found", "page not found"
+- If YES → Set is_expired: true and skip other fields
+- If NO → Continue to step 3
+
+STEP 3: Check if this is a SOFTWARE/TECH job
 - Is this a software development, programming, engineering, or technical position?
 - Software jobs include: Developer, Engineer, Programmer, Data Scientist, DevOps, QA, Designer (UI/UX), Product Manager (tech), etc.
 - NON-software jobs include: AI Trainer, Content Writer, Volunteer Coordinator, Civil Engineer (non-software), Customer Service, Sales, Marketing (non-tech), Administrative, HR, Finance, Operations, etc.
 - If NOT a software/tech job → Set is_software_job: false and skip to return
-- If YES → Set is_software_job: true and continue to step 3
+- If YES → Set is_software_job: true and continue to step 4
 
-STEP 3: Extract job information (ONLY if software job)
+STEP 4: Extract job information (ONLY if software job)
 1. company - Company name
 2. title - Job title
 3. salary - Salary range or "Not specified"
@@ -203,6 +208,7 @@ CRITICAL:
 Return ONLY valid JSON:
 {
   "is_verification_page": true/false,
+  "is_expired": true/false,
   "is_software_job": true/false,
   "company": "...",
   "title": "...",
@@ -532,6 +538,7 @@ Return ONLY valid JSON:
       
       return {
         isVerificationPage: data.is_verification_page === true || data.is_verification_page === 'true',
+        isExpired: data.is_expired === true || data.is_expired === 'true',
         isSoftwareJob: data.is_software_job === true || data.is_software_job === 'true',
         company: data.company || 'Unknown',
         title: data.title || 'Unknown',
