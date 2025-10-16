@@ -5,7 +5,7 @@ class GPTExtractor {
   constructor() {
     this.isReady = false;
     this.lastRequestTime = 0;
-    this.minDelayBetweenRequests = 2000; // 4 seconds between ChatGPT requests
+    this.minDelayBetweenRequests = 5000; // 5 seconds between ChatGPT requests (more human-like)
     this.verificationCheckInterval = null;
     this.lastRefreshTime = 0;
     this.refreshCooldown = 30000; // 30 seconds cooldown between refreshes
@@ -288,7 +288,11 @@ Return ONLY valid JSON:
                 'access denied',
                 'human verification',
                 'please verify',
-                'verify your identity'
+                'verify your identity',
+                'suspicious activity',
+                'suspicious activity alert',
+                'rate limit exceeded',
+                'too many requests'
               ];
               
               // ONLY detect verification if it has specific verification keywords
@@ -321,6 +325,32 @@ Return ONLY valid JSON:
                                    document.querySelector('textarea');
               
               const isReady = messageInput && messageInput.offsetParent !== null;
+              
+              // Try to dismiss "Suspicious Activity Alert" if present
+              if (bodyText.includes('suspicious activity') || bodyText.includes('rate limit')) {
+                // Look for dismiss/close buttons
+                const allButtons = document.querySelectorAll('button');
+                let dismissBtn = null;
+                
+                for (const btn of allButtons) {
+                  const btnText = btn.textContent?.toLowerCase() || '';
+                  const btnAria = btn.getAttribute('aria-label')?.toLowerCase() || '';
+                  
+                  if (btnAria.includes('close') || btnAria.includes('dismiss') || 
+                      btnText.includes('ok') || btnText.includes('continue') || 
+                      btnText.includes('dismiss') || btnText.includes('close')) {
+                    dismissBtn = btn;
+                    break;
+                  }
+                }
+                
+                if (dismissBtn) {
+                  console.log('🔓 Auto-dismissing suspicious activity alert...');
+                  dismissBtn.click();
+                  // Wait a moment for dismissal
+                  await new Promise(r => setTimeout(r, 1000));
+                }
+              }
               
               return { 
                 needsVerification: realVerification || hasCloudflare,
