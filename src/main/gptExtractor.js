@@ -361,8 +361,6 @@ Return ONLY valid JSON:
                 if (dismissBtn) {
                   console.log('🔓 Auto-dismissing suspicious activity alert...');
                   dismissBtn.click();
-                  // Wait a moment for dismissal
-                  await new Promise(r => setTimeout(r, 1000));
                 }
               }
               
@@ -396,7 +394,6 @@ Return ONLY valid JSON:
                 
                 if (actionBtn) {
                   actionBtn.click();
-                  await new Promise(r => setTimeout(r, 2000));
                 }
               }
               
