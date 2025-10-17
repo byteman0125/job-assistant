@@ -295,6 +295,20 @@ Return ONLY valid JSON:
                 'too many requests'
               ];
               
+              // Check for ChatGPT error messages
+              const errorKeywords = [
+                'something went wrong',
+                'error generating',
+                'failed to generate',
+                'please try again',
+                'contact us through our help center',
+                'help.openai.com'
+              ];
+              
+              const hasError = errorKeywords.some(keyword => {
+                return bodyText.includes(keyword);
+              });
+              
               // ONLY detect verification if it has specific verification keywords
               const hasVerification = verificationKeywords.some(keyword => {
                 return bodyText.includes(keyword) || title.includes(keyword);
@@ -352,8 +366,43 @@ Return ONLY valid JSON:
                 }
               }
               
+              // Handle "Something went wrong" errors by clicking Regenerate or starting new chat
+              if (hasError) {
+                console.log('⚠️ ChatGPT error detected: "Something went wrong"');
+                
+                const allButtons = document.querySelectorAll('button');
+                let actionBtn = null;
+                
+                for (const btn of allButtons) {
+                  const btnText = btn.textContent?.toLowerCase() || '';
+                  const btnAria = btn.getAttribute('aria-label')?.toLowerCase() || '';
+                  
+                  // Look for "Regenerate" button first
+                  if (btnText.includes('regenerate') || btnAria.includes('regenerate')) {
+                    actionBtn = btn;
+                    console.log('🔄 Found "Regenerate" button - clicking...');
+                    break;
+                  }
+                }
+                
+                // If no regenerate button, start a new chat
+                if (!actionBtn) {
+                  const newChatBtn = document.querySelector('a[data-testid="create-new-chat-button"]');
+                  if (newChatBtn) {
+                    actionBtn = newChatBtn;
+                    console.log('🆕 Starting new chat to recover from error...');
+                  }
+                }
+                
+                if (actionBtn) {
+                  actionBtn.click();
+                  await new Promise(r => setTimeout(r, 2000));
+                }
+              }
+              
               return { 
                 needsVerification: realVerification || hasCloudflare,
+                hasError: hasError,
                 isReady: isReady,
                 hasMessageInput: !!messageInput,
                 bodyPreview: bodyText.substring(0, 200)
@@ -379,6 +428,14 @@ Return ONLY valid JSON:
         await new Promise(r => setTimeout(r, 3000));
         
         return true;
+      }
+      
+      if (result && result.hasError && timeSinceLastRefresh > this.refreshCooldown) {
+        console.log(`❌ ChatGPT error detected: "Something went wrong" - Handled in webview`);
+        // Error is already being handled in the webview (Regenerate or New Chat)
+        // Just wait a bit and mark that we've handled it
+        await new Promise(r => setTimeout(r, 2000));
+        return false; // Don't refresh, let the in-page handling work
       }
       
       if (result && !result.hasMessageInput && timeSinceLastRefresh > this.refreshCooldown) {
