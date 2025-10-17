@@ -341,16 +341,33 @@ ipcMain.handle('save-cookies', async (event, platform, cookies) => {
       
       for (const cookie of cookies) {
         try {
-          await chatgptSession.cookies.set({
+          const cookieConfig = {
             url: 'https://chatgpt.com',
             name: cookie.name,
             value: cookie.value,
-            domain: cookie.domain || '.chatgpt.com',
             path: cookie.path || '/',
             secure: cookie.secure !== false,
             httpOnly: cookie.httpOnly !== false,
             expirationDate: cookie.expirationDate || (Date.now() / 1000 + 86400 * 365)
-          });
+          };
+          
+          // Handle __Host- and __Secure- prefix cookies specially
+          if (cookie.name.startsWith('__Host-')) {
+            // __Host- cookies MUST NOT have a domain attribute
+            // They MUST be secure and MUST have path='/'
+            cookieConfig.secure = true;
+            cookieConfig.path = '/';
+            // Don't set domain at all
+          } else if (cookie.name.startsWith('__Secure-')) {
+            // __Secure- cookies MUST be secure
+            cookieConfig.secure = true;
+            cookieConfig.domain = cookie.domain || '.chatgpt.com';
+          } else {
+            // Regular cookies can have domain
+            cookieConfig.domain = cookie.domain || '.chatgpt.com';
+          }
+          
+          await chatgptSession.cookies.set(cookieConfig);
         } catch (err) {
           console.error(`Error setting cookie ${cookie.name}:`, err.message);
         }
@@ -778,16 +795,33 @@ app.whenReady().then(async () => {
       
       for (const cookie of chatgptCookies) {
         try {
-          await chatgptSession.cookies.set({
+          const cookieConfig = {
             url: 'https://chatgpt.com',
             name: cookie.name,
             value: cookie.value,
-            domain: cookie.domain || '.chatgpt.com',
             path: cookie.path || '/',
             secure: cookie.secure !== false,
             httpOnly: cookie.httpOnly !== false,
             expirationDate: cookie.expirationDate || (Date.now() / 1000 + 86400 * 365)
-          });
+          };
+          
+          // Handle __Host- and __Secure- prefix cookies specially
+          if (cookie.name.startsWith('__Host-')) {
+            // __Host- cookies MUST NOT have a domain attribute
+            // They MUST be secure and MUST have path='/'
+            cookieConfig.secure = true;
+            cookieConfig.path = '/';
+            // Don't set domain at all
+          } else if (cookie.name.startsWith('__Secure-')) {
+            // __Secure- cookies MUST be secure
+            cookieConfig.secure = true;
+            cookieConfig.domain = cookie.domain || '.chatgpt.com';
+          } else {
+            // Regular cookies can have domain
+            cookieConfig.domain = cookie.domain || '.chatgpt.com';
+          }
+          
+          await chatgptSession.cookies.set(cookieConfig);
         } catch (err) {
           console.error(`Error loading cookie ${cookie.name}:`, err.message);
         }
