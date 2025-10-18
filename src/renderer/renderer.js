@@ -4132,15 +4132,21 @@ function initChatTab() {
     chatInput.value = '';
     chatInput.style.height = 'auto';
     
-    // Disable send button and show typing
+    // Disable send button and show typing indicators
     chatSendBtn.disabled = true;
     chatTyping.classList.add('show');
     updateChatStatus('AI is thinking...', false);
+    
+    // Add thinking message bubble to chat
+    addThinkingMessage();
     
     // Send to main process
     ipcRenderer.invoke('chat-with-ai', message).then(response => {
       chatSendBtn.disabled = false;
       chatTyping.classList.remove('show');
+      
+      // Remove thinking message bubble
+      removeThinkingMessage();
       
       if (response.success) {
         addChatMessage(response.message, 'ai');
@@ -4152,6 +4158,10 @@ function initChatTab() {
     }).catch(error => {
       chatSendBtn.disabled = false;
       chatTyping.classList.remove('show');
+      
+      // Remove thinking message bubble
+      removeThinkingMessage();
+      
       addChatMessage(`Connection error: ${error.message}`, 'ai');
       updateChatStatus('Disconnected', true);
     });
@@ -4173,6 +4183,45 @@ function initChatTab() {
     
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return messageDiv;
+  }
+
+  // Add thinking message bubble
+  function addThinkingMessage() {
+    const thinkingDiv = document.createElement('div');
+    thinkingDiv.className = 'chat-message ai-message thinking-message';
+    thinkingDiv.id = 'thinking-message';
+    
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    thinkingDiv.innerHTML = `
+      <div class="message-avatar">🤖</div>
+      <div class="message-content">
+        <div class="message-text thinking-text">
+          <span>AI is thinking</span>
+          <span class="thinking-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </span>
+        </div>
+        <div class="message-time">${time}</div>
+      </div>
+    `;
+    
+    chatMessages.appendChild(thinkingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return thinkingDiv;
+  }
+
+  // Remove thinking message
+  function removeThinkingMessage() {
+    const thinkingMessage = document.getElementById('thinking-message');
+    if (thinkingMessage) {
+      thinkingMessage.remove();
+    }
   }
   
   function clearChat() {
@@ -4195,7 +4244,10 @@ function initChatTab() {
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    // Convert newlines to <br> and preserve formatting
+    return div.innerHTML
+      .replace(/\n/g, '<br>')
+      .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
   }
   
   // Add event listeners after all functions are defined
