@@ -25,8 +25,17 @@ class GPTExtractor {
       await this.checkGPUAvailability();
       await this.ensureModelInstalled();
       
+      // Test AI connection to ensure it's working
+      const aiTestResult = await this.testAIConnection();
+      if (aiTestResult) {
+        console.log(`✅ AI Extractor: Ollama is ready for job analysis (${this.gpuAvailable ? 'GPU' : 'CPU'} mode)`);
+        this.ollamaInitialized = true;
+      } else {
+        console.log('⚠️ AI test failed, but Ollama server is running - will retry during job processing');
+        this.ollamaInitialized = false;
+      }
+      
       this.isReady = true;
-      console.log(`✅ AI Extractor: Ollama is ready for job analysis (${this.gpuAvailable ? 'GPU' : 'CPU'} mode)`);
     } catch (error) {
       console.log('⚠️ Ollama initialization failed:', error.message);
       console.log('💡 Continuing without AI extraction - jobs will be processed with basic data');
