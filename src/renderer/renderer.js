@@ -4083,3 +4083,127 @@ document.querySelector('[data-tab="apply"]').addEventListener('click', async (e)
   }
 });
 
+// Chat Tab Event Listener
+document.addEventListener('click', function(e) {
+  if (e.target.closest('[data-tab="chat"]')) {
+    initChatTab();
+  }
+});
+
+// Chat functionality
+function initChatTab() {
+  if (document.getElementById('chat-tab').getAttribute('data-initialized')) return;
+  
+  const chatInput = document.getElementById('chatInput');
+  const chatSendBtn = document.getElementById('chatSendBtn');
+  const chatClearBtn = document.getElementById('chatClearBtn');
+  const chatMessages = document.getElementById('chatMessages');
+  const chatStatus = document.getElementById('chatStatus');
+  const chatTyping = document.getElementById('chatTyping');
+  
+  if (!chatInput || !chatSendBtn) return;
+  
+  // Initialize chat status
+  updateChatStatus('Connected', false);
+  
+  // Auto-resize textarea
+  chatInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = this.scrollHeight + 'px';
+  });
+  
+  // Send message on Enter (but allow Shift+Enter for new lines)
+  chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+  
+  // Send button click
+  chatSendBtn.addEventListener('click', sendChatMessage);
+  
+  // Clear chat button
+  chatClearBtn.addEventListener('click', clearChat);
+  
+  function sendChatMessage() {
+    const message = chatInput.value.trim();
+    if (!message) return;
+    
+    // Add user message to chat
+    addChatMessage(message, 'user');
+    
+    // Clear input
+    chatInput.value = '';
+    chatInput.style.height = 'auto';
+    
+    // Disable send button and show typing
+    chatSendBtn.disabled = true;
+    chatTyping.classList.add('show');
+    updateChatStatus('AI is thinking...', false);
+    
+    // Send to main process
+    ipcRenderer.invoke('chat-with-ai', message).then(response => {
+      chatSendBtn.disabled = false;
+      chatTyping.classList.remove('show');
+      
+      if (response.success) {
+        addChatMessage(response.message, 'ai');
+        updateChatStatus('Connected', false);
+      } else {
+        addChatMessage(`Sorry, I encountered an error: ${response.error}`, 'ai');
+        updateChatStatus('Error', true);
+      }
+    }).catch(error => {
+      chatSendBtn.disabled = false;
+      chatTyping.classList.remove('show');
+      addChatMessage(`Connection error: ${error.message}`, 'ai');
+      updateChatStatus('Disconnected', true);
+    });
+  }
+  
+  function addChatMessage(message, sender) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${sender}-message`;
+    
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    messageDiv.innerHTML = `
+      <div class="message-avatar">${sender === 'user' ? '👤' : '🤖'}</div>
+      <div class="message-content">
+        <div class="message-text">${escapeHtml(message)}</div>
+        <div class="message-time">${time}</div>
+      </div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+  
+  function clearChat() {
+    chatMessages.innerHTML = `
+      <div class="chat-message ai-message">
+        <div class="message-avatar">🤖</div>
+        <div class="message-content">
+          <div class="message-text">Hello! I'm your AI assistant powered by Llama. How can I help you today?</div>
+          <div class="message-time">Just now</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  function updateChatStatus(status, isError) {
+    chatStatus.textContent = `● ${status}`;
+    chatStatus.className = `status-indicator ${isError ? 'error' : ''}`;
+  }
+  
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // Mark as initialized
+  document.getElementById('chat-tab').setAttribute('data-initialized', 'true');
+}
+

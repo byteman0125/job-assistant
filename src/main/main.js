@@ -692,6 +692,55 @@ ipcMain.handle('chatgpt-send-result', async (event, result) => {
   return result;
 });
 
+// Chat with AI handler
+ipcMain.handle('chat-with-ai', async (event, message) => {
+  try {
+    console.log('🤖 Chat request received:', message);
+    
+    let gptExtractor;
+    
+    // Get or create GPT extractor instance
+    if (scraperManager && scraperManager.gptExtractor) {
+      gptExtractor = scraperManager.gptExtractor;
+    } else {
+      const GPTExtractor = require('./gptExtractor');
+      gptExtractor = new GPTExtractor();
+      await gptExtractor.initialize();
+    }
+    
+    if (!gptExtractor.ollamaInitialized && !gptExtractor.isReady) {
+      return {
+        success: false,
+        error: 'AI service not available. Please ensure Ollama is running.'
+      };
+    }
+    
+    // Send message to Ollama
+    const response = await gptExtractor.sendToOllama(message);
+    
+    if (!response) {
+      return {
+        success: false,
+        error: 'No response from AI service'
+      };
+    }
+    
+    console.log('🤖 Chat response:', response.substring(0, 100) + '...');
+    
+    return {
+      success: true,
+      message: response
+    };
+    
+  } catch (error) {
+    console.error('❌ Chat error:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
 // Window controls for custom title bar
 ipcMain.on('window-minimize', () => {
   if (mainWindow) mainWindow.minimize();
