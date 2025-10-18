@@ -55,11 +55,7 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     
-    // Refresh ChatGPT when main window opens to ensure fresh start
-    setTimeout(() => {
-      console.log('🔄 Refreshing ChatGPT on startup...');
-      mainWindow.webContents.send('refresh-chatgpt');
-    }, 6000); // Wait 6 seconds for ChatGPT to fully load first
+    // ChatGPT UI removed - no longer needed
   });
   
   // Register main window globally
@@ -74,11 +70,7 @@ function createWindow() {
     webContents.setUserAgent(userAgent);
     console.log(`✅ User agent set: Chrome (not Electron)`);
     
-    // Refresh ChatGPT webview after attachment to ensure clean state
-    setTimeout(() => {
-      console.log('🔄 Refreshing ChatGPT webview after attachment...');
-      webContents.reload();
-    }, 5000); // Wait 5 seconds for webview to fully initialize
+    // ChatGPT webview removed - no longer needed
     
     // Hide webdriver and automation flags
     webContents.executeJavaScript(`

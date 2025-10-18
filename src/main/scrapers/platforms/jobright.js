@@ -1806,9 +1806,9 @@ class JobrightScraper extends BaseScraper {
           continue; // Skip to next job
         }
         
-        // Step 4: Send to ChatGPT for analysis
-        this.updateStatus(`[4/5] 🤖 Analyzing with ChatGPT...`, `Processed: ${totalProcessedCount}`);
-        console.log(`${this.platform}: 📤 Sending to ChatGPT for COMBINED analysis...`);
+        // Step 4: Send to Puter AI for analysis
+        this.updateStatus(`[4/5] 🤖 Analyzing with Puter AI...`, `Processed: ${totalProcessedCount}`);
+        console.log(`${this.platform}: 📤 Sending to Puter AI for COMBINED analysis...`);
         
         let gptResult = null;
         
@@ -1821,41 +1821,12 @@ class JobrightScraper extends BaseScraper {
             );
             
             if (gptResult) {
-              console.log(`${this.platform}: ✅ ChatGPT analysis complete`);
+              console.log(`${this.platform}: ✅ Puter AI analysis complete`);
             } else {
-              console.log(`${this.platform}: ⚠️ ChatGPT returned null - Refreshing ChatGPT and retrying...`);
-              
-              // Refresh ChatGPT webview
-              try {
-                const { BrowserWindow } = require('electron');
-                const mainWindow = BrowserWindow.getAllWindows()[0];
-                if (mainWindow) {
-                  mainWindow.webContents.send('refresh-chatgpt');
-                  console.log(`${this.platform}: 🔄 Sent ChatGPT refresh command`);
-                  
-                  // Wait 3 seconds for ChatGPT to reload
-                  await new Promise(r => setTimeout(r, 3000));
-                  
-                  // Retry once
-                  console.log(`${this.platform}: 🔄 Retrying ChatGPT analysis...`);
-                  gptResult = await this.gptExtractor.extractJobData(
-                    quickContent,
-                    this.platform,
-                    finalJobUrl
-                  );
-                  
-                  if (gptResult) {
-                    console.log(`${this.platform}: ✅ ChatGPT analysis successful after refresh!`);
-                  } else {
-                    console.log(`${this.platform}: ⚠️ ChatGPT still failed - Using fallback`);
-                  }
-                }
-              } catch (refreshErr) {
-                console.log(`${this.platform}: ⚠️ Error refreshing ChatGPT: ${refreshErr.message}`);
-              }
+              console.log(`${this.platform}: ⚠️ Puter AI extraction returned null - Using fallback data`);
             }
             
-            // Check if scraper was stopped during ChatGPT analysis
+            // Check if scraper was stopped during AI analysis
             if (!this.isRunning) {
               console.log(`${this.platform}: 🛑 Scraper stopped by user during analysis`);
               
@@ -1878,11 +1849,11 @@ class JobrightScraper extends BaseScraper {
               break;
             }
           } catch (gptError) {
-            console.log(`${this.platform}: ⚠️ ChatGPT error: ${gptError.message}`);
+            console.log(`${this.platform}: ⚠️ Puter AI error: ${gptError.message}`);
           }
         }
         
-        // Fallback if ChatGPT fails
+        // Fallback if Puter AI fails
         if (!gptResult) {
           console.log(`${this.platform}: Using basic extraction`);
           gptResult = {
@@ -1902,7 +1873,7 @@ class JobrightScraper extends BaseScraper {
 
         // CHECK: Is this a verification page?
         if (gptResult.isVerificationPage) {
-          console.log(`${this.platform}: ❌ ChatGPT confirmed: Verification page - SKIPPING`);
+          console.log(`${this.platform}: ❌ Puter AI confirmed: Verification page - SKIPPING`);
           
           // Close tab and go back
           try {
@@ -1925,7 +1896,7 @@ class JobrightScraper extends BaseScraper {
         
         // CHECK: Is this an EXPIRED or NO LONGER AVAILABLE page?
         if (gptResult.isExpired) {
-          console.log(`${this.platform}: ⏰ ChatGPT confirmed: Job posting is EXPIRED or NO LONGER AVAILABLE - SKIPPING`);
+          console.log(`${this.platform}: ⏰ Puter AI confirmed: Job posting is EXPIRED or NO LONGER AVAILABLE - SKIPPING`);
           
           // Send skip notification
           this.sendSkipNotification(jobCard, 'Expired/No Longer Available');
@@ -2099,7 +2070,7 @@ class JobrightScraper extends BaseScraper {
             // Step 5: Save job
             this.updateStatus(`[5/5] 💾 Saving job to database...`, `Processed: ${totalProcessedCount}`);
             
-            // Use ChatGPT-extracted company/title if available, otherwise fall back to job card
+            // Use Puter AI-extracted company/title if available, otherwise fall back to job card
             const finalCompany = (gptResult.company && gptResult.company !== 'Unknown') 
               ? gptResult.company 
               : jobCard.company;
@@ -2109,17 +2080,17 @@ class JobrightScraper extends BaseScraper {
             
             // Log which source we're using
             if (gptResult.company && gptResult.company !== 'Unknown') {
-              console.log(`${this.platform}: 📝 Using ChatGPT-extracted company: "${finalCompany}"`);
+              console.log(`${this.platform}: 📝 Using Puter AI-extracted company: "${finalCompany}"`);
             } else {
               console.log(`${this.platform}: 📝 Using job card company: "${finalCompany}"`);
             }
             if (gptResult.title && gptResult.title !== 'Unknown') {
-              console.log(`${this.platform}: 📝 Using ChatGPT-extracted title: "${finalTitle}"`);
+              console.log(`${this.platform}: 📝 Using Puter AI-extracted title: "${finalTitle}"`);
             } else {
               console.log(`${this.platform}: 📝 Using job card title: "${finalTitle}"`);
             }
             
-            // Save job - Use ChatGPT data when available, fall back to card data
+            // Save job - Use Puter AI data when available, fall back to card data
             const saved = this.saveJob({
               company: finalCompany,
               title: finalTitle,
@@ -2294,7 +2265,8 @@ class JobrightScraper extends BaseScraper {
     return newJobsCount;
   }
 
-  // Send job content to ChatGPT and extract detailed info
+  // Send job content to Puter AI and extract detailed info (legacy method)
+  // Note: This method appears to be unused - the main extraction now uses gptExtractor.extractJobData()
   async sendToGPTAndExtract(jobContent, company, title) {
     try {
       const path = require('path');
@@ -2306,7 +2278,7 @@ class JobrightScraper extends BaseScraper {
         return null;
       }
 
-      console.log(`${this.platform}: 🤖 Preparing ChatGPT extraction...`);
+      console.log(`${this.platform}: 🤖 Preparing Puter AI extraction...`);
       console.log(`${this.platform}: Job URL: ${jobContent.url}`);
       console.log(`${this.platform}: Page title: ${jobContent.title}`);
 
@@ -2363,7 +2335,7 @@ Format response as JSON.`;
       `);
 
       if (!newChatClicked) {
-        console.log(`${this.platform}: ⚠️ ChatGPT new chat button not found, may need refresh`);
+        console.log(`${this.platform}: ⚠️ ChatGPT new chat button not found`);
         return null;
       }
 
@@ -2503,13 +2475,7 @@ Format response as JSON.`;
           return null;
         }
       } else {
-        console.log(`${this.platform}: ⚠️ No ChatGPT response, ChatGPT may need refresh`);
-        
-        // Try to refresh ChatGPT
-        console.log(`${this.platform}: Refreshing ChatGPT...`);
-        mainWindow.webContents.send('refresh-chatgpt-view');
-        await this.randomDelay(5000, 7000); // Duration: 5-7 seconds - Wait for refresh
-        
+        console.log(`${this.platform}: ⚠️ No GPT response received`);
         return null;
       }
 

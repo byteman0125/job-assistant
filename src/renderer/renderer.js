@@ -86,79 +86,8 @@ let currentSettings = {
   min_salary_hourly: ''
 };
 
-// ChatGPT Sidebar
-const chatgptView = document.getElementById('chatgptView');
-const refreshChatGPT = document.getElementById('refreshChatGPT');
-const toggleSidebar = document.getElementById('toggleSidebar');
-
 let allJobs = [];
 
-// ChatGPT Prompt Modal handlers
-const gptPromptModal = document.getElementById('gptPromptModal');
-const gptPromptOverlay = document.getElementById('gptPromptOverlay');
-const gptPromptText = document.getElementById('gptPromptText');
-const gptPromptInstructions = document.getElementById('gptPromptInstructions');
-const gptWaitingStatus = document.getElementById('gptWaitingStatus');
-const gptSendingStatus = document.getElementById('gptSendingStatus');
-const copyPromptBtn = document.getElementById('copyPromptBtn');
-const closePromptBtn = document.getElementById('closePromptBtn');
-const closePromptModal = document.getElementById('closePromptModal');
-
-function showGPTPrompt(data) {
-  gptPromptText.value = data.prompt;
-  gptPromptModal.style.display = 'block';
-  gptPromptOverlay.style.display = 'block';
-  
-  // Show auto-sending status
-  gptPromptInstructions.style.display = 'none';
-  gptWaitingStatus.style.display = 'none';
-  gptSendingStatus.style.display = 'block';
-  
-  // Disable copy button during auto-send
-  copyPromptBtn.disabled = true;
-  copyPromptBtn.style.opacity = '0.6';
-  copyPromptBtn.textContent = '🤖 Auto-sending...';
-  
-  showNotification(`🤖 Auto-sending prompt to ChatGPT...`, 'info');
-  
-  // After 2 seconds, show waiting status
-  setTimeout(() => {
-    gptSendingStatus.style.display = 'none';
-    gptWaitingStatus.style.display = 'block';
-    copyPromptBtn.textContent = '⏳ Waiting for response...';
-    showNotification(`⏳ Waiting for ChatGPT to respond (up to 90s)...`, 'info');
-  }, 2000);
-}
-
-function showWaitingForResponse() {
-  gptPromptInstructions.style.display = 'none';
-  gptWaitingStatus.style.display = 'block';
-  gptSendingStatus.style.display = 'none';
-  copyPromptBtn.textContent = '⏳ Waiting for response...';
-  copyPromptBtn.disabled = true;
-  copyPromptBtn.style.opacity = '0.6';
-}
-
-function hideGPTPrompt() {
-  gptPromptModal.style.display = 'none';
-  gptPromptOverlay.style.display = 'none';
-  
-  // Reset button
-  copyPromptBtn.textContent = '📋 Copy to Clipboard';
-  copyPromptBtn.disabled = false;
-  copyPromptBtn.style.opacity = '1';
-}
-
-
-// Listen for when ChatGPT responds
-ipcRenderer.on('gpt-response-received', (event, data) => {
-  console.log('✅ ChatGPT responded! Processing job...');
-});
-
-// Listen for timeout
-ipcRenderer.on('gpt-response-timeout', () => {
-  console.log('⏱️ ChatGPT response timeout - using basic extraction');
-});
 
 // Listen for job skip notifications
 ipcRenderer.on('job-skipped', (event, data) => {
@@ -337,26 +266,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadProfile();
   await loadResumes();
   
-  // Setup GPT prompt modal buttons
-  if (copyPromptBtn) {
-    copyPromptBtn.addEventListener('click', async () => {
-      if (copyPromptBtn.disabled) return;
-      
-      await ipcRenderer.invoke('copy-to-clipboard', gptPromptText.value);
-      showNotification('✅ Prompt copied as backup!', 'success');
-    });
-  }
-  
-  if (closePromptBtn) closePromptBtn.addEventListener('click', hideGPTPrompt);
-  if (closePromptModal) closePromptModal.addEventListener('click', hideGPTPrompt);
-  if (gptPromptOverlay) gptPromptOverlay.addEventListener('click', hideGPTPrompt);
-  
-  // Auto-load ChatGPT cookies on startup to show they're saved
-  setTimeout(async () => {
-    if (cookiePlatform && cookiePlatform.value === 'chatgpt') {
-      await loadCookies();
-    }
-  }, 1000);
 });
 
 // Setup Event Listeners
@@ -468,37 +377,6 @@ function setupEventListeners() {
   // Load settings on startup
   loadSettings();
 
-  // ChatGPT
-  refreshChatGPT.addEventListener('click', () => {
-    chatgptView.reload();
-    // Removed toast - less intrusive
-  });
-
-  // Listen for refresh requests from main process
-  ipcRenderer.on('refresh-chatgpt-view', () => {
-    console.log('🔄 Refreshing ChatGPT as requested by scraper');
-    chatgptView.reload();
-  });
-  
-  // Handle auto-refresh from scraper when ChatGPT fails
-  ipcRenderer.on('refresh-chatgpt', () => {
-    console.log('🔄 ChatGPT failed - Auto-refreshing...');
-    chatgptView.reload();
-    // Removed toast - auto-refresh is transparent
-  });
-  
-  // Handle ChatGPT verification needed
-  ipcRenderer.on('chatgpt-verification-needed', () => {
-    console.log('🚫 ChatGPT requires human verification!');
-    showNotification('⚠️ ChatGPT needs verification! Please complete it and click "Start Scraping" again.', 'error');
-    // Auto-stop scraping
-    ipcRenderer.send('stop-scraping');
-  });
-
-  // Listen for ChatGPT webview load
-  chatgptView.addEventListener('did-finish-load', () => {
-    console.log('ChatGPT loaded - cookies should be active from session');
-  });
 
   // Listen for scraping status updates
   ipcRenderer.on('scraping-status-update', (event, data) => {
@@ -1050,11 +928,6 @@ async function saveCookies() {
     
     await ipcRenderer.invoke('save-cookies', platform, cookies);
     showMessage(cookieStatus, 'Cookies saved successfully!', 'success');
-    
-    // If it's ChatGPT cookies, reload the webview
-    if (platform === 'chatgpt') {
-      chatgptView.reload();
-    }
   } catch (error) {
     showMessage(cookieStatus, `Error: ${error.message}`, 'error');
   }
@@ -3942,7 +3815,6 @@ setTimeout(() => {
    ======================================== */
 
 let applyPage = null;
-let applyGptWebview = null;
 let applyWebviewElement = null;
 let applyZoomLevel = 1.0;
 
@@ -3958,12 +3830,6 @@ function initApplyTab() {
   const zoomOutBtn = document.getElementById('applyZoomOutBtn');
   const resetZoomBtn = document.getElementById('applyResetZoomBtn');
   
-  const loadGptBtn = document.getElementById('loadApplyGptBtn');
-  const gptRefreshBtn = document.getElementById('applyGptRefreshBtn');
-  const gptClearBtn = document.getElementById('applyGptClearBtn');
-  
-  const extractJobInfoBtn = document.getElementById('extractJobInfoBtn');
-  const sendPageToGptBtn = document.getElementById('sendPageToGptBtn');
   const fillFormBtn = document.getElementById('fillFormBtn');
   
   // URL Navigation
@@ -4011,14 +3877,7 @@ function initApplyTab() {
     updateZoom();
   });
   
-  // ChatGPT Controls
-  loadGptBtn.addEventListener('click', loadApplyGpt);
-  gptRefreshBtn.addEventListener('click', refreshApplyGpt);
-  gptClearBtn.addEventListener('click', clearApplyGptChat);
-  
   // Quick Actions
-  extractJobInfoBtn.addEventListener('click', extractJobInfo);
-  sendPageToGptBtn.addEventListener('click', sendPageToGpt);
   fillFormBtn.addEventListener('click', autoFillForm);
 }
 
@@ -4134,193 +3993,6 @@ function setApplyStatus(text, loading) {
   loadingIndicator.style.display = loading ? 'flex' : 'none';
 }
 
-// Load ChatGPT
-async function loadApplyGpt() {
-  try {
-    const container = document.getElementById('applyGptContainer');
-    
-    // Remove placeholder
-    const placeholder = container.querySelector('.apply-gpt-placeholder');
-    if (placeholder) {
-      placeholder.remove();
-    }
-    
-    // Check if webview already exists
-    if (applyGptWebview) {
-      setApplyStatus('ChatGPT already loaded', false);
-      return;
-    }
-    
-    // Get ChatGPT cookies
-    const cookies = await ipcRenderer.invoke('get-gpt-cookies');
-    
-    if (!cookies || cookies.length === 0) {
-      setApplyStatus('No ChatGPT cookies found. Please add them in Cookies tab.', false);
-      return;
-    }
-    
-    // Create ChatGPT webview
-    applyGptWebview = document.createElement('webview');
-    applyGptWebview.id = 'applyGptWebview';
-    applyGptWebview.src = 'https://chatgpt.com';
-    applyGptWebview.style.width = '100%';
-    applyGptWebview.style.height = '100%';
-    applyGptWebview.setAttribute('partition', 'persist:chatgpt');
-    applyGptWebview.setAttribute('nodeintegration', 'false');
-    
-    let cookiesApplied = false;
-    
-    // Wait for webview to be ready
-    applyGptWebview.addEventListener('dom-ready', async () => {
-      // Only set cookies once to avoid infinite reload loop
-      if (!cookiesApplied) {
-        cookiesApplied = true;
-        try {
-          // Set cookies
-          for (const cookie of cookies) {
-            await applyGptWebview.executeJavaScript(`
-              document.cookie = '${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=/; secure; samesite=lax';
-            `);
-          }
-          
-          // Reload to apply cookies
-          applyGptWebview.reload();
-        } catch (err) {
-          console.error('Error setting ChatGPT cookies:', err);
-          setApplyStatus('Failed to set ChatGPT cookies', false);
-        }
-      } else {
-        // Cookies already applied, just show success
-        setApplyStatus('ChatGPT loaded successfully', false);
-      }
-    });
-    
-    container.appendChild(applyGptWebview);
-  } catch (err) {
-    console.error('Error loading ChatGPT:', err);
-    setApplyStatus('Failed to load ChatGPT', false);
-  }
-}
-
-// Refresh ChatGPT
-function refreshApplyGpt() {
-  if (applyGptWebview) {
-    applyGptWebview.reload();
-    setApplyStatus('ChatGPT refreshed', false);
-  } else {
-    setApplyStatus('ChatGPT not loaded yet', false);
-  }
-}
-
-// Clear ChatGPT chat (start new)
-function clearApplyGptChat() {
-  if (applyGptWebview) {
-    applyGptWebview.loadURL('https://chatgpt.com');
-    setApplyStatus('Started new ChatGPT chat', false);
-  } else {
-    setApplyStatus('ChatGPT not loaded yet', false);
-  }
-}
-
-// Extract job info using ChatGPT
-async function extractJobInfo() {
-  if (!applyWebviewElement) {
-    setApplyStatus('No page loaded', false);
-    return;
-  }
-  
-  if (!applyGptWebview) {
-    setApplyStatus('Please load ChatGPT first', false);
-    return;
-  }
-  
-  try {
-    // Get page content
-    const content = await applyWebviewElement.executeJavaScript(`
-      document.body.innerText
-    `);
-    
-    if (!content || content.length < 100) {
-      setApplyStatus('Page content is too short', false);
-      return;
-    }
-    
-    // Prepare prompt
-    const prompt = `Extract job information from this page and format as JSON:
-    
-${content.substring(0, 10000)}
-
-Please extract:
-- Company name
-- Job title  
-- Location
-- Job type (Full-time, Part-time, Contract, etc.)
-- Remote status (Remote, Hybrid, On-site)
-- Salary/compensation
-- Required skills/tech stack
-- Job description summary
-
-Format as JSON.`;
-    
-    // Send to ChatGPT
-    await applyGptWebview.executeJavaScript(`
-      const textarea = document.querySelector('[data-id="root"] textarea');
-      if (textarea) {
-        textarea.value = ${JSON.stringify(prompt)};
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        
-        // Find and click send button
-        setTimeout(() => {
-          const sendBtn = document.querySelector('[data-testid="send-button"]');
-          if (sendBtn && !sendBtn.disabled) {
-            sendBtn.click();
-          }
-        }, 500);
-      }
-    `);
-    
-    setApplyStatus('Sent job info extraction request to ChatGPT', false);
-  } catch (err) {
-    console.error('Error extracting job info:', err);
-    setApplyStatus('Failed to extract job info', false);
-  }
-}
-
-// Send current page content to ChatGPT
-async function sendPageToGpt() {
-  if (!applyWebviewElement) {
-    setApplyStatus('No page loaded', false);
-    return;
-  }
-  
-  if (!applyGptWebview) {
-    setApplyStatus('Please load ChatGPT first', false);
-    return;
-  }
-  
-  try {
-    // Get page content
-    const content = await applyWebviewElement.executeJavaScript(`
-      document.body.innerText
-    `);
-    
-    const url = applyWebviewElement.getURL();
-    
-    // Send to ChatGPT
-    await applyGptWebview.executeJavaScript(`
-      const textarea = document.querySelector('[data-id="root"] textarea');
-      if (textarea) {
-        textarea.value = 'Here is content from ${url}:\\n\\n' + ${JSON.stringify(content.substring(0, 8000))};
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    `);
-    
-    setApplyStatus('Sent page content to ChatGPT', false);
-  } catch (err) {
-    console.error('Error sending page to GPT:', err);
-    setApplyStatus('Failed to send page content', false);
-  }
-}
 
 // Auto-fill form with profile data
 async function autoFillForm() {

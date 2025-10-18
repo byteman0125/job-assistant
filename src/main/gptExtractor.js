@@ -11,46 +11,25 @@ class GPTExtractor {
 
   async initialize() {
     console.log('🤖 GPT Extractor: Initializing with Puter.js support');
-    await this.initializePuter();
-    this.isReady = true;
+    try {
+      await this.initializePuter();
+      // Even if Puter.js is disabled, we can mark as ready to prevent errors
+      this.isReady = true;
+    } catch (error) {
+      console.log('⚠️ Puter.js initialization failed, but continuing without AI extraction');
+      this.isReady = true; // Allow scraping to continue without AI
+      this.puterInitialized = false;
+    }
   }
 
   async initializePuter() {
-    try {
-      const mainWindow = getMainWindow();
-      if (!mainWindow) {
-        throw new Error('Main window not available');
-      }
-
-      // Initialize Puter.js SDK
-      await mainWindow.webContents.executeJavaScript(`
-        // Load Puter.js SDK if not already loaded
-        if (typeof puter === 'undefined') {
-          return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://js.puter.com/v2/';
-            script.onload = () => {
-              console.log('✅ Puter.js SDK loaded');
-              resolve(true);
-            };
-            script.onerror = () => {
-              console.error('❌ Failed to load Puter.js SDK');
-              reject(new Error('Failed to load Puter.js SDK'));
-            };
-            document.head.appendChild(script);
-          });
-        } else {
-          console.log('✅ Puter.js SDK already loaded');
-          return true;
-        }
-      `);
-
-      this.puterInitialized = true;
-      console.log('✅ Puter.js initialized successfully');
-    } catch (error) {
-      console.error('❌ Failed to initialize Puter.js:', error.message);
-      throw error;
-    }
+    // Temporarily disable Puter.js initialization since ChatGPT webview was removed
+    // TODO: Implement Puter.js integration via HTTP API or different approach
+    console.log('⚠️ Puter.js initialization disabled - ChatGPT UI was removed');
+    this.puterInitialized = false;
+    
+    // For now, we'll skip AI extraction and use fallback data
+    // This prevents the scraping from failing entirely
   }
   
   
@@ -122,7 +101,8 @@ Answer with ONLY one word: yes or no`;
   }
 
   async extractJobData(pageContent, platform, jobUrl) {
-    if (!this.isReady) {
+    if (!this.isReady || !this.puterInitialized) {
+      console.log(`⚠️ Puter.js not initialized, skipping AI extraction for ${platform} job`);
       return null;
     }
 
@@ -133,7 +113,8 @@ Answer with ONLY one word: yes or no`;
       console.log(`📤 Sending to Puter AI: ${platform} job at ${jobUrl}`);
       
       const mainWindow = getMainWindow();
-      if (!mainWindow || !this.puterInitialized) {
+      if (!mainWindow) {
+        console.log('⚠️ Main window not available');
         return null;
       }
       
@@ -353,7 +334,7 @@ Return ONLY valid JSON:
       const fileExt = path.extname(resumePath).toLowerCase();
       let resumeText = '';
       
-      // For now, we'll send the file path to ChatGPT and ask it to extract info
+      // For now, we'll send the file path to Puter AI and ask it to extract info
       // In a more advanced version, we could extract text from PDF/DOC files first
       
       const prompt = `I have uploaded my resume. Please analyze it and extract the following information in JSON format:
@@ -403,7 +384,7 @@ Return ONLY valid JSON:
 Please provide ONLY the JSON object, no additional text. File path: ${resumePath}`;
 
       // Note: This is a placeholder. In production, you'd want to either:
-      // 1. Use ChatGPT's file upload API
+      // 1. Use Puter AI's file upload API
       // 2. Extract text from the resume file first and send that text
       // 3. Use a specialized resume parsing service
       
@@ -427,7 +408,7 @@ Please provide ONLY the JSON object, no additional text. File path: ${resumePath
         summary: '',
         work_experience: [],
         education: [],
-        _note: 'Resume parsing requires manual implementation with file reading and ChatGPT API integration'
+        _note: 'Resume parsing requires manual implementation with file reading and Puter AI integration'
       };
       
     } catch (error) {
