@@ -1806,9 +1806,9 @@ class JobrightScraper extends BaseScraper {
           continue; // Skip to next job
         }
         
-        // Step 4: Send to Puter AI for analysis
-        this.updateStatus(`[4/5] 🤖 Analyzing with Puter AI...`, `Processed: ${totalProcessedCount}`);
-        console.log(`${this.platform}: 📤 Sending to Puter AI for COMBINED analysis...`);
+        // Step 4: Send to Ollama AI for analysis
+        this.updateStatus(`[4/5] 🤖 Analyzing with Ollama AI...`, `Processed: ${totalProcessedCount}`);
+        console.log(`${this.platform}: 📤 Sending to Ollama AI for COMBINED analysis...`);
         
         let gptResult = null;
         
@@ -1821,9 +1821,9 @@ class JobrightScraper extends BaseScraper {
             );
             
             if (gptResult) {
-              console.log(`${this.platform}: ✅ Puter AI analysis complete`);
+              console.log(`${this.platform}: ✅ Ollama AI analysis complete`);
             } else {
-              console.log(`${this.platform}: ⚠️ Puter AI extraction returned null - Using fallback data`);
+              console.log(`${this.platform}: ⚠️ Ollama AI extraction returned null - Using fallback data`);
             }
             
             // Check if scraper was stopped during AI analysis
@@ -1849,11 +1849,11 @@ class JobrightScraper extends BaseScraper {
               break;
             }
           } catch (gptError) {
-            console.log(`${this.platform}: ⚠️ Puter AI error: ${gptError.message}`);
+            console.log(`${this.platform}: ⚠️ Ollama AI error: ${gptError.message}`);
           }
         }
         
-        // Fallback if Puter AI fails
+        // Fallback if Ollama AI fails
         if (!gptResult) {
           console.log(`${this.platform}: Using basic extraction`);
           gptResult = {
@@ -1873,7 +1873,7 @@ class JobrightScraper extends BaseScraper {
 
         // CHECK: Is this a verification page?
         if (gptResult.isVerificationPage) {
-          console.log(`${this.platform}: ❌ Puter AI confirmed: Verification page - SKIPPING`);
+          console.log(`${this.platform}: ❌ Ollama AI confirmed: Verification page - SKIPPING`);
           
           // Close tab and go back
           try {
@@ -1896,7 +1896,7 @@ class JobrightScraper extends BaseScraper {
         
         // CHECK: Is this an EXPIRED or NO LONGER AVAILABLE page?
         if (gptResult.isExpired) {
-          console.log(`${this.platform}: ⏰ Puter AI confirmed: Job posting is EXPIRED or NO LONGER AVAILABLE - SKIPPING`);
+          console.log(`${this.platform}: ⏰ Ollama AI confirmed: Job posting is EXPIRED or NO LONGER AVAILABLE - SKIPPING`);
           
           // Send skip notification
           this.sendSkipNotification(jobCard, 'Expired/No Longer Available');
@@ -2070,7 +2070,7 @@ class JobrightScraper extends BaseScraper {
             // Step 5: Save job
             this.updateStatus(`[5/5] 💾 Saving job to database...`, `Processed: ${totalProcessedCount}`);
             
-            // Use Puter AI-extracted company/title if available, otherwise fall back to job card
+            // Use Ollama AI-extracted company/title if available, otherwise fall back to job card
             const finalCompany = (gptResult.company && gptResult.company !== 'Unknown') 
               ? gptResult.company 
               : jobCard.company;
@@ -2080,17 +2080,17 @@ class JobrightScraper extends BaseScraper {
             
             // Log which source we're using
             if (gptResult.company && gptResult.company !== 'Unknown') {
-              console.log(`${this.platform}: 📝 Using Puter AI-extracted company: "${finalCompany}"`);
+              console.log(`${this.platform}: 📝 Using Ollama AI-extracted company: "${finalCompany}"`);
             } else {
               console.log(`${this.platform}: 📝 Using job card company: "${finalCompany}"`);
             }
             if (gptResult.title && gptResult.title !== 'Unknown') {
-              console.log(`${this.platform}: 📝 Using Puter AI-extracted title: "${finalTitle}"`);
+              console.log(`${this.platform}: 📝 Using Ollama AI-extracted title: "${finalTitle}"`);
             } else {
               console.log(`${this.platform}: 📝 Using job card title: "${finalTitle}"`);
             }
             
-            // Save job - Use Puter AI data when available, fall back to card data
+            // Save job - Use Ollama AI data when available, fall back to card data
             const saved = this.saveJob({
               company: finalCompany,
               title: finalTitle,
@@ -2265,7 +2265,7 @@ class JobrightScraper extends BaseScraper {
     return newJobsCount;
   }
 
-  // Send job content to Puter AI and extract detailed info (legacy method)
+  // Send job content to Ollama AI and extract detailed info (legacy method)
   // Note: This method appears to be unused - the main extraction now uses gptExtractor.extractJobData()
   async sendToGPTAndExtract(jobContent, company, title) {
     try {
@@ -2278,7 +2278,7 @@ class JobrightScraper extends BaseScraper {
         return null;
       }
 
-      console.log(`${this.platform}: 🤖 Preparing Puter AI extraction...`);
+      console.log(`${this.platform}: 🤖 Preparing Ollama AI extraction...`);
       console.log(`${this.platform}: Job URL: ${jobContent.url}`);
       console.log(`${this.platform}: Page title: ${jobContent.title}`);
 
