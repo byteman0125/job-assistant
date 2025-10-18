@@ -320,34 +320,61 @@ Respond with ONLY: "yes" if this is a verification/bot check page, or "no" if it
       return null;
     }
 
-    try {
-      // Wait for rate limit before sending to Ollama
-      await this.waitForRateLimit();
-      console.log(`📤 Sending to Ollama AI: ${platform} job at ${jobUrl}`);
-      
-      const prompt = this.createJobAnalysisPrompt(pageContent, platform, jobUrl);
-      console.log(`🤖 Prompt created with ${pageContent.bodyText?.length || 0} characters of content`);
+    // Retry logic for more robust AI analysis
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        // Wait for rate limit before sending to Ollama
+        await this.waitForRateLimit();
+        
+        if (attempt > 1) {
+          console.log(`🔄 Retry attempt ${attempt}/${this.maxRetries} for ${platform} job`);
+        } else {
+          console.log(`📤 Sending to Ollama AI: ${platform} job at ${jobUrl}`);
+        }
+        
+        const prompt = this.createJobAnalysisPrompt(pageContent, platform, jobUrl);
+        console.log(`🤖 Prompt created with ${pageContent.bodyText?.length || 0} characters of content`);
 
-      console.log(`🤖 Sending to Ollama AI silently...`);
-      
-      // Send prompt to Ollama AI
-      const response = await this.sendToOllama(prompt);
-      
-      if (!response) {
-        console.log(`⚠️ Failed to get response from Ollama AI`);
-        return null;
+        console.log(`🤖 Sending to Ollama AI...`);
+        
+        // Send prompt to Ollama AI
+        const response = await this.sendToOllama(prompt);
+        
+        if (!response) {
+          console.log(`⚠️ Failed to get response from Ollama AI (attempt ${attempt})`);
+          if (attempt < this.maxRetries) continue;
+          return null;
+        }
+        
+        console.log(`✅ Got response from Ollama AI!`);
+        
+        // Parse response
+        const parsed = this.parseResponse(response);
+        
+        if (parsed) {
+          console.log(`🎯 AI analysis successful: Company="${parsed.company}", Title="${parsed.title}"`);
+          return parsed;
+        } else {
+          console.log(`⚠️ Failed to parse AI response (attempt ${attempt})`);
+          if (attempt < this.maxRetries) {
+            console.log(`🔄 Retrying in 2 seconds...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+        }
+        
+      } catch (error) {
+        console.error(`❌ Ollama AI error (attempt ${attempt}):`, error.message);
+        if (attempt < this.maxRetries) {
+          console.log(`🔄 Retrying in 3 seconds...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          continue;
+        }
       }
-      
-      console.log(`✅ Got response from Ollama AI!`);
-      
-      // Parse response
-      const parsed = this.parseResponse(response);
-      return parsed;
-      
-    } catch (error) {
-      console.error('❌ Ollama AI error:', error.message);
-      return null;
     }
+    
+    console.log(`❌ All ${this.maxRetries} attempts failed for AI analysis`);
+    return null;
   }
 
   // Send prompt to Ollama AI using local API
@@ -398,30 +425,48 @@ Respond with ONLY: "yes" if this is a verification/bot check page, or "no" if it
 
   // Create job analysis prompt
   createJobAnalysisPrompt(pageContent, platform, jobUrl) {
+    // Sanitize content to prevent prompt injection
+    const safeContent = (pageContent.bodyText || 'No content available')
+      .substring(0, 4000)
+      .replace(/```/g, '')
+      .replace(/\{|\}/g, '');
+    
+    const safeTitle = (pageContent.title || 'Unknown')
+      .substring(0, 200)
+      .replace(/```/g, '')
+      .replace(/\{|\}/g, '');
+
     return `You are an AI assistant that extracts job information from web pages. Analyze this job posting and extract the following information in JSON format.
 
 Job URL: ${jobUrl}
 Platform: ${platform}
-Page Title: ${pageContent.title || 'Unknown'}
+Page Title: ${safeTitle}
 
 Page Content:
-${pageContent.bodyText?.substring(0, 4000) || 'No content available'}
+${safeContent}
 
-Extract and return ONLY a valid JSON object with these exact fields:
+Instructions:
+1. Check if this is a verification/protection page (Cloudflare, "access denied", etc.) - if so, set "is_verification_page": true
+2. Check if the job posting is expired or no longer available - if so, set "is_expired": true
+3. Extract the following information and return ONLY a valid JSON object with these exact fields:
+
 {
   "company": "Company name from the page",
-  "title": "Job title from the page",
+  "title": "Job title from the page", 
   "salary": "Salary information if visible, otherwise null",
-  "tech_stack": "Array of technologies mentioned, or empty array",
-  "work_type": "remote/hybrid/onsite based on content",
-  "is_startup": "yes/no - determine if this appears to be a startup company",
+  "tech_stack": ["array", "of", "technologies", "mentioned"],
+  "work_type": "remote/hybrid/onsite based on content analysis",
+  "is_startup": true/false,
   "location": "Job location or 'Remote' if remote position",
   "job_type": "full-time/part-time/contract based on content",
   "industry": "Industry/sector if mentioned, otherwise 'Technology'",
   "details": "Brief summary of job description (max 200 chars)",
   "is_expired": false,
+  "is_verification_page": false,
   "is_software_job": true
-}`;
+}
+
+Return ONLY the JSON object, no other text.`;
   }
 
   // Parse Ollama response
@@ -438,6 +483,15 @@ Extract and return ONLY a valid JSON object with these exact fields:
         throw new Error('Missing required fields: company or title');
       }
       
+      // Handle tech_stack properly - could be array, string, or comma-separated string
+      let techStack = [];
+      if (Array.isArray(data.tech_stack)) {
+        techStack = data.tech_stack;
+      } else if (typeof data.tech_stack === 'string' && data.tech_stack.trim()) {
+        // Handle comma-separated string or single string
+        techStack = data.tech_stack.split(',').map(tech => tech.trim()).filter(tech => tech);
+      }
+      
       // Check work_type for remote keywords
       const workType = data.work_type?.toLowerCase() || '';
       const location = data.location?.toLowerCase() || '';
@@ -450,22 +504,26 @@ Extract and return ONLY a valid JSON object with these exact fields:
                                     !location.includes('hybrid') && 
                                     !location.includes('onsite');
       
+      // Clean and validate company/title
+      const cleanCompany = (data.company || 'Unknown').trim();
+      const cleanTitle = (data.title || 'Unknown').trim();
+      
       return {
         isVerificationPage: data.is_verification_page === true || data.is_verification_page === 'true',
         isExpired: data.is_expired === true || data.is_expired === 'true',
         isSoftwareJob: data.is_software_job === true || data.is_software_job === 'true',
-        company: data.company || 'Unknown',
-        title: data.title || 'Unknown',
-        salary: data.salary,
-        techStack: Array.isArray(data.tech_stack) ? data.tech_stack : [],
-        location: data.location,
+        company: cleanCompany,
+        title: cleanTitle,
+        salary: data.salary || null,
+        techStack: techStack,
+        location: data.location || 'Unknown',
         isRemote: isRemoteFromWorkType || isRemoteFromLocation,
         isHybrid: workType.includes('hybrid') || location.includes('hybrid'),
         isOnsite: workType.includes('onsite') || location.includes('onsite'),
-        isStartup: data.is_startup === 'yes' || data.is_startup === true,
+        isStartup: data.is_startup === true || data.is_startup === 'yes',
         jobType: data.job_type || 'Other',
-        industry: data.industry || 'Other',
-        details: data.details
+        industry: data.industry || 'Technology',
+        details: data.details || null
       };
     } catch (err) {
       console.log(`⚠️ Parse error: ${err.message}`);
