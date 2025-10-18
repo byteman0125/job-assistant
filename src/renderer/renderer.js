@@ -514,6 +514,11 @@ function setupTabs() {
         if (pane.id === `${tabName}-tab`) {
           console.log(`✅ Showing tab pane: ${pane.id}`);
           pane.classList.add('active');
+          
+          // Initialize specific tabs when they are shown
+          if (tabName === 'chat') {
+            initChatTab();
+          }
         } else {
           pane.classList.remove('active');
         }
@@ -4083,14 +4088,16 @@ document.querySelector('[data-tab="apply"]').addEventListener('click', async (e)
   }
 });
 
-// Chat Tab Event Listener - Initialize when chat tab is clicked
-document.querySelector('[data-tab="chat"]').addEventListener('click', () => {
-  initChatTab();
-});
+// Chat initialization is now handled in the main tab switching logic above
 
 // Chat functionality
 function initChatTab() {
-  if (document.getElementById('chat-tab').getAttribute('data-initialized')) return;
+  console.log('initChatTab called');
+  if (document.getElementById('chat-tab').getAttribute('data-initialized')) {
+    console.log('Chat tab already initialized, skipping');
+    return;
+  }
+  console.log('Initializing chat tab...');
   
   const chatInput = document.getElementById('chatInput');
   const chatSendBtn = document.getElementById('chatSendBtn');
@@ -4200,7 +4207,9 @@ function initChatTab() {
   
   // Send message on Enter (but allow Shift+Enter for new lines)
   chatInput.addEventListener('keydown', function(e) {
+    console.log('Key pressed:', e.key, 'Shift:', e.shiftKey);
     if (e.key === 'Enter' && !e.shiftKey) {
+      console.log('Enter key detected, sending message');
       e.preventDefault();
       sendChatMessage();
     }
@@ -4220,5 +4229,6 @@ function initChatTab() {
   
   // Mark as initialized
   document.getElementById('chat-tab').setAttribute('data-initialized', 'true');
+  console.log('Chat tab initialization completed successfully');
 }
 
