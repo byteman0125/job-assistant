@@ -1,47 +1,58 @@
-// ChatGPT Data Extractor - Uses ChatGPT with CORRECT ProseMirror handling
+// GPT Data Extractor - Uses Puter.js with gpt-5-nano model
 const { getMainWindow } = require('./windowManager');
 
 class GPTExtractor {
   constructor() {
     this.isReady = false;
     this.lastRequestTime = 0;
-    this.minDelayBetweenRequests = 5000; // 5 seconds between ChatGPT requests (more human-like)
-    this.verificationCheckInterval = null;
-    this.lastRefreshTime = 0;
-    this.refreshCooldown = 30000; // 30 seconds cooldown between refreshes
+    this.minDelayBetweenRequests = 5000; // 5 seconds between Puter requests (more human-like)
+    this.puterInitialized = false;
   }
 
   async initialize() {
-    console.log('🤖 GPT Extractor: Initializing with ProseMirror support');
+    console.log('🤖 GPT Extractor: Initializing with Puter.js support');
+    await this.initializePuter();
     this.isReady = true;
-    
-    // Start periodic verification check
-    this.startVerificationMonitoring();
   }
-  
-  startVerificationMonitoring() {
-    // Check for verification every 15 seconds (more frequent to catch readiness issues)
-    this.verificationCheckInterval = setInterval(async () => {
-      try {
-        const mainWindow = getMainWindow();
-        if (mainWindow && this.isReady) {
-          const needsVerification = await this.checkChatGPTVerification(mainWindow);
-          if (needsVerification) {
-            console.log('🔄 ChatGPT issue detected - Auto-refreshed');
-          }
-        }
-      } catch (error) {
-        // Ignore errors in monitoring
+
+  async initializePuter() {
+    try {
+      const mainWindow = getMainWindow();
+      if (!mainWindow) {
+        throw new Error('Main window not available');
       }
-    }, 15000); // Check every 15 seconds
-  }
-  
-  stopVerificationMonitoring() {
-    if (this.verificationCheckInterval) {
-      clearInterval(this.verificationCheckInterval);
-      this.verificationCheckInterval = null;
+
+      // Initialize Puter.js SDK
+      await mainWindow.webContents.executeJavaScript(`
+        // Load Puter.js SDK if not already loaded
+        if (typeof puter === 'undefined') {
+          return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://js.puter.com/v2/';
+            script.onload = () => {
+              console.log('✅ Puter.js SDK loaded');
+              resolve(true);
+            };
+            script.onerror = () => {
+              console.error('❌ Failed to load Puter.js SDK');
+              reject(new Error('Failed to load Puter.js SDK'));
+            };
+            document.head.appendChild(script);
+          });
+        } else {
+          console.log('✅ Puter.js SDK already loaded');
+          return true;
+        }
+      `);
+
+      this.puterInitialized = true;
+      console.log('✅ Puter.js initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize Puter.js:', error.message);
+      throw error;
     }
   }
+  
   
   async waitForRateLimit() {
     const now = Date.now();
@@ -49,14 +60,14 @@ class GPTExtractor {
     const remainingWait = this.minDelayBetweenRequests - timeSinceLastRequest;
     
     if (remainingWait > 0) {
-      console.log(`⏱️ Rate limit: Waiting ${Math.round(remainingWait/1000)}s before next ChatGPT request...`);
+      console.log(`⏱️ Rate limit: Waiting ${Math.round(remainingWait/1000)}s before next Puter request...`);
       await new Promise(r => setTimeout(r, remainingWait));
     }
     
     this.lastRequestTime = Date.now();
   }
 
-  // Ask ChatGPT if page is a verification/bot check page
+  // Ask Puter AI if page is a verification/bot check page
   async isVerificationPage(pageContent, mainWindow) {
     try {
       // Quick check: If content is too small, it's likely Cloudflare/verification
@@ -64,15 +75,15 @@ class GPTExtractor {
       
       if (contentLength < 400) {
         console.log(`⚠️ Content too small (${contentLength} chars) - likely verification page`);
-        return true;  // Skip without asking ChatGPT
+        return true;  // Skip without asking Puter
       }
       
-      // Wait for rate limit before asking ChatGPT
+      // Wait for rate limit before asking Puter
       await this.waitForRateLimit();
       
-      console.log(`🤔 Asking ChatGPT: Is this a verification page? (${contentLength} chars)`);
+      console.log(`🤔 Asking Puter AI: Is this a verification page? (${contentLength} chars)`);
       
-      if (!mainWindow) return false;
+      if (!mainWindow || !this.puterInitialized) return false;
       
       const prompt = `Look at this page content and answer with ONLY "yes" or "no":
 
@@ -85,26 +96,17 @@ Question: Is this a human verification page, Cloudflare challenge ("Just a momen
 
 Answer with ONLY one word: yes or no`;
 
-      console.log('📤 Sending to ChatGPT...');
+      console.log('📤 Sending to Puter AI...');
       console.log(`📝 Prompt preview: Title="${pageContent.title}", Content starts with: "${pageContent.bodyText?.substring(0, 100)}..."`);
       
-      const sent = await this.sendToChatGPT(mainWindow, prompt);
-      if (!sent) {
-        console.log('⚠️ Failed to send, assuming not verification');
-        return false;
-      }
-      
-      console.log('⏳ Waiting for ChatGPT response (30s max)...');
-      
-      // Wait for response (30s max for simple yes/no)
-      const response = await this.waitForResponse(mainWindow, 30000);
+      const response = await this.sendToPuter(mainWindow, prompt);
       
       if (!response) {
-        console.log('⚠️ No response from ChatGPT, assuming not verification');
+        console.log('⚠️ No response from Puter AI, assuming not verification');
         return false;
       }
       
-      console.log(`📥 ChatGPT full response: "${response}"`);
+      console.log(`📥 Puter AI full response: "${response}"`);
       
       const answer = response.toLowerCase().trim();
       const isVerification = answer.includes('yes');
@@ -114,7 +116,7 @@ Answer with ONLY one word: yes or no`;
       return isVerification;
       
     } catch (error) {
-      console.error('❌ Error asking ChatGPT:', error.message);
+      console.error('❌ Error asking Puter AI:', error.message);
       return false;
     }
   }
@@ -125,13 +127,13 @@ Answer with ONLY one word: yes or no`;
     }
 
     try {
-      // Wait for rate limit before sending to ChatGPT
+      // Wait for rate limit before sending to Puter
       await this.waitForRateLimit();
       
-      console.log(`📤 Sending to ChatGPT: ${platform} job at ${jobUrl}`);
+      console.log(`📤 Sending to Puter AI: ${platform} job at ${jobUrl}`);
       
       const mainWindow = getMainWindow();
-      if (!mainWindow) {
+      if (!mainWindow || !this.puterInitialized) {
         return null;
       }
       
@@ -223,35 +225,17 @@ Return ONLY valid JSON:
 
       console.log(`🤖 Prompt created with ${pageContent.bodyText?.length || 0} characters of content`);
 
-      console.log(`🤖 Sending to ChatGPT silently...`);
+      console.log(`🤖 Sending to Puter AI silently...`);
       
-      // Check if ChatGPT is showing verification before sending
-      const needsVerification = await this.checkChatGPTVerification(mainWindow);
-      if (needsVerification) {
-        console.log(`🚫 ChatGPT requires human verification! Pausing...`);
-        mainWindow.webContents.send('chatgpt-verification-needed');
-        return null;
-      }
-      
-      // Start new chat + send prompt
-      const sent = await this.sendToChatGPT(mainWindow, prompt);
-      
-      if (!sent) {
-        console.log(`⚠️ Failed to send`);
-        return null;
-      }
-      
-      console.log(`✅ Sent! Waiting for response (20s)...`);
-      
-      // Wait for response
-      const response = await this.waitForResponse(mainWindow, 20000);
+      // Send prompt to Puter AI
+      const response = await this.sendToPuter(mainWindow, prompt);
       
       if (!response) {
-        console.log(`⏱️ Timeout`);
+        console.log(`⚠️ Failed to get response from Puter AI`);
         return null;
       }
       
-      console.log(`✅ Got response!`);
+      console.log(`✅ Got response from Puter AI!`);
       
       // Parse
       const parsed = this.parseResponse(response);
@@ -263,342 +247,52 @@ Return ONLY valid JSON:
     }
   }
 
-  async checkChatGPTVerification(mainWindow) {
+  // Send prompt to Puter AI using gpt-5-nano model
+  async sendToPuter(mainWindow, prompt) {
     try {
-      const result = await mainWindow.webContents.executeJavaScript(`
-        (function() {
-          const chatgptView = document.getElementById('chatgptView');
-          if (!chatgptView) return { needsVerification: false, isReady: false };
-          
-          return chatgptView.executeJavaScript(\`
-            (function() {
-              const bodyText = document.body.innerText.toLowerCase();
-              const title = document.title.toLowerCase();
-              
-              // Check for verification indicators (ONLY real verification pages)
-              const verificationKeywords = [
-                'verify you are human',
-                'verification required',
-                'captcha',
-                'just a moment',
-                'checking your browser',
-                'security check',
-                'unusual activity',
-                'blocked by your administrator',
-                'access denied',
-                'human verification',
-                'please verify',
-                'verify your identity',
-                'suspicious activity',
-                'suspicious activity alert',
-                'rate limit exceeded',
-                'too many requests'
-              ];
-              
-              // Check for ChatGPT error messages
-              const errorKeywords = [
-                'something went wrong',
-                'error generating',
-                'failed to generate',
-                'please try again',
-                'contact us through our help center',
-                'help.openai.com'
-              ];
-              
-              const hasError = errorKeywords.some(keyword => {
-                return bodyText.includes(keyword);
-              });
-              
-              // ONLY detect verification if it has specific verification keywords
-              const hasVerification = verificationKeywords.some(keyword => {
-                return bodyText.includes(keyword) || title.includes(keyword);
-              });
-              
-              // Check if ChatGPT has a working message input (means it's ready)
-              const hasWorkingInput = document.querySelector('textarea[placeholder*="message"]') || 
-                                     document.querySelector('textarea[data-testid*="input"]') ||
-                                     document.querySelector('div[contenteditable="true"]') ||
-                                     document.querySelector('textarea');
-              
-              // Only consider it verification if:
-              // 1. It has verification keywords AND
-              // 2. It does NOT have a working message input
-              const realVerification = hasVerification && !hasWorkingInput;
-              
-              // Also check for Cloudflare-specific elements
-              const hasCloudflare = document.querySelector('[data-ray]') || 
-                                   document.querySelector('.cf-browser-verification') ||
-                                   document.querySelector('#challenge-form');
-              
-              // Check if ChatGPT is ready (has message input area)
-              const messageInput = document.querySelector('textarea[placeholder*="message"]') || 
-                                   document.querySelector('textarea[placeholder*="Message"]') ||
-                                   document.querySelector('textarea[data-testid*="input"]') ||
-                                   document.querySelector('textarea[id*="prompt"]') ||
-                                   document.querySelector('div[contenteditable="true"]') ||
-                                   document.querySelector('textarea');
-              
-              const isReady = messageInput && messageInput.offsetParent !== null;
-              
-              // Try to dismiss "Suspicious Activity Alert" if present
-              if (bodyText.includes('suspicious activity') || bodyText.includes('rate limit')) {
-                // Look for dismiss/close buttons
-                const allButtons = document.querySelectorAll('button');
-                let dismissBtn = null;
-                
-                for (const btn of allButtons) {
-                  const btnText = btn.textContent?.toLowerCase() || '';
-                  const btnAria = btn.getAttribute('aria-label')?.toLowerCase() || '';
-                  
-                  if (btnAria.includes('close') || btnAria.includes('dismiss') || 
-                      btnText.includes('ok') || btnText.includes('continue') || 
-                      btnText.includes('dismiss') || btnText.includes('close')) {
-                    dismissBtn = btn;
-                    break;
-                  }
-                }
-                
-                if (dismissBtn) {
-                  console.log('🔓 Auto-dismissing suspicious activity alert...');
-                  dismissBtn.click();
-                }
-              }
-              
-              // Handle "Something went wrong" errors by clicking Regenerate or starting new chat
-              if (hasError) {
-                console.log('⚠️ ChatGPT error detected: "Something went wrong"');
-                
-                const allButtons = document.querySelectorAll('button');
-                let actionBtn = null;
-                
-                for (const btn of allButtons) {
-                  const btnText = btn.textContent?.toLowerCase() || '';
-                  const btnAria = btn.getAttribute('aria-label')?.toLowerCase() || '';
-                  
-                  // Look for "Regenerate" button first
-                  if (btnText.includes('regenerate') || btnAria.includes('regenerate')) {
-                    actionBtn = btn;
-                    console.log('🔄 Found "Regenerate" button - clicking...');
-                    break;
-                  }
-                }
-                
-                // If no regenerate button, start a new chat
-                if (!actionBtn) {
-                  const newChatBtn = document.querySelector('a[data-testid="create-new-chat-button"]');
-                  if (newChatBtn) {
-                    actionBtn = newChatBtn;
-                    console.log('🆕 Starting new chat to recover from error...');
-                  }
-                }
-                
-                if (actionBtn) {
-                  actionBtn.click();
-                }
-              }
-              
-              return { 
-                needsVerification: realVerification || hasCloudflare,
-                hasError: hasError,
-                isReady: isReady,
-                hasMessageInput: !!messageInput,
-                bodyPreview: bodyText.substring(0, 200)
-              };
-            })()
-          \`);
-        })()
-      `);
+      console.log('📤 Sending prompt to Puter AI...');
       
-      // Check cooldown to prevent excessive refreshing
-      const now = Date.now();
-      const timeSinceLastRefresh = now - this.lastRefreshTime;
-      
-      if (result && result.needsVerification && timeSinceLastRefresh > this.refreshCooldown) {
-        console.log(`🚫 ChatGPT verification detected: ${result.bodyPreview}`);
-        
-        // Auto-refresh ChatGPT when verification detected
-        console.log(`🔄 Auto-refreshing ChatGPT to bypass verification...`);
-        mainWindow.webContents.send('refresh-chatgpt');
-        this.lastRefreshTime = now;
-        
-        // Wait a bit for refresh to start
-        await new Promise(r => setTimeout(r, 3000));
-        
-        return true;
-      }
-      
-      if (result && result.hasError && timeSinceLastRefresh > this.refreshCooldown) {
-        console.log(`❌ ChatGPT error detected: "Something went wrong" - Handled in webview`);
-        // Error is already being handled in the webview (Regenerate or New Chat)
-        // Just wait a bit and mark that we've handled it
-        await new Promise(r => setTimeout(r, 2000));
-        return false; // Don't refresh, let the in-page handling work
-      }
-      
-      if (result && !result.hasMessageInput && timeSinceLastRefresh > this.refreshCooldown) {
-        console.log(`⚠️ ChatGPT not ready (no message input found) - Refreshing...`);
-        mainWindow.webContents.send('refresh-chatgpt');
-        this.lastRefreshTime = now;
-        await new Promise(r => setTimeout(r, 3000));
-        return true;
-      }
-      
-      if (timeSinceLastRefresh <= this.refreshCooldown) {
-        console.log(`⏳ Refresh cooldown active (${Math.round((this.refreshCooldown - timeSinceLastRefresh)/1000)}s remaining)`);
-      }
-      
-      return false;
-    } catch (error) {
-      console.log(`⚠️ Error checking ChatGPT verification: ${error.message}`);
-      return false;
-    }
-  }
-  
-  async sendToChatGPT(mainWindow, prompt) {
-    try {
       // Encode prompt as base64 to safely pass through executeJavaScript
       const promptBase64 = Buffer.from(prompt).toString('base64');
       
-      const result = await mainWindow.webContents.executeJavaScript(`
+      const response = await mainWindow.webContents.executeJavaScript(`
         (async function() {
           try {
-            const chatgptView = document.querySelector('webview#chatgptView');
-            if (!chatgptView) return { error: 'No webview' };
+            // Check if Puter.js is available
+            if (typeof puter === 'undefined') {
+              throw new Error('Puter.js SDK not loaded');
+            }
             
             // Decode prompt from base64
             const promptText = atob('${promptBase64}');
             
-            // Store in webview context
-            await chatgptView.executeJavaScript('window.__prompt = atob("${promptBase64}");');
+            // Use Puter AI chat with gpt-5-nano model
+            const response = await puter.ai.chat(promptText, {
+              model: 'gpt-5-nano',
+            });
             
-            const result = await chatgptView.executeJavaScript(\`
-              (async function() {
-                try {
-                  const prompt = window.__prompt;
-                  if (!prompt) return { error: 'No prompt' };
-                  
-                  // 1. Click New chat
-                  await new Promise(r => setTimeout(r, 1000));
-                  const newChat = document.querySelector('a[data-testid="create-new-chat-button"]');
-                  if (newChat) {
-                    newChat.click();
-                    await new Promise(r => setTimeout(r, 1500));
-                  }
-                  
-                  // 2. Find ProseMirror
-                  const input = document.querySelector('#prompt-textarea.ProseMirror');
-                  if (!input) return { error: 'Input not found' };
-                  
-                  // 3. Focus
-                  input.focus();
-                  await new Promise(r => setTimeout(r, 300));
-                  
-                  // 4. Insert as <p>
-                  input.innerHTML = '';
-                  await new Promise(r => setTimeout(r, 100));
-                  
-                  const p = document.createElement('p');
-                  p.textContent = prompt;
-                  input.appendChild(p);
-                  
-                  // 5. Events
-                  input.dispatchEvent(new Event('input', { bubbles: true }));
-                  await new Promise(r => setTimeout(r, 100));
-                  input.dispatchEvent(new Event('change', { bubbles: true }));
-                  
-                  // 6. Wait for button
-                  await new Promise(r => setTimeout(r, 800));
-                  
-                  // 7. Click send
-                  const send = document.querySelector('button[data-testid="send-button"]') ||
-                               document.querySelector('#composer-submit-button');
-                  
-                  if (!send || send.disabled) return { error: 'Button not ready' };
-                  
-                  await new Promise(r => setTimeout(r, 400));
-                  send.click();
-                  
-                  await new Promise(r => setTimeout(r, 1000));
-                  delete window.__prompt;
-                  return { success: true };
-                  
-                } catch (err) {
-                  return { error: err.message };
-                }
-              })();
-            \`);
+            console.log('✅ Puter AI response received');
+            return response;
             
-            return result;
-          } catch (err) {
-            return { error: err.message };
+          } catch (error) {
+            console.error('❌ Puter AI error:', error.message);
+            throw error;
           }
         })();
       `);
       
-      if (result.error) {
-        console.log(`⚠️ ${result.error}`);
-        return false;
+      if (!response) {
+        console.log('⚠️ No response from Puter AI');
+        return null;
       }
       
-      console.log('✅ Sent!');
-      return true;
+      console.log('✅ Got response from Puter AI');
+      return response;
       
     } catch (error) {
-      console.error('❌ Error:', error.message);
-      return false;
+      console.error('❌ Error sending to Puter AI:', error.message);
+      return null;
     }
-  }
-
-  async waitForResponse(mainWindow, timeout) {
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      const timeoutId = setTimeout(() => {
-        clearInterval(checkInterval);
-        resolve(null);
-      }, timeout);
-      
-      let checkCount = 0;
-      const checkInterval = setInterval(async () => {
-        checkCount++;
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        
-        try {
-          const response = await mainWindow.webContents.executeJavaScript(`
-            (async function() {
-              const chatgptView = document.querySelector('webview#chatgptView');
-              if (!chatgptView) return null;
-              
-              const msg = await chatgptView.executeJavaScript(\`
-                (function() {
-                  const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
-                  if (messages.length === 0) return null;
-                  
-                  const lastMsg = messages[messages.length - 1];
-                  const content = lastMsg.innerText || lastMsg.textContent;
-                  
-                  if (content.includes('{') && content.includes('}')) {
-                    return content;
-                  }
-                  
-                  return null;
-                })();
-              \`);
-              
-              return msg;
-            })();
-          `);
-          
-          if (response) {
-            clearTimeout(timeoutId);
-            clearInterval(checkInterval);
-            console.log(`✅ Got response after ${elapsed}s (checked ${checkCount} times)`);
-            resolve(response);
-          }
-        } catch (err) {
-          // Continue
-        }
-      }, 500); // ⚡ Check every 0.5s for fast response detection
-    });
   }
 
   parseResponse(responseText) {
@@ -744,6 +438,7 @@ Please provide ONLY the JSON object, no additional text. File path: ${resumePath
 
   async close() {
     this.isReady = false;
+    this.puterInitialized = false;
   }
 }
 
