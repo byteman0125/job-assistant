@@ -458,6 +458,49 @@ class BaseScraper {
     }
   }
 
+  // Extract job data using GPT/AI from current page
+  async extractWithGPT(jobUrl) {
+    try {
+      if (!this.gptExtractor || !this.page) {
+        console.log(`${this.platform}: GPT extractor or page not available`);
+        return null;
+      }
+
+      console.log(`${this.platform}: 📄 Extracting page content for AI analysis...`);
+      
+      // Get page content
+      const pageContent = await this.page.evaluate(() => {
+        return {
+          title: document.title || '',
+          bodyText: document.body ? document.body.innerText : '',
+          url: window.location.href
+        };
+      });
+
+      if (!pageContent.bodyText || pageContent.bodyText.length < 50) {
+        console.log(`${this.platform}: ⚠️ Page content too short for AI analysis`);
+        return null;
+      }
+
+      console.log(`${this.platform}: 🤖 Sending ${pageContent.bodyText.length} chars to AI extractor...`);
+      
+      // Use the GPT extractor to analyze the job page
+      const extractedData = await this.gptExtractor.extractJobData(pageContent, this.platform, jobUrl);
+      
+      if (extractedData) {
+        console.log(`${this.platform}: ✅ AI extracted job data successfully`);
+        return extractedData;
+      } else {
+        console.log(`${this.platform}: ⚠️ AI extraction failed`);
+        return null;
+      }
+      
+    } catch (error) {
+      console.error(`${this.platform}: Error in extractWithGPT:`, error.message);
+      return null;
+    }
+  }
+
   // Main scrape method - to be implemented by each platform
   async scrape() {
     throw new Error('scrape() method must be implemented by platform scraper');

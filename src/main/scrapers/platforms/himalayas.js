@@ -73,9 +73,21 @@ class HimalayasScraper extends BaseScraper {
             console.log(`${this.platform}: 🤖 Using ChatGPT to extract job data...`);
             gptData = await this.extractWithGPT(finalUrl);
             if (gptData) {
-              company = gptData.company;
-              title = gptData.title;
-              console.log(`${this.platform}: ✅ GPT extracted: ${company} - ${title}`);
+              // Check if AI extracted valid company and title
+              const aiCompanyValid = gptData.company && 
+                                     gptData.company.trim() !== '' && 
+                                     gptData.company.toLowerCase() !== 'unknown';
+              const aiTitleValid = gptData.title && 
+                                   gptData.title.trim() !== '' && 
+                                   gptData.title.toLowerCase() !== 'unknown';
+              
+              if (aiCompanyValid && aiTitleValid) {
+                company = gptData.company;
+                title = gptData.title;
+                console.log(`${this.platform}: ✅ GPT extracted: ${company} - ${title}`);
+              } else {
+                console.log(`${this.platform}: ⚠️ GPT extraction incomplete - will use fallback selectors`);
+              }
               
               // Check if it's a software job
               if (gptData.isSoftwareJob === false) {
@@ -104,11 +116,15 @@ class HimalayasScraper extends BaseScraper {
             }
           }
           
-          // Fallback to selectors if GPT fails
+          // Fallback to selectors if GPT fails or didn't provide valid company/title
           if (!company || !title) {
             console.log(`${this.platform}: Falling back to selector extraction`);
-            company = await this.extractText(actions.companySelector) || 'Unknown Company';
-            title = await this.extractText(actions.titleSelector) || 'Unknown Title';
+            if (!company) {
+              company = await this.extractText(actions.companySelector) || 'Unknown Company';
+            }
+            if (!title) {
+              title = await this.extractText(actions.titleSelector) || 'Unknown Title';
+            }
           }
 
           // Save job (only if it passed the software check)

@@ -1853,9 +1853,9 @@ class JobrightScraper extends BaseScraper {
           }
         }
         
-        // Fallback if Ollama AI fails
+        // Fallback if Ollama AI fails or doesn't provide company/title
         if (!gptResult) {
-          console.log(`${this.platform}: Using basic extraction`);
+          console.log(`${this.platform}: Using basic extraction - no AI result`);
           gptResult = {
             isVerificationPage: false,
             isExpired: false,
@@ -1869,6 +1869,29 @@ class JobrightScraper extends BaseScraper {
             salary: null,
             techStack: null
           };
+        } else {
+          // AI result exists - check if company and title are valid
+          // If AI didn't extract valid company/title, fallback to job card data
+          const aiCompanyValid = gptResult.company && 
+                                 gptResult.company.trim() !== '' && 
+                                 gptResult.company.toLowerCase() !== 'unknown';
+          const aiTitleValid = gptResult.title && 
+                               gptResult.title.trim() !== '' && 
+                               gptResult.title.toLowerCase() !== 'unknown';
+          
+          if (!aiCompanyValid || !aiTitleValid) {
+            console.log(`${this.platform}: AI result incomplete - using job card for missing data`);
+            if (!aiCompanyValid) {
+              gptResult.company = jobCard.company;
+              console.log(`${this.platform}: Using job card company: ${jobCard.company}`);
+            }
+            if (!aiTitleValid) {
+              gptResult.title = jobCard.title;
+              console.log(`${this.platform}: Using job card title: ${jobCard.title}`);
+            }
+          } else {
+            console.log(`${this.platform}: Using AI-extracted company: "${gptResult.company}" and title: "${gptResult.title}"`);
+          }
         }
 
         // CHECK: Is this a verification page?

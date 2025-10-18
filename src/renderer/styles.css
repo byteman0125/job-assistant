@@ -2957,7 +2957,6 @@ td[title]:hover {
   color: #e0e0e0;
   line-height: 1.5;
   word-wrap: break-word;
-  white-space: pre-wrap;
 }
 
 .user-message .message-text {
