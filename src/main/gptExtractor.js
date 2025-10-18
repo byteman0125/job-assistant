@@ -347,12 +347,26 @@ Respond with ONLY: "yes" if this is a verification/bot check page, or "no" if it
         }
         
         console.log(`✅ Got response from Ollama AI!`);
+        console.log(`📄 Raw AI Response: ${response.substring(0, 300)}${response.length > 300 ? '...' : ''}`);
         
         // Parse response
         const parsed = this.parseResponse(response);
         
         if (parsed) {
-          console.log(`🎯 AI analysis successful: Company="${parsed.company}", Title="${parsed.title}"`);
+          console.log(`🎯 AI analysis successful:`);
+          console.log(`   📋 Company: "${parsed.company}"`);
+          console.log(`   📋 Title: "${parsed.title}"`);
+          console.log(`   💰 Salary: ${parsed.salary || 'Not specified'}`);
+          console.log(`   🏠 Location: ${parsed.location || 'Unknown'}`);
+          console.log(`   🖥️ Work Type: ${parsed.isRemote ? 'Remote' : parsed.isHybrid ? 'Hybrid' : parsed.isOnsite ? 'Onsite' : 'Unknown'}`);
+          console.log(`   🚀 Startup: ${parsed.isStartup ? 'Yes' : 'No'}`);
+          console.log(`   💼 Job Type: ${parsed.jobType || 'Unknown'}`);
+          console.log(`   🏭 Industry: ${parsed.industry || 'Unknown'}`);
+          console.log(`   💻 Tech Stack: [${parsed.techStack.join(', ') || 'None detected'}]`);
+          console.log(`   📝 Details: ${parsed.details || 'No details'}`);
+          console.log(`   ✅ Software Job: ${parsed.isSoftwareJob ? 'Yes' : 'No'}`);
+          console.log(`   ⚠️ Expired: ${parsed.isExpired ? 'Yes' : 'No'}`);
+          console.log(`   🔒 Verification Page: ${parsed.isVerificationPage ? 'Yes' : 'No'}`);
           return parsed;
         } else {
           console.log(`⚠️ Failed to parse AI response (attempt ${attempt})`);
@@ -526,8 +540,9 @@ Return ONLY the JSON object, no other text.`;
         details: data.details || null
       };
     } catch (err) {
-      console.log(`⚠️ Parse error: ${err.message}`);
-      console.log(`Raw response: ${responseText.substring(0, 500)}...`);
+      console.log(`❌ Parse error: ${err.message}`);
+      console.log(`📄 Full raw response: ${responseText}`);
+      console.log(`🔍 Response length: ${responseText.length} characters`);
       return null;
     }
   }
