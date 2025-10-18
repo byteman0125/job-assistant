@@ -4083,11 +4083,9 @@ document.querySelector('[data-tab="apply"]').addEventListener('click', async (e)
   }
 });
 
-// Chat Tab Event Listener
-document.addEventListener('click', function(e) {
-  if (e.target.closest('[data-tab="chat"]')) {
-    initChatTab();
-  }
+// Chat Tab Event Listener - Initialize when chat tab is clicked
+document.querySelector('[data-tab="chat"]').addEventListener('click', () => {
+  initChatTab();
 });
 
 // Chat functionality
@@ -4101,34 +4099,24 @@ function initChatTab() {
   const chatStatus = document.getElementById('chatStatus');
   const chatTyping = document.getElementById('chatTyping');
   
-  if (!chatInput || !chatSendBtn) return;
+  console.log('Chat elements found:', { chatInput: !!chatInput, chatSendBtn: !!chatSendBtn });
+  if (!chatInput || !chatSendBtn) {
+    console.log('Missing chat elements, cannot initialize');
+    return;
+  }
   
   // Initialize chat status
   updateChatStatus('Connected', false);
   
-  // Auto-resize textarea
-  chatInput.addEventListener('input', function() {
-    this.style.height = 'auto';
-    this.style.height = this.scrollHeight + 'px';
-  });
-  
-  // Send message on Enter (but allow Shift+Enter for new lines)
-  chatInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  });
-  
-  // Send button click
-  chatSendBtn.addEventListener('click', sendChatMessage);
-  
-  // Clear chat button
-  chatClearBtn.addEventListener('click', clearChat);
-  
+  // Define functions first
   function sendChatMessage() {
+    console.log('sendChatMessage called');
     const message = chatInput.value.trim();
-    if (!message) return;
+    console.log('Message:', message);
+    if (!message) {
+      console.log('No message to send');
+      return;
+    }
     
     // Add user message to chat
     addChatMessage(message, 'user');
@@ -4201,6 +4189,33 @@ function initChatTab() {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+  
+  // Add event listeners after all functions are defined
+  // Auto-resize textarea
+  chatInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = this.scrollHeight + 'px';
+  });
+  
+  // Send message on Enter (but allow Shift+Enter for new lines)
+  chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+  
+  // Send button click
+  chatSendBtn.addEventListener('click', function(e) {
+    console.log('Send button clicked!');
+    e.preventDefault();
+    sendChatMessage();
+  });
+  
+  // Clear chat button
+  if (chatClearBtn) {
+    chatClearBtn.addEventListener('click', clearChat);
   }
   
   // Mark as initialized
