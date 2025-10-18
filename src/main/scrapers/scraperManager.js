@@ -118,6 +118,10 @@ class ScraperManager {
   stop() {
     this.isRunning = false;
     this.scrapers.forEach(scraper => scraper.stop());
+    // Cleanup Ollama if we started it
+    if (this.gptExtractor) {
+      this.gptExtractor.cleanup();
+    }
     // Don't log here - main.js will handle the notification
   }
 

@@ -5,6 +5,8 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "set NODE_OPTIONS=--no-deprecation && electron . --no-cache",
+    "start-auto": "set NODE_OPTIONS=--no-deprecation && electron . --no-cache",
+    "start-manual": "concurrently \"ollama serve\" \"npm run start-auto\" --names \"Ollama,App\" --prefix-colors \"blue,green\"",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",

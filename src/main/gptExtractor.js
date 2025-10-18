@@ -14,6 +14,7 @@ class GPTExtractor {
     this.model = 'llama3.2:3b'; // Medium model (~2GB) - better quality, balanced performance
     this.maxRetries = 3;
     this.gpuAvailable = false;
+    this.ollamaProcess = null; // Reference to Ollama server process
   }
 
   async initialize() {
@@ -34,7 +35,7 @@ class GPTExtractor {
     }
   }
 
-  // Check if Ollama server is running
+  // Check if Ollama server is running, start it if not
   async checkOllamaAvailability() {
     console.log('🔍 Checking Ollama server availability...');
     
@@ -50,14 +51,76 @@ class GPTExtractor {
       } catch (error) {
         console.log(`⏳ Ollama server check attempt ${attempt}/${this.maxRetries}: ${error.message}`);
         
+        if (attempt === 1) {
+          // Try to start Ollama server on first attempt
+          console.log('🚀 Attempting to start Ollama server...');
+          try {
+            await this.startOllamaServer();
+            console.log('⏳ Waiting 5 seconds for Ollama server to start...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } catch (startError) {
+            console.log(`⚠️ Could not start Ollama server: ${startError.message}`);
+          }
+        }
+        
         if (attempt === this.maxRetries) {
-          throw new Error(`Ollama server not available after ${this.maxRetries} attempts. Please start Ollama server.`);
+          throw new Error(`Ollama server not available after ${this.maxRetries} attempts. Please ensure Ollama is installed and start it manually: ollama serve`);
         }
         
         // Wait before retry
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
+  }
+
+  // Start Ollama server automatically
+  async startOllamaServer() {
+    return new Promise((resolve, reject) => {
+      console.log('🔧 Starting Ollama server in background...');
+      
+      const ollamaProcess = spawn('ollama', ['serve'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true // Allow server to continue running after this process
+      });
+      
+      // Store reference to kill later if needed
+      this.ollamaProcess = ollamaProcess;
+      
+      let started = false;
+      
+      ollamaProcess.stdout.on('data', (data) => {
+        const message = data.toString();
+        if (!started && (message.includes('listening') || message.includes('server'))) {
+          console.log('✅ Ollama server started successfully');
+          started = true;
+          resolve();
+        }
+      });
+      
+      ollamaProcess.stderr.on('data', (data) => {
+        const message = data.toString();
+        console.log(`🔧 Ollama: ${message.trim()}`);
+      });
+      
+      ollamaProcess.on('error', (error) => {
+        if (error.code === 'ENOENT') {
+          reject(new Error('Ollama command not found. Please install Ollama first: https://ollama.ai'));
+        } else {
+          reject(error);
+        }
+      });
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (!started) {
+          console.log('⏰ Ollama server starting... (may take a moment)');
+          resolve(); // Don't reject, let the retry mechanism handle it
+        }
+      }, 10000);
+      
+      // Detach the process so it can run independently
+      ollamaProcess.unref();
+    });
   }
 
   // Ensure the model is installed
@@ -412,6 +475,18 @@ Extract and return ONLY a valid JSON object with these exact fields:
       education: 'Bachelor\'s Degree',
       _note: 'Resume parsing requires additional implementation'
     };
+  }
+
+  // Cleanup method to handle app shutdown
+  cleanup() {
+    if (this.ollamaProcess && !this.ollamaProcess.killed) {
+      console.log('🧹 Cleaning up Ollama server process...');
+      try {
+        this.ollamaProcess.kill();
+      } catch (error) {
+        console.log('⚠️ Could not clean up Ollama process:', error.message);
+      }
+    }
   }
 }
 
