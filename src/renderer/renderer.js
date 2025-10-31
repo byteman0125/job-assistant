@@ -106,8 +106,10 @@ function updateCookieSetLabels() {
   const p = getCurrentCookieSetPlatform();
   const labelEl = document.getElementById('csPlatformLabel');
   const subEl = document.getElementById('csPlatformLabelSub');
+  const l3 = document.getElementById('csPlatformLabel3');
   if (labelEl) labelEl.textContent = p;
   if (subEl) subEl.textContent = p;
+  if (l3) l3.textContent = p;
 }
 
 function renderJRCookieSets(sets) {
