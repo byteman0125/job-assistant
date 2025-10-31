@@ -88,6 +88,100 @@ let currentSettings = {
 
 let allJobs = [];
 
+// Jobright multi-cookie UI elements
+const jrCookieLabel = document.getElementById('jrCookieLabel');
+const jrCookieJson = document.getElementById('jrCookieJson');
+const addJRCookieSetBtn = document.getElementById('addJRCookieSetBtn');
+const listJRCookieSetsBtn = document.getElementById('listJRCookieSetsBtn');
+const rotateJRCookieSetBtn = document.getElementById('rotateJRCookieSetBtn');
+const jrCookieSetsStatus = document.getElementById('jrCookieSetsStatus');
+const jrCookieSetsList = document.getElementById('jrCookieSetsList');
+
+function renderJRCookieSets(sets) {
+  if (!jrCookieSetsList) return;
+  if (!Array.isArray(sets) || sets.length === 0) {
+    jrCookieSetsList.innerHTML = '<div class="empty-list">No Jobright cookie sets saved yet.</div>';
+    return;
+  }
+  jrCookieSetsList.innerHTML = sets.map(s => {
+    const activeBadge = s.is_active ? '<span class="badge badge-success" style="margin-left:8px;">Active</span>' : '';
+    return `
+      <div class="list-item">
+        <div class="list-item-main">
+          <div>
+            <strong>${s.label || 'Untitled'}</strong>${activeBadge}
+          </div>
+          <div class="list-item-meta">Usage: ${s.usage_count} • Last used: ${s.last_used ? new Date(s.last_used * 1000).toLocaleString() : 'Never'}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function refreshJRCookieSets() {
+  try {
+    const res = await ipcRenderer.invoke('list-cookie-sets', 'Jobright');
+    if (res && res.success) {
+      renderJRCookieSets(res.data);
+      showMessage(jrCookieSetsStatus, `Loaded ${res.data.length} cookie set(s).`, 'success');
+    } else {
+      showMessage(jrCookieSetsStatus, res?.error || 'Failed to load cookie sets', 'error');
+    }
+  } catch (e) {
+    showMessage(jrCookieSetsStatus, e.message, 'error');
+  }
+}
+
+async function addJRCookieSet() {
+  try {
+    const label = (jrCookieLabel?.value || '').trim();
+    let cookies = [];
+    try {
+      cookies = JSON.parse(jrCookieJson.value || '[]');
+    } catch (e) {
+      throw new Error('Invalid JSON');
+    }
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      throw new Error('Provide a non-empty cookies array');
+    }
+    const res = await ipcRenderer.invoke('save-cookie-set', 'Jobright', label, cookies);
+    if (res && res.success) {
+      showMessage(jrCookieSetsStatus, 'Cookie set saved.', 'success');
+      jrCookieJson.value = '';
+      refreshJRCookieSets();
+    } else {
+      showMessage(jrCookieSetsStatus, res?.error || 'Failed to save cookie set', 'error');
+    }
+  } catch (e) {
+    showMessage(jrCookieSetsStatus, e.message, 'error');
+  }
+}
+
+async function rotateJRCookieSet() {
+  try {
+    const res = await ipcRenderer.invoke('rotate-cookie-set', 'Jobright');
+    if (res && res.success) {
+      showMessage(jrCookieSetsStatus, `Rotated active set (id: ${res.activeId || 'unknown'}).`, 'success');
+      refreshJRCookieSets();
+    } else {
+      showMessage(jrCookieSetsStatus, res?.error || 'Failed to rotate', 'error');
+    }
+  } catch (e) {
+    showMessage(jrCookieSetsStatus, e.message, 'error');
+  }
+}
+
+if (addJRCookieSetBtn) addJRCookieSetBtn.addEventListener('click', addJRCookieSet);
+if (listJRCookieSetsBtn) listJRCookieSetsBtn.addEventListener('click', refreshJRCookieSets);
+if (rotateJRCookieSetBtn) rotateJRCookieSetBtn.addEventListener('click', rotateJRCookieSet);
+
+// Auto-refresh list when opening Cookies tab
+const cookiesTabBtn = document.querySelector('.tab-btn-vertical[data-tab="cookies"]');
+if (cookiesTabBtn) {
+  cookiesTabBtn.addEventListener('click', () => {
+    setTimeout(refreshJRCookieSets, 200);
+  });
+}
 
 // Listen for job skip notifications
 ipcRenderer.on('job-skipped', (event, data) => {
