@@ -81,7 +81,7 @@ class JobDatabase {
       // Column already exists, ignore
     }
 
-    // Cookies table (encrypted) - single-set per platform (legacy)
+    // Cookies table (encrypted) - legacy single set per platform
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS cookies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,7 +91,7 @@ class JobDatabase {
       )
     `);
 
-    // Cookie Sets table (encrypted) - supports multiple cookie sets per platform
+    // Cookie sets table - multiple cookie sets per platform
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS cookie_sets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,10 +105,7 @@ class JobDatabase {
         updated_at INTEGER DEFAULT (strftime('%s', 'now'))
       )
     `);
-    // Helpful index for rotations
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_cookie_sets_platform ON cookie_sets(platform);
-    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_cookie_sets_platform ON cookie_sets(platform);`);
 
     // Actions table (scraper configurations)
     this.db.exec(`
@@ -389,20 +386,19 @@ class JobDatabase {
     return true;
   }
 
-  // Cookie Sets (multiple per platform)
+  // Cookie sets operations (multiple per platform)
   saveCookieSet(platform, label, cookies) {
     const cookiesJson = JSON.stringify(cookies);
     const encrypted = this.encrypt(cookiesJson);
     const now = Math.floor(Date.now() / 1000);
-    const existingCount = this.db.prepare('SELECT COUNT(1) as cnt FROM cookie_sets WHERE platform = ?').get(platform).cnt;
-    const isActive = existingCount === 0 ? 1 : 0; // first set becomes active by default
-
+    const existingCount = this.db.prepare('SELECT COUNT(1) AS cnt FROM cookie_sets WHERE platform = ?').get(platform).cnt;
+    const isActive = existingCount === 0 ? 1 : 0;
     const stmt = this.db.prepare(`
       INSERT INTO cookie_sets (platform, label, cookies_encrypted, is_active, usage_count, last_used, created_at, updated_at)
       VALUES (?, ?, ?, ?, 0, 0, ?, ?)
     `);
-    const result = stmt.run(platform, label || null, encrypted, isActive, now, now);
-    return result.lastInsertRowid;
+    const res = stmt.run(platform, label || null, encrypted, isActive, now, now);
+    return res.lastInsertRowid;
   }
 
   getCookieSets(platform) {
@@ -424,10 +420,7 @@ class JobDatabase {
     if (!row) return null;
     try {
       const decrypted = this.decrypt(row.cookies_encrypted);
-      return {
-        id: row.id,
-        cookies: JSON.parse(decrypted)
-      };
+      return { id: row.id, cookies: JSON.parse(decrypted) };
     } catch (e) {
       console.error('Error decrypting active cookie set:', e);
       return null;
@@ -435,7 +428,6 @@ class JobDatabase {
   }
 
   rotateCookieSet(platform) {
-    // Pick the least recently used cookie set as next active
     const next = this.db.prepare('SELECT id FROM cookie_sets WHERE platform = ? ORDER BY last_used ASC, id ASC LIMIT 1').get(platform);
     if (!next) return null;
     const now = Math.floor(Date.now() / 1000);
@@ -449,8 +441,7 @@ class JobDatabase {
 
   markCookieSetUsed(id) {
     const now = Math.floor(Date.now() / 1000);
-    this.db.prepare('UPDATE cookie_sets SET usage_count = usage_count + 1, last_used = ?, updated_at = ? WHERE id = ?')
-      .run(now, now, id);
+    this.db.prepare('UPDATE cookie_sets SET usage_count = usage_count + 1, last_used = ?, updated_at = ? WHERE id = ?').run(now, now, id);
   }
 
   getCookies(platform) {
