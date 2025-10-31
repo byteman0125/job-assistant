@@ -3147,3 +3147,104 @@ td[title]:hover {
   background: #555;
 }
 
+/* Jobright Cookie Sets Cute Cards */
+.jr-sets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.jr-card {
+  background: linear-gradient(135deg, #252525 0%, #2e2e2e 100%);
+  border: 1px solid rgba(76, 175, 80, 0.2);
+  border-radius: 12px;
+  padding: 14px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+.jr-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(76, 175, 80, 0.15);
+  border-color: rgba(76, 175, 80, 0.4);
+}
+
+.jr-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.jr-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jr-card-title .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #777;
+}
+
+.jr-card.active .jr-card-title .dot {
+  background: #4CAF50;
+  box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.15);
+}
+
+.jr-badge {
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: white;
+  background: #777;
+}
+
+.jr-badge.active {
+  background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+}
+
+.jr-card-meta {
+  display: flex;
+  gap: 10px;
+  color: #999;
+  font-size: 11px;
+}
+
+.jr-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.jr-mini-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #3d3d3d;
+  background: #232323;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.jr-mini-btn:hover {
+  border-color: #4CAF50;
+  color: #4CAF50;
+}
+
+.jr-empty {
+  text-align: center;
+  color: #888;
+  padding: 18px;
+  border: 1px dashed #3d3d3d;
+  border-radius: 10px;
+}
+

@@ -100,22 +100,54 @@ const jrCookieSetsList = document.getElementById('jrCookieSetsList');
 function renderJRCookieSets(sets) {
   if (!jrCookieSetsList) return;
   if (!Array.isArray(sets) || sets.length === 0) {
-    jrCookieSetsList.innerHTML = '<div class="empty-list">No Jobright cookie sets saved yet.</div>';
+    jrCookieSetsList.innerHTML = '<div class="jr-empty">No Jobright cookie sets saved yet.</div>';
     return;
   }
   jrCookieSetsList.innerHTML = sets.map(s => {
-    const activeBadge = s.is_active ? '<span class="badge badge-success" style="margin-left:8px;">Active</span>' : '';
+    const activeClass = s.is_active ? 'active' : '';
+    const activeBadge = s.is_active ? '<span class="jr-badge active">Active</span>' : '<span class="jr-badge">Inactive</span>';
+    const lastUsed = s.last_used ? new Date(s.last_used * 1000).toLocaleString() : 'Never';
+    const label = (s.label || 'Untitled').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return `
-      <div class="list-item">
-        <div class="list-item-main">
-          <div>
-            <strong>${s.label || 'Untitled'}</strong>${activeBadge}
-          </div>
-          <div class="list-item-meta">Usage: ${s.usage_count} • Last used: ${s.last_used ? new Date(s.last_used * 1000).toLocaleString() : 'Never'}</div>
+      <div class="jr-card ${activeClass}" data-id="${s.id}">
+        <div class="jr-card-header">
+          <div class="jr-card-title"><span class="dot"></span><strong>${label}</strong></div>
+          ${activeBadge}
+        </div>
+        <div class="jr-card-meta">
+          <span>Usage: ${s.usage_count}</span>
+          <span>Last used: ${lastUsed}</span>
+        </div>
+        <div class="jr-card-actions">
+          <button class="jr-mini-btn" data-action="rotate" data-id="${s.id}">Make Active</button>
+          <button class="jr-mini-btn" data-action="copy" data-id="${s.id}">Copy JSON</button>
         </div>
       </div>
     `;
   }).join('');
+  // Attach actions
+  jrCookieSetsList.querySelectorAll('button[data-action="rotate"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await rotateJRCookieSet();
+    });
+  });
+  jrCookieSetsList.querySelectorAll('button[data-action="copy"]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.getAttribute('data-id');
+      try {
+        // Re-fetch sets to get latest
+        const res = await ipcRenderer.invoke('list-cookie-sets', 'Jobright');
+        if (res?.success) {
+          const set = (res.data || []).find(x => String(x.id) === String(id));
+          if (!set) throw new Error('Set not found');
+          // We don't have cookie JSON here (kept encrypted in DB), so just notify
+          showMessage(jrCookieSetsStatus, 'For security, raw cookies aren\'t shown. Re-paste your source JSON if needed.', 'info');
+        }
+      } catch (err) {
+        showMessage(jrCookieSetsStatus, err.message, 'error');
+      }
+    });
+  });
 }
 
 async function refreshJRCookieSets() {
