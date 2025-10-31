@@ -150,12 +150,26 @@ function renderJRCookieSets(sets) {
   });
 }
 
+function getCurrentCookieSetPlatform() {
+  const p = cookiePlatform?.value || 'Jobright';
+  return p;
+}
+
+function updateCookieSetLabels() {
+  const p = getCurrentCookieSetPlatform();
+  const labelEl = document.getElementById('csPlatformLabel');
+  const subEl = document.getElementById('csPlatformLabelSub');
+  if (labelEl) labelEl.textContent = p;
+  if (subEl) subEl.textContent = p;
+}
+
 async function refreshJRCookieSets() {
   try {
-    const res = await ipcRenderer.invoke('list-cookie-sets', 'Jobright');
+    const platform = getCurrentCookieSetPlatform();
+    const res = await ipcRenderer.invoke('list-cookie-sets', platform);
     if (res && res.success) {
       renderJRCookieSets(res.data);
-      showMessage(jrCookieSetsStatus, `Loaded ${res.data.length} cookie set(s).`, 'success');
+      showMessage(jrCookieSetsStatus, `Loaded ${res.data.length} cookie set(s) for ${platform}.`, 'success');
     } else {
       showMessage(jrCookieSetsStatus, res?.error || 'Failed to load cookie sets', 'error');
     }
@@ -166,6 +180,7 @@ async function refreshJRCookieSets() {
 
 async function addJRCookieSet() {
   try {
+    const platform = getCurrentCookieSetPlatform();
     const label = (jrCookieLabel?.value || '').trim();
     let cookies = [];
     try {
@@ -176,9 +191,9 @@ async function addJRCookieSet() {
     if (!Array.isArray(cookies) || cookies.length === 0) {
       throw new Error('Provide a non-empty cookies array');
     }
-    const res = await ipcRenderer.invoke('save-cookie-set', 'Jobright', label, cookies);
+    const res = await ipcRenderer.invoke('save-cookie-set', platform, label, cookies);
     if (res && res.success) {
-      showMessage(jrCookieSetsStatus, 'Cookie set saved.', 'success');
+      showMessage(jrCookieSetsStatus, `Cookie set saved for ${platform}.`, 'success');
       jrCookieJson.value = '';
       refreshJRCookieSets();
     } else {
@@ -191,9 +206,10 @@ async function addJRCookieSet() {
 
 async function rotateJRCookieSet() {
   try {
-    const res = await ipcRenderer.invoke('rotate-cookie-set', 'Jobright');
+    const platform = getCurrentCookieSetPlatform();
+    const res = await ipcRenderer.invoke('rotate-cookie-set', platform);
     if (res && res.success) {
-      showMessage(jrCookieSetsStatus, `Rotated active set (id: ${res.activeId || 'unknown'}).`, 'success');
+      showMessage(jrCookieSetsStatus, `Rotated active set for ${platform} (id: ${res.activeId || 'unknown'}).`, 'success');
       refreshJRCookieSets();
     } else {
       showMessage(jrCookieSetsStatus, res?.error || 'Failed to rotate', 'error');
@@ -203,15 +219,19 @@ async function rotateJRCookieSet() {
   }
 }
 
-if (addJRCookieSetBtn) addJRCookieSetBtn.addEventListener('click', addJRCookieSet);
-if (listJRCookieSetsBtn) listJRCookieSetsBtn.addEventListener('click', refreshJRCookieSets);
-if (rotateJRCookieSetBtn) rotateJRCookieSetBtn.addEventListener('click', rotateJRCookieSet);
-
-// Auto-refresh list when opening Cookies tab
+// Auto-refresh when Cookies tab opens and when platform changes
 const cookiesTabBtn = document.querySelector('.tab-btn-vertical[data-tab="cookies"]');
 if (cookiesTabBtn) {
   cookiesTabBtn.addEventListener('click', () => {
+    updateCookieSetLabels();
     setTimeout(refreshJRCookieSets, 200);
+  });
+}
+
+if (cookiePlatform) {
+  cookiePlatform.addEventListener('change', () => {
+    updateCookieSetLabels();
+    refreshJRCookieSets();
   });
 }
 

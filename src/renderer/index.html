@@ -621,15 +621,15 @@
 
             <div id="cookieStatus" class="status-message"></div>
 
-            <!-- Jobright Multi-Cookie Sets -->
+            <!-- Multi-Cookie Sets (for selected platform) -->
             <div class="settings-section" style="margin-top: 24px;">
-              <h3>🍪 Jobright Cookie Sets (Rotation)</h3>
-              <p class="help-text">Manage multiple Jobright cookie sets. The scraper will auto-rotate if a set is limited.</p>
+              <h3>🍪 <span id="csPlatformLabel">Jobright</span> Cookie Sets (Rotation)</h3>
+              <p class="help-text">Manage multiple <span id="csPlatformLabelSub">Jobright</span> cookie sets. The scraper will auto-rotate if a set is limited.</p>
               <div class="input-group" style="margin-bottom: 8px;">
                 <input type="text" id="jrCookieLabel" placeholder="Label (e.g., Account 1)" class="form-control">
               </div>
               <div class="form-group">
-                <label for="jrCookieJson">Jobright Cookie JSON:</label>
+                <label for="jrCookieJson">Cookie JSON:</label>
                 <textarea id="jrCookieJson" class="form-textarea" rows="6" placeholder='[{"name":"session","value":"...","domain":".jobright.ai","path":"/"}]'></textarea>
               </div>
               <div class="form-actions">
