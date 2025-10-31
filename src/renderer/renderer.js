@@ -97,10 +97,23 @@ const rotateJRCookieSetBtn = document.getElementById('rotateJRCookieSetBtn');
 const jrCookieSetsStatus = document.getElementById('jrCookieSetsStatus');
 const jrCookieSetsList = document.getElementById('jrCookieSetsList');
 
+function getCurrentCookieSetPlatform() {
+  const p = cookiePlatform?.value || 'Jobright';
+  return p;
+}
+
+function updateCookieSetLabels() {
+  const p = getCurrentCookieSetPlatform();
+  const labelEl = document.getElementById('csPlatformLabel');
+  const subEl = document.getElementById('csPlatformLabelSub');
+  if (labelEl) labelEl.textContent = p;
+  if (subEl) subEl.textContent = p;
+}
+
 function renderJRCookieSets(sets) {
   if (!jrCookieSetsList) return;
   if (!Array.isArray(sets) || sets.length === 0) {
-    jrCookieSetsList.innerHTML = '<div class="jr-empty">No Jobright cookie sets saved yet.</div>';
+    jrCookieSetsList.innerHTML = '<div class="jr-empty">No cookie sets saved yet.</div>';
     return;
   }
   jrCookieSetsList.innerHTML = sets.map(s => {
@@ -135,12 +148,11 @@ function renderJRCookieSets(sets) {
     btn.addEventListener('click', async (e) => {
       const id = e.currentTarget.getAttribute('data-id');
       try {
-        // Re-fetch sets to get latest
-        const res = await ipcRenderer.invoke('list-cookie-sets', 'Jobright');
+        const platform = getCurrentCookieSetPlatform();
+        const res = await ipcRenderer.invoke('list-cookie-sets', platform);
         if (res?.success) {
           const set = (res.data || []).find(x => String(x.id) === String(id));
           if (!set) throw new Error('Set not found');
-          // We don't have cookie JSON here (kept encrypted in DB), so just notify
           showMessage(jrCookieSetsStatus, 'For security, raw cookies aren\'t shown. Re-paste your source JSON if needed.', 'info');
         }
       } catch (err) {
@@ -148,19 +160,6 @@ function renderJRCookieSets(sets) {
       }
     });
   });
-}
-
-function getCurrentCookieSetPlatform() {
-  const p = cookiePlatform?.value || 'Jobright';
-  return p;
-}
-
-function updateCookieSetLabels() {
-  const p = getCurrentCookieSetPlatform();
-  const labelEl = document.getElementById('csPlatformLabel');
-  const subEl = document.getElementById('csPlatformLabelSub');
-  if (labelEl) labelEl.textContent = p;
-  if (subEl) subEl.textContent = p;
 }
 
 async function refreshJRCookieSets() {
@@ -218,6 +217,10 @@ async function rotateJRCookieSet() {
     showMessage(jrCookieSetsStatus, e.message, 'error');
   }
 }
+
+if (addJRCookieSetBtn) addJRCookieSetBtn.addEventListener('click', addJRCookieSet);
+if (listJRCookieSetsBtn) listJRCookieSetsBtn.addEventListener('click', refreshJRCookieSets);
+if (rotateJRCookieSetBtn) rotateJRCookieSetBtn.addEventListener('click', rotateJRCookieSet);
 
 // Auto-refresh when Cookies tab opens and when platform changes
 const cookiesTabBtn = document.querySelector('.tab-btn-vertical[data-tab="cookies"]');
