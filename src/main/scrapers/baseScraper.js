@@ -284,10 +284,27 @@ class BaseScraper {
         isMobile: false
       });
       
-      // Load cookies if available
-      const cookies = this.db.getCookies(this.platform);
-      if (cookies && Array.isArray(cookies)) {
-        console.log(`${this.platform}: Loading ${cookies.length} cookies...`);
+      // Load cookies: prefer active cookie set (supports multiple), fallback to legacy single set
+      let cookieSetInfo = this.db.getActiveCookieSet(this.platform);
+      if (!cookieSetInfo) {
+        const legacyCookies = this.db.getCookies(this.platform);
+        if (legacyCookies && Array.isArray(legacyCookies) && legacyCookies.length > 0) {
+          console.log(`${this.platform}: Loading ${legacyCookies.length} cookies (legacy)...`);
+          const puppeteerCookies = legacyCookies.map(c => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || this.getBaseDomain(),
+            path: c.path || '/',
+            httpOnly: c.httpOnly || false,
+            secure: c.secure !== false,
+            expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
+          }));
+          await this.page.setCookie(...puppeteerCookies);
+          console.log(`${this.platform}: ✅ Cookies loaded (legacy)`);
+        }
+      } else {
+        const cookies = cookieSetInfo.cookies || [];
+        console.log(`${this.platform}: Loading ${cookies.length} cookies from active set #${cookieSetInfo.id}...`);
         const puppeteerCookies = cookies.map(c => ({
           name: c.name,
           value: c.value,
@@ -297,9 +314,11 @@ class BaseScraper {
           secure: c.secure !== false,
           expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
         }));
-        
         await this.page.setCookie(...puppeteerCookies);
-        console.log(`${this.platform}: ✅ Cookies loaded`);
+        if (cookieSetInfo.id) {
+          try { this.db.markCookieSetUsed(cookieSetInfo.id); } catch (e) {}
+        }
+        console.log(`${this.platform}: ✅ Cookies loaded (active set)`);
       }
       
       // Note: Tab creation is now handled per-scraper with promises

@@ -534,6 +534,49 @@ class JobrightScraper extends BaseScraper {
       
       console.log(`${this.platform}: Navigating to ${this.baseUrl}`);
       await this.navigateToUrl(this.baseUrl);
+      // If rate limited or login required, rotate cookie set (if available)
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const limited = await this.page.evaluate(() => {
+            const text = document.body.innerText || '';
+            const signals = [
+              'too many requests',
+              'rate limit',
+              'verify you are human',
+              'captcha',
+              'access denied',
+              'sign in',
+              'log in'
+            ];
+            return signals.some(s => text.toLowerCase().includes(s));
+          });
+          if (!limited) break;
+          console.log(`${this.platform}: ⚠️ Detected limitation/login page. Rotating cookie set...`);
+          const nextSet = this.db.rotateCookieSet(this.platform);
+          if (!nextSet) { console.log(`${this.platform}: ❌ No alternate cookie sets available`); break; }
+          // Clear existing cookies for domain and apply new set
+          try {
+            const client = await this.page.target().createCDPSession();
+            await client.send('Network.clearBrowserCookies');
+          } catch (_) {}
+          const cookies = nextSet.cookies || [];
+          if (cookies.length > 0) {
+            await this.page.setCookie(...cookies.map(c => ({
+              name: c.name,
+              value: c.value,
+              domain: c.domain || this.getBaseDomain(),
+              path: c.path || '/',
+              httpOnly: c.httpOnly || false,
+              secure: c.secure !== false,
+              expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
+            })));
+          }
+          console.log(`${this.platform}: 🔄 Reloading with rotated cookies...`);
+          await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        }
+      } catch (e) {
+        console.log(`${this.platform}: ⚠️ Cookie rotation check failed: ${e.message}`);
+      }
       console.log(`${this.platform}: ⏳ Waiting 1.5-2s for page to load...`);
       await this.randomDelay(1500, 2000);
 

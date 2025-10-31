@@ -377,6 +377,37 @@ ipcMain.handle('get-cookies', async (event, platform) => {
   return db.getCookies(platform);
 });
 
+// Cookie Sets IPC: manage multiple cookie sets per platform
+ipcMain.handle('save-cookie-set', async (event, platform, label, cookies) => {
+  try {
+    const id = db.saveCookieSet(platform, label, cookies);
+    return { success: true, id };
+  } catch (err) {
+    console.error('Error saving cookie set:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('list-cookie-sets', async (event, platform) => {
+  try {
+    const sets = db.getCookieSets(platform);
+    return { success: true, data: sets };
+  } catch (err) {
+    console.error('Error listing cookie sets:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('rotate-cookie-set', async (event, platform) => {
+  try {
+    const active = db.rotateCookieSet(platform);
+    return { success: !!active, activeId: active?.id || null };
+  } catch (err) {
+    console.error('Error rotating cookie set:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('save-actions', async (event, platform, actions) => {
   return db.saveActions(platform, actions);
 });
