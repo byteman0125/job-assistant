@@ -846,6 +846,46 @@ class JobrightScraper extends BaseScraper {
       console.log(`  Title: ${jobCard.title}`);
       console.log(`  Posted: ${jobCard.postedTime}`);
       
+      // FAST-SKIP: If company shows aggregator like "Jobs via Dice", auto-mark applied and skip
+      try {
+        const companyLower = (jobCard.company || '').toLowerCase();
+        if (companyLower.includes('jobs via dice')) {
+          console.log(`${this.platform}: 🚫 Aggregator detected (Jobs via Dice) - auto-marking as applied and skipping`);
+          this.sendSkipNotification(jobCard, 'Aggregator: Jobs via Dice');
+          try {
+            const aggJob = {
+              company: jobCard.company,
+              title: jobCard.title,
+              url: this.baseUrl,
+              is_remote: false,
+              is_startup: false,
+              salary: 'Skipped: Jobs via Dice',
+              tech_stack: '',
+              location: ''
+            };
+            const saved = this.saveJob(aggJob);
+            if (saved) {
+              const jobs = this.db.getAllJobs();
+              const savedJob = jobs.find(j => j.company === jobCard.company);
+              if (savedJob) {
+                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
+                console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (aggregator)`);
+              }
+            }
+          } catch (saveErr) {
+            console.log(`${this.platform}: ⚠️ Error saving aggregator job: ${saveErr.message}`);
+          }
+          // Remove card from feed if possible
+          try {
+            await this.clickNotInterestedButton(jobCard);
+          } catch (e) {}
+          // Soft refresh to move on
+          try { await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 }); } catch (_) {}
+          await this.randomDelay(800, 1200);
+          continue;
+        }
+      } catch (_) {}
+      
       // CHECK: Is this job older than 7 days?
       const isOld = this.isJobOlderThanOneDay(jobCard.postedTime);
       if (isOld) {
