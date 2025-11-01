@@ -737,19 +737,67 @@ class JobrightScraper extends BaseScraper {
         console.log(`${this.platform}: ⚠️ No job cards found (attempt ${consecutiveEmptyCount}/5)`);
         
         if (consecutiveEmptyCount >= 5) {
-          console.log(`${this.platform}: ❌ No cards found after 5 attempts - stopping`);
-          
-          // Send warning to UI  
+          // Before stopping, rotate through all available cookie sets to try recovering
+          try {
+            const sets = this.db.getCookieSets(this.platform) || [];
+            if (sets.length > 1) {
+              console.log(`${this.platform}: 🔄 No cards after 5 tries. Trying cookie set rotation across ${sets.length} set(s)...`);
+              let recovered = false;
+              for (let i = 0; i < sets.length; i++) {
+                const next = this.db.rotateCookieSet(this.platform);
+                if (!next) break;
+                // Clear cookies and apply new set
+                try {
+                  const client = await this.page.target().createCDPSession();
+                  await client.send('Network.clearBrowserCookies');
+                } catch (_) {}
+                const cookies = next.cookies || [];
+                if (cookies.length > 0) {
+                  await this.page.setCookie(...cookies.map(c => ({
+                    name: c.name,
+                    value: c.value,
+                    domain: c.domain || this.getBaseDomain(),
+                    path: c.path || '/',
+                    httpOnly: c.httpOnly || false,
+                    secure: c.secure !== false,
+                    expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
+                  })));
+                }
+                console.log(`${this.platform}: 🔁 Reloading page with rotated cookies (attempt ${i + 1}/${sets.length})...`);
+                await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                await this.randomDelay(1500, 2000);
+                // Quick check for cards
+                const cardCount = await this.page.evaluate(() => {
+                  const list = document.querySelector('.ant-list-items');
+                  const cards = list ? list.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC') : document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                  return cards ? cards.length : 0;
+                });
+                console.log(`${this.platform}: 🔎 Cards after rotation: ${cardCount}`);
+                if (cardCount > 0) {
+                  consecutiveEmptyCount = 0;
+                  recovered = true;
+                  break;
+                }
+              }
+              if (recovered) {
+                continue; // Resume main loop with new cookies
+              }
+            }
+          } catch (e) {
+            console.log(`${this.platform}: ⚠️ Rotation attempt failed: ${e.message}`);
+          }
+
+          console.log(`${this.platform}: ❌ No cards found after rotation attempts - stopping`);
+          // Send warning to UI
           const path = require('path');
           const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
           const mainWindow = getMainWindow();
           if (mainWindow) {
             mainWindow.webContents.send('scraper-warning', {
               platform: this.platform,
-              message: 'No job cards found. Please save Jobright cookies and login.'
+              message: 'No job cards found. Tried rotating cookie sets; please update cookies.'
             });
           }
-          
           await this.closeBrowser();
           this.isRunning = false;
           return newJobsCount;
@@ -792,9 +840,55 @@ class JobrightScraper extends BaseScraper {
         
         // Stop if we've seen 10 consecutive old jobs
         if (consecutiveOldJobs >= 10) {
+          // Before exiting, rotate cookie sets to see if another account has fresh feed
+          let rotatedFound = false;
+          try {
+            const sets = this.db.getCookieSets(this.platform) || [];
+            if (sets.length > 1) {
+              console.log(`${this.platform}: 🔄 10 old jobs in a row. Rotating cookie sets across ${sets.length} set(s)...`);
+              for (let i = 0; i < sets.length; i++) {
+                const next = this.db.rotateCookieSet(this.platform);
+                if (!next) break;
+                try {
+                  const client = await this.page.target().createCDPSession();
+                  await client.send('Network.clearBrowserCookies');
+                } catch (_) {}
+                const cookies = next.cookies || [];
+                if (cookies.length > 0) {
+                  await this.page.setCookie(...cookies.map(c => ({
+                    name: c.name,
+                    value: c.value,
+                    domain: c.domain || this.getBaseDomain(),
+                    path: c.path || '/',
+                    httpOnly: c.httpOnly || false,
+                    secure: c.secure !== false,
+                    expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
+                  })));
+                }
+                console.log(`${this.platform}: 🔁 Reloading page with rotated cookies (attempt ${i + 1}/${sets.length})...`);
+                await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                await this.randomDelay(1500, 2000);
+                // Quick probe for a fresh-looking first card
+                const hasAnyCard = await this.page.evaluate(() => {
+                  const list = document.querySelector('.ant-list-items');
+                  const cards = list ? list.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC') : document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
+                  return (cards && cards.length > 0);
+                });
+                if (hasAnyCard) {
+                  consecutiveOldJobs = 0;
+                  rotatedFound = true;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            console.log(`${this.platform}: ⚠️ Rotation attempt failed: ${e.message}`);
+          }
+          if (rotatedFound) {
+            continue; // Resume with reset counters on new cookie set
+          }
           console.log(`\n${this.platform}: ═══════════════════════════════════════════`);
-          console.log(`${this.platform}: 🛑 STOPPING - Found 10 consecutive old jobs`);
-          console.log(`${this.platform}: All remaining jobs are likely older than 7 days`);
+          console.log(`${this.platform}: 🛑 STOPPING - Found 10 consecutive old jobs (after rotation attempts)`);
           console.log(`${this.platform}: ═══════════════════════════════════════════\n`);
           break; // Exit the while loop
         }
