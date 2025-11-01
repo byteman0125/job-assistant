@@ -876,8 +876,22 @@ class JobrightScraper extends BaseScraper {
             console.log(`${this.platform}: ⚠️ Error saving Dice-skip job: ${saveErr.message}`);
           }
           // Attempt to remove card from feed
-          try { await this.clickNotInterestedButton(jobCard); } catch (_) {}
-          await this.randomDelay(800, 1200);
+          try { 
+            await this.clickNotInterestedButton(jobCard); 
+            // Wait for card to disappear
+            await this.randomDelay(2000, 3000);
+            // Force page reload to refresh feed if card didn't disappear
+            console.log(`${this.platform}: 🔄 Reloading page to refresh feed after Dice skip...`);
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+            await this.randomDelay(1500, 2000);
+          } catch (err) {
+            console.log(`${this.platform}: ⚠️ Error removing Dice card: ${err.message}`);
+            // Reload anyway to avoid infinite loop
+            try {
+              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              await this.randomDelay(1500, 2000);
+            } catch (_) {}
+          }
           continue; // Next job
         }
       } catch (e) {
