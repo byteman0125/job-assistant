@@ -260,6 +260,7 @@ class JobDatabase {
       CREATE INDEX IF NOT EXISTS idx_jobs_timestamp ON jobs(timestamp);
       CREATE INDEX IF NOT EXISTS idx_jobs_platform ON jobs(platform);
       CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
+      CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company);
     `);
 
     // Migration: enforce UNIQUE(company) instead of UNIQUE(company, title)
@@ -376,6 +377,12 @@ class JobDatabase {
   getAllJobs() {
     const stmt = this.db.prepare('SELECT * FROM jobs ORDER BY timestamp DESC');
     return stmt.all();
+  }
+
+  companyExists(company) {
+    const stmt = this.db.prepare('SELECT 1 FROM jobs WHERE company = ? LIMIT 1');
+    const row = stmt.get(company);
+    return !!row;
   }
 
   getJobsToday() {

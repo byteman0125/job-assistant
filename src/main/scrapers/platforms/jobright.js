@@ -846,6 +846,19 @@ class JobrightScraper extends BaseScraper {
       console.log(`  Title: ${jobCard.title}`);
       console.log(`  Posted: ${jobCard.postedTime}`);
       
+      // EARLY DEDUP: Skip if company already exists in DB (avoid opening)
+      try {
+        if (this.db.companyExists(jobCard.company)) {
+          console.log(`${this.platform}: ⛔ Duplicate company detected in DB – skipping open: ${jobCard.company}`);
+          this.sendSkipNotification(jobCard, 'Duplicate company (already saved)');
+          // Optionally remove from feed to advance
+          try { await this.clickNotInterestedButton(jobCard); } catch (_) {}
+          try { await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 }); } catch (_) {}
+          await this.randomDelay(600, 1000);
+          continue;
+        }
+      } catch (_) {}
+
       // FAST-SKIP: If company shows aggregator like "Jobs via Dice", auto-mark applied and skip
       try {
         const companyLower = (jobCard.company || '').toLowerCase();
