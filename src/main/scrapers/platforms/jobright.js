@@ -846,58 +846,43 @@ class JobrightScraper extends BaseScraper {
       console.log(`  Title: ${jobCard.title}`);
       console.log(`  Posted: ${jobCard.postedTime}`);
       
-      // EARLY DEDUP: Skip if company already exists in DB (avoid opening)
-      try {
-        if (this.db.companyExists(jobCard.company)) {
-          console.log(`${this.platform}: ⛔ Duplicate company detected in DB – skipping open: ${jobCard.company}`);
-          this.sendSkipNotification(jobCard, 'Duplicate company (already saved)');
-          // Optionally remove from feed to advance
-          try { await this.clickNotInterestedButton(jobCard); } catch (_) {}
-          try { await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 }); } catch (_) {}
-          await this.randomDelay(600, 1000);
-          continue;
-        }
-      } catch (_) {}
-
-      // FAST-SKIP: If company shows aggregator like "Jobs via Dice", auto-mark applied and skip
+      // Fast-skip: Jobs via Dice → mark applied right away without opening
       try {
         const companyLower = (jobCard.company || '').toLowerCase();
         if (companyLower.includes('jobs via dice')) {
-          console.log(`${this.platform}: 🚫 Aggregator detected (Jobs via Dice) - auto-marking as applied and skipping`);
-          this.sendSkipNotification(jobCard, 'Aggregator: Jobs via Dice');
+          console.log(`${this.platform}: 🚫 Skipping Dice aggregator - marking as applied`);
+          this.sendSkipNotification(jobCard, 'Jobs via Dice - Aggregator skipped');
           try {
-            const aggJob = {
+            const quickJob = {
               company: jobCard.company,
               title: jobCard.title,
               url: this.baseUrl,
               is_remote: false,
               is_startup: false,
-              salary: 'Skipped: Jobs via Dice',
+              salary: 'Skipped: Dice aggregator',
               tech_stack: '',
               location: ''
             };
-            const saved = this.saveJob(aggJob);
+            const saved = this.saveJob(quickJob);
             if (saved) {
               const jobs = this.db.getAllJobs();
-              const savedJob = jobs.find(j => j.company === jobCard.company);
+              const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
               if (savedJob) {
                 this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
-                console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (aggregator)`);
+                console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (Dice)`);
               }
             }
           } catch (saveErr) {
-            console.log(`${this.platform}: ⚠️ Error saving aggregator job: ${saveErr.message}`);
+            console.log(`${this.platform}: ⚠️ Error saving Dice-skip job: ${saveErr.message}`);
           }
-          // Remove card from feed if possible
-          try {
-            await this.clickNotInterestedButton(jobCard);
-          } catch (e) {}
-          // Soft refresh to move on
-          try { await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 }); } catch (_) {}
+          // Attempt to remove card from feed
+          try { await this.clickNotInterestedButton(jobCard); } catch (_) {}
           await this.randomDelay(800, 1200);
-          continue;
+          continue; // Next job
         }
-      } catch (_) {}
+      } catch (e) {
+        console.log(`${this.platform}: ⚠️ Dice detection failed: ${e.message}`);
+      }
       
       // CHECK: Is this job older than 7 days?
       const isOld = this.isJobOlderThanOneDay(jobCard.postedTime);
