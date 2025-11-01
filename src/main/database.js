@@ -42,7 +42,7 @@ class JobDatabase {
         applied_by TEXT DEFAULT 'None',
         applied_date INTEGER,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        UNIQUE(company, title)
+        UNIQUE(company)
       )
     `);
     
@@ -261,6 +261,63 @@ class JobDatabase {
       CREATE INDEX IF NOT EXISTS idx_jobs_platform ON jobs(platform);
       CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
     `);
+
+    // Migration: enforce UNIQUE(company) instead of UNIQUE(company, title)
+    try {
+      const migrated = this.getSetting('unique_company_migration_done');
+      if (!migrated) {
+        // Create new table with desired constraint
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS jobs_mig (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company TEXT NOT NULL,
+            title TEXT NOT NULL,
+            url TEXT UNIQUE NOT NULL,
+            platform TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            salary TEXT,
+            tech_stack TEXT,
+            is_remote BOOLEAN DEFAULT 1,
+            is_startup BOOLEAN DEFAULT 0,
+            location TEXT,
+            job_type TEXT,
+            industry TEXT,
+            applied BOOLEAN DEFAULT 0,
+            applied_by TEXT DEFAULT 'None',
+            applied_date INTEGER,
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            UNIQUE(company)
+          );
+        `);
+        // Insert latest job per company
+        this.db.exec(`
+          INSERT OR IGNORE INTO jobs_mig (
+            company, title, url, platform, timestamp, salary, tech_stack, is_remote, is_startup, location, job_type, industry, applied, applied_by, applied_date, created_at
+          )
+          SELECT j.company, j.title, j.url, j.platform, j.timestamp, j.salary, j.tech_stack, j.is_remote, j.is_startup, j.location, j.job_type, j.industry, j.applied, j.applied_by, j.applied_date, j.created_at
+          FROM jobs j
+          JOIN (
+            SELECT company, MAX(timestamp) AS max_ts
+            FROM jobs
+            GROUP BY company
+          ) latest ON latest.company = j.company AND latest.max_ts = j.timestamp;
+        `);
+        // Replace old table
+        this.db.exec(`
+          DROP TABLE IF EXISTS jobs;
+          ALTER TABLE jobs_mig RENAME TO jobs;
+        `);
+        // Recreate indexes
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_jobs_timestamp ON jobs(timestamp);
+          CREATE INDEX IF NOT EXISTS idx_jobs_platform ON jobs(platform);
+          CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
+        `);
+        this.saveSetting('unique_company_migration_done', true);
+      }
+    } catch (e) {
+      // If anything fails, keep existing table
+    }
     
     // Initialize default settings if not exists
     this.initializeDefaultSettings();
