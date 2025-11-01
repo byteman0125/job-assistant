@@ -136,6 +136,7 @@ function renderJRCookieSets(sets) {
         <div class="jr-card-actions">
           <button class="jr-mini-btn" data-action="rotate" data-id="${s.id}">Make Active</button>
           <button class="jr-mini-btn" data-action="copy" data-id="${s.id}">Copy JSON</button>
+          <button class="jr-mini-btn" data-action="delete" data-id="${s.id}">Delete</button>
         </div>
       </div>
     `;
@@ -156,6 +157,22 @@ function renderJRCookieSets(sets) {
           const set = (res.data || []).find(x => String(x.id) === String(id));
           if (!set) throw new Error('Set not found');
           showMessage(jrCookieSetsStatus, 'For security, raw cookies aren\'t shown. Re-paste your source JSON if needed.', 'info');
+        }
+      } catch (err) {
+        showMessage(jrCookieSetsStatus, err.message, 'error');
+      }
+    });
+  });
+  jrCookieSetsList.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = Number(e.currentTarget.getAttribute('data-id'));
+      try {
+        const res = await ipcRenderer.invoke('delete-cookie-set', id);
+        if (res?.success) {
+          showMessage(jrCookieSetsStatus, 'Cookie set deleted.', 'success');
+          refreshJRCookieSets();
+        } else {
+          showMessage(jrCookieSetsStatus, res?.error || 'Failed to delete cookie set', 'error');
         }
       } catch (err) {
         showMessage(jrCookieSetsStatus, err.message, 'error');
@@ -4434,4 +4451,32 @@ function initChatTab() {
   document.getElementById('chat-tab').setAttribute('data-initialized', 'true');
   console.log('Chat tab initialization completed successfully');
 }
+
+// Optional: clear all cookies for selected platform
+const clearAllBtnId = 'clearAllCookieSetsBtn';
+(function ensureClearAllButton(){
+  const container = document.getElementById('jrCookieSetsStatus');
+  if (container && !document.getElementById(clearAllBtnId)) {
+    const btn = document.createElement('button');
+    btn.id = clearAllBtnId;
+    btn.className = 'btn btn-danger';
+    btn.textContent = '🗑️ Clear All for Platform';
+    btn.style.marginTop = '8px';
+    btn.addEventListener('click', async () => {
+      const platform = getCurrentCookieSetPlatform();
+      try {
+        const res = await ipcRenderer.invoke('clear-cookies', platform);
+        if (res?.success) {
+          showMessage(jrCookieSetsStatus, `Cleared all cookies for ${platform}.`, 'success');
+          refreshJRCookieSets();
+        } else {
+          showMessage(jrCookieSetsStatus, res?.error || 'Failed to clear cookies', 'error');
+        }
+      } catch (e) {
+        showMessage(jrCookieSetsStatus, e.message, 'error');
+      }
+    });
+    container.parentNode.insertBefore(btn, container.nextSibling);
+  }
+})();
 

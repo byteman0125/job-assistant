@@ -444,6 +444,19 @@ class JobDatabase {
     this.db.prepare('UPDATE cookie_sets SET usage_count = usage_count + 1, last_used = ?, updated_at = ? WHERE id = ?').run(now, now, id);
   }
 
+  deleteCookieSet(id) {
+    const stmt = this.db.prepare('DELETE FROM cookie_sets WHERE id = ?');
+    const res = stmt.run(id);
+    return res.changes > 0;
+  }
+
+  clearCookies(platform) {
+    // Remove legacy single-set cookies and all cookie_sets for platform
+    this.db.prepare('DELETE FROM cookies WHERE platform = ?').run(platform);
+    this.db.prepare('DELETE FROM cookie_sets WHERE platform = ?').run(platform);
+    return true;
+  }
+
   getCookies(platform) {
     const stmt = this.db.prepare('SELECT cookies_encrypted FROM cookies WHERE platform = ?');
     const row = stmt.get(platform);

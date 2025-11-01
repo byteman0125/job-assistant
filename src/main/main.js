@@ -408,6 +408,26 @@ ipcMain.handle('rotate-cookie-set', async (event, platform) => {
   }
 });
 
+ipcMain.handle('delete-cookie-set', async (event, id) => {
+  try {
+    const ok = db.deleteCookieSet(id);
+    return { success: ok };
+  } catch (err) {
+    console.error('Error deleting cookie set:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('clear-cookies', async (event, platform) => {
+  try {
+    db.clearCookies(platform);
+    return { success: true };
+  } catch (err) {
+    console.error('Error clearing cookies:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('save-actions', async (event, platform, actions) => {
   return db.saveActions(platform, actions);
 });
