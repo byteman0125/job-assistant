@@ -751,6 +751,24 @@ class JobrightScraper extends BaseScraper {
                   const client = await this.page.target().createCDPSession();
                   await client.send('Network.clearBrowserCookies');
                 } catch (_) {}
+                // Clear persistent data and apply cookies
+                const origin = 'https://jobright.ai';
+                try { await client.send('Network.clearBrowserCache'); } catch (_) {}
+                try { await client.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' }); } catch (_) {}
+                try {
+                  await this.page.evaluate(async () => {
+                    try { localStorage.clear(); } catch (e) {}
+                    try { sessionStorage.clear(); } catch (e) {}
+                    try {
+                      const regs = await navigator.serviceWorker?.getRegistrations?.();
+                      if (Array.isArray(regs)) { for (const r of regs) { try { await r.unregister(); } catch (e) {} } }
+                    } catch (e) {}
+                    try {
+                      const keys = await caches?.keys?.();
+                      if (Array.isArray(keys)) { for (const k of keys) { try { await caches.delete(k); } catch (e) {} } }
+                    } catch (e) {}
+                  });
+                } catch (_) {}
                 const cookies = next.cookies || [];
                 if (cookies.length > 0) {
                   await this.page.setCookie(...cookies.map(c => ({
@@ -763,8 +781,11 @@ class JobrightScraper extends BaseScraper {
                     expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
                   })));
                 }
+                // Disable cache for next navigation and reload
+                try { await this.page.setCacheEnabled(false); } catch (_) {}
                 console.log(`${this.platform}: 🔁 Reloading page with rotated cookies (attempt ${i + 1}/${sets.length})...`);
                 await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                try { await this.page.setCacheEnabled(true); } catch (_) {}
                 await this.randomDelay(1500, 2000);
                 // Quick check for cards
                 const cardCount = await this.page.evaluate(() => {
@@ -853,6 +874,23 @@ class JobrightScraper extends BaseScraper {
                   const client = await this.page.target().createCDPSession();
                   await client.send('Network.clearBrowserCookies');
                 } catch (_) {}
+                const origin2 = 'https://jobright.ai';
+                try { await client.send('Network.clearBrowserCache'); } catch (_) {}
+                try { await client.send('Storage.clearDataForOrigin', { origin: origin2, storageTypes: 'all' }); } catch (_) {}
+                try {
+                  await this.page.evaluate(async () => {
+                    try { localStorage.clear(); } catch (e) {}
+                    try { sessionStorage.clear(); } catch (e) {}
+                    try {
+                      const regs = await navigator.serviceWorker?.getRegistrations?.();
+                      if (Array.isArray(regs)) { for (const r of regs) { try { await r.unregister(); } catch (e) {} } }
+                    } catch (e) {}
+                    try {
+                      const keys = await caches?.keys?.();
+                      if (Array.isArray(keys)) { for (const k of keys) { try { await caches.delete(k); } catch (e) {} } }
+                    } catch (e) {}
+                  });
+                } catch (_) {}
                 const cookies = next.cookies || [];
                 if (cookies.length > 0) {
                   await this.page.setCookie(...cookies.map(c => ({
@@ -865,8 +903,10 @@ class JobrightScraper extends BaseScraper {
                     expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
                   })));
                 }
+                try { await this.page.setCacheEnabled(false); } catch (_) {}
                 console.log(`${this.platform}: 🔁 Reloading page with rotated cookies (attempt ${i + 1}/${sets.length})...`);
                 await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                try { await this.page.setCacheEnabled(true); } catch (_) {}
                 await this.randomDelay(1500, 2000);
                 // Quick probe for a fresh-looking first card
                 const hasAnyCard = await this.page.evaluate(() => {
