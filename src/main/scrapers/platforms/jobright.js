@@ -661,7 +661,7 @@ class JobrightScraper extends BaseScraper {
             
             let jobLocation = 'Unknown';
             let salaryText = null;
-            let workLocationType = 'UNKNOWN';
+            // Removed work location type parsing per requirement
             
             // Loop through metadata items to identify each by icon or content
             metadataItems.forEach((item) => {
@@ -673,7 +673,7 @@ class JobrightScraper extends BaseScraper {
               if (highlightEl) {
                 const workTypeText = highlightEl.textContent.trim().toUpperCase();
                 if (workTypeText === 'REMOTE' || workTypeText === 'HYBRID' || workTypeText === 'ONSITE') {
-                  workLocationType = workTypeText;
+                  // skip: work location parsing not needed
                   return; // Found work type, skip other checks for this item
                 }
               }
@@ -686,9 +686,7 @@ class JobrightScraper extends BaseScraper {
               // Skip if this looks like work type but we didn't get highlight element
               if (text.toUpperCase().includes('REMOTE') || text.toUpperCase().includes('HYBRID') || text.toUpperCase().includes('ONSITE')) {
                 // Extract work type from text as fallback
-                if (text.toUpperCase().includes('REMOTE')) workLocationType = 'REMOTE';
-                else if (text.toUpperCase().includes('HYBRID')) workLocationType = 'HYBRID';
-                else if (text.toUpperCase().includes('ONSITE')) workLocationType = 'ONSITE';
+                // skip: work location parsing not needed
                 return;
               }
               
@@ -710,8 +708,7 @@ class JobrightScraper extends BaseScraper {
               }
             });
             
-            const isRemote = workLocationType === 'REMOTE';
-            const isHybridOrOnsite = workLocationType === 'HYBRID' || workLocationType === 'ONSITE';
+            // skip: work location flags not needed
             
             return {
               index: index,
@@ -721,9 +718,7 @@ class JobrightScraper extends BaseScraper {
               hasApplyButton: !!applyBtn,
               buttonText: buttonText,
               isDirectApply: isDirectApply,
-              workLocationType: workLocationType,
-              isRemote: isRemote,
-              isHybridOrOnsite: isHybridOrOnsite,
+              // work location fields removed
               location: jobLocation,
               salaryFromCard: salaryText
             };
@@ -977,38 +972,9 @@ class JobrightScraper extends BaseScraper {
       }
       
       // CHECK: Work location type - Only process REMOTE jobs
-      console.log(`${this.platform}: 📍 Work Location: ${jobCard.workLocationType}`);
-      
-      if (jobCard.isHybridOrOnsite) {
-        console.log(`${this.platform}: 🚫 SKIPPING - "${jobCard.workLocationType}" job (we only want REMOTE)`);
-        console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
-        
-        this.sendSkipNotification(jobCard, `${jobCard.workLocationType} - Only Remote jobs wanted`);
-        
-        // Click "Not Interested" to remove it and reveal next card
-        try {
-          await this.clickNotInterestedButton(jobCard);
-          console.log(`${this.platform}: ✅ Marked as "Not Interested" and removed from feed`);
-        } catch (err) {
-          console.log(`${this.platform}: ⚠️ Could not remove job: ${err.message}`);
-        }
-        
-        // Refresh page after skip to ensure clean state
-        console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-        try {
-          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-        } catch (reloadErr) {
-          console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
-        }
-        await this.randomDelay(1000, 1500);
-        continue; // Get next card from refreshed list
-      }
-      
-      if (!jobCard.isRemote && jobCard.workLocationType !== 'UNKNOWN') {
-        console.log(`${this.platform}: ⚠️ Unknown work location type: "${jobCard.workLocationType}" - Processing anyway`);
-      } else if (jobCard.isRemote) {
-        console.log(`${this.platform}: ✅ REMOTE job confirmed - Will process this job`);
-      }
+      // skip: no work location logging
+
+      // skip: no work location checks
       
       // CHECK: Job location - Must be USA
       console.log(`${this.platform}: 📍 Job Location: ${jobCard.location}`);
