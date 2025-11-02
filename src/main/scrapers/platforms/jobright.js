@@ -1155,39 +1155,64 @@ class JobrightScraper extends BaseScraper {
           // Set up promise to wait for new tab with countdown
           const newTabPromise = new Promise((resolve) => {
             let tabOpened = false;
+            let resolved = false;
             
-            this.browser.once('targetcreated', async (target) => {
+            const targetHandler = async (target) => {
+              // Ignore if already resolved
+              if (resolved) return;
+              
               try {
                 if (target.type() === 'page') {
-                  tabOpened = true;
                   console.log(`${this.platform}: 🆕 New tab detected, getting page object...`);
                   const newPage = await target.page();
-                  console.log(`${this.platform}: ✅ Page object obtained successfully`);
                   
-                  // IMMEDIATELY show the page to user
-                  const quickUrl = newPage.url();
-                  console.log(`${this.platform}: 📺 INSTANT MIRROR: ${quickUrl}`);
-                  this.mirrorToWebview(quickUrl);
+                  // Validate URL - ignore chrome-error, about:blank, empty
+                  const pageUrl = newPage.url();
+                  const isValidUrl = pageUrl && 
+                                     !pageUrl.includes('chrome-error://') && 
+                                     !pageUrl.includes('about:blank') &&
+                                     pageUrl !== '' &&
+                                     (pageUrl.startsWith('http://') || pageUrl.startsWith('https://'));
+                  
+                  if (!isValidUrl) {
+                    console.log(`${this.platform}: ⚠️ Ignoring invalid target URL: ${pageUrl}`);
+                    return;
+                  }
+                  
+                  // Valid page found
+                  tabOpened = true;
+                  resolved = true;
+                  console.log(`${this.platform}: ✅ Valid page obtained successfully`);
+                  console.log(`${this.platform}: 📺 INSTANT MIRROR: ${pageUrl}`);
+                  this.mirrorToWebview(pageUrl);
+                  
+                  // Cleanup listener
+                  this.browser.removeListener('targetcreated', targetHandler);
                   
                   resolve(newPage);
                 }
               } catch (err) {
-                console.log(`${this.platform}: ❌ Error getting page: ${err.message}`);
-                resolve(null);
+                console.log(`${this.platform}: ⚠️ Error getting page: ${err.message}`);
               }
-            });
+            };
+            
+            this.browser.on('targetcreated', targetHandler);
             
             // Countdown with status updates and isRunning checks
             const countdownInterval = setInterval(() => {
               if (!this.isRunning) {
                 clearInterval(countdownInterval);
+                this.browser.removeListener('targetcreated', targetHandler);
                 console.log(`${this.platform}: 🛑 Stopped by user during wait`);
-                resolve(null);
+                if (!resolved) {
+                  resolved = true;
+                  resolve(null);
+                }
               }
             }, 500);
             
             // Show countdown every 2 seconds
-            let timeLeft = 8;
+            let timeLeft = 12;
             const countdownDisplay = setInterval(() => {
               if (tabOpened) {
                 clearInterval(countdownDisplay);
@@ -1198,15 +1223,19 @@ class JobrightScraper extends BaseScraper {
               }
             }, 2000);
             
-            // Timeout after 8 seconds (reduced from 20s)
+            // Timeout after 12 seconds (increased from 8s for slower sites)
             setTimeout(() => {
               clearInterval(countdownDisplay);
               clearInterval(countdownInterval);
-              if (!tabOpened) {
-                console.log(`${this.platform}: ⏰ No tab after 8s`);
+              this.browser.removeListener('targetcreated', targetHandler);
+              if (!resolved) {
+                resolved = true;
+                if (!tabOpened) {
+                  console.log(`${this.platform}: ⏰ No tab after 12s`);
+                }
                 resolve(null);
               }
-            }, 8000);
+            }, 12000);
           });
         
           // Click the button (try to match by company/title, fallback to first card)
