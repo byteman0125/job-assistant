@@ -846,58 +846,6 @@ class JobrightScraper extends BaseScraper {
       console.log(`  Title: ${jobCard.title}`);
       console.log(`  Posted: ${jobCard.postedTime}`);
       
-      // Fast-skip: Jobs via Dice → mark applied right away without opening
-      try {
-        const companyLower = (jobCard.company || '').toLowerCase();
-        if (companyLower.includes('jobs via dice')) {
-          console.log(`${this.platform}: 🚫 Skipping Dice aggregator - marking as applied`);
-          this.sendSkipNotification(jobCard, 'Jobs via Dice - Aggregator skipped');
-          try {
-            const quickJob = {
-              company: jobCard.company,
-              title: jobCard.title,
-              url: this.baseUrl,
-              is_remote: false,
-              is_startup: false,
-              salary: 'Skipped: Dice aggregator',
-              tech_stack: '',
-              location: ''
-            };
-            const saved = this.saveJob(quickJob);
-            if (saved) {
-              const jobs = this.db.getAllJobs();
-              const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
-              if (savedJob) {
-                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
-                console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (Dice)`);
-              }
-            }
-          } catch (saveErr) {
-            console.log(`${this.platform}: ⚠️ Error saving Dice-skip job: ${saveErr.message}`);
-          }
-          // Attempt to remove card from feed
-          try { 
-            await this.clickNotInterestedButton(jobCard); 
-            // Wait for card to disappear
-            await this.randomDelay(2000, 3000);
-            // Force page reload to refresh feed if card didn't disappear
-            console.log(`${this.platform}: 🔄 Reloading page to refresh feed after Dice skip...`);
-            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-            await this.randomDelay(1500, 2000);
-          } catch (err) {
-            console.log(`${this.platform}: ⚠️ Error removing Dice card: ${err.message}`);
-            // Reload anyway to avoid infinite loop
-            try {
-              await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-              await this.randomDelay(1500, 2000);
-            } catch (_) {}
-          }
-          continue; // Next job
-        }
-      } catch (e) {
-        console.log(`${this.platform}: ⚠️ Dice detection failed: ${e.message}`);
-      }
-      
       // CHECK: Is this job older than 7 days?
       const isOld = this.isJobOlderThanOneDay(jobCard.postedTime);
       if (isOld) {
@@ -1356,6 +1304,31 @@ class JobrightScraper extends BaseScraper {
         if (!newPage) {
           console.log(`${this.platform}: ❌ Failed to open tab after 3 attempts - skipping job`);
           
+          // Save job to database with failure reason
+          try {
+            const failedJob = {
+              company: jobCard.company,
+              title: jobCard.title,
+              url: this.baseUrl, // No real URL available
+              is_remote: false,
+              is_startup: false,
+              salary: jobCard.salaryFromCard || 'Unknown',
+              tech_stack: '',
+              location: jobCard.location || 'Unknown'
+            };
+            const saved = this.saveJob(failedJob);
+            if (saved) {
+              const jobs = this.db.getAllJobs();
+              const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
+              if (savedJob) {
+                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot - Tab failed to open');
+                console.log(`${this.platform}: 💾 Saved failed job to database (Tab failed)`);
+              }
+            }
+          } catch (saveErr) {
+            console.log(`${this.platform}: ⚠️ Could not save failed job: ${saveErr.message}`);
+          }
+          
           // Mark as "Not Interested" so we don't keep trying
           try {
             const clicked = await this.page.evaluate((company, title) => {
@@ -1648,6 +1621,33 @@ class JobrightScraper extends BaseScraper {
         
         if (!contentLoaded) {
           console.log(`${this.platform}: ❌ Content didn't load after 20s - SKIPPING (stuck on Cloudflare)`);
+          
+          // Save job to database with the URL and failure reason
+          try {
+            const jobUrl = newPage ? newPage.url() : this.baseUrl;
+            const isValidUrl = jobUrl && !jobUrl.includes('chrome-error://') && !jobUrl.includes('about:blank');
+            const failedJob = {
+              company: jobCard.company,
+              title: jobCard.title,
+              url: isValidUrl ? jobUrl : this.baseUrl,
+              is_remote: false,
+              is_startup: false,
+              salary: jobCard.salaryFromCard || 'Unknown',
+              tech_stack: '',
+              location: jobCard.location || 'Unknown'
+            };
+            const saved = this.saveJob(failedJob);
+            if (saved) {
+              const jobs = this.db.getAllJobs();
+              const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
+              if (savedJob) {
+                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot - Content failed to load');
+                console.log(`${this.platform}: 💾 Saved failed job to database (Content timeout): ${jobUrl}`);
+              }
+            }
+          } catch (saveErr) {
+            console.log(`${this.platform}: ⚠️ Could not save failed job: ${saveErr.message}`);
+          }
           
             // Close tab and mark as applied
             try {
