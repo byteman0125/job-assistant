@@ -1579,6 +1579,33 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: ✅ Final job URL: ${finalJobUrl}`);
         }
         
+        // Save job IMMEDIATELY with basic info before analysis
+        let savedJobId = null;
+        try {
+          const isValidUrl = finalJobUrl && !finalJobUrl.includes('chrome-error://') && !finalJobUrl.includes('about:blank');
+          const earlyJob = {
+            company: jobCard.company,
+            title: jobCard.title,
+            url: isValidUrl ? finalJobUrl : this.baseUrl,
+            is_remote: false,
+            is_startup: false,
+            salary: jobCard.salaryFromCard || 'Unknown',
+            tech_stack: '',
+            location: jobCard.location || 'Unknown'
+          };
+          const saved = this.saveJob(earlyJob);
+          if (saved) {
+            const jobs = this.db.getAllJobs();
+            const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
+            if (savedJob) {
+              savedJobId = savedJob.id;
+              console.log(`${this.platform}: 💾 Saved job to database (ID: ${savedJobId}): ${finalJobUrl}`);
+            }
+          }
+        } catch (saveErr) {
+          console.log(`${this.platform}: ⚠️ Could not save job early: ${saveErr.message}`);
+        }
+        
         // CRITICAL: Wait for page content to fully load (not just DOM)
         console.log(`${this.platform}: Waiting for content to fully render...`);
         
@@ -1622,31 +1649,14 @@ class JobrightScraper extends BaseScraper {
         if (!contentLoaded) {
           console.log(`${this.platform}: ❌ Content didn't load after 20s - SKIPPING (stuck on Cloudflare)`);
           
-          // Save job to database with the URL and failure reason
-          try {
-            const jobUrl = newPage ? newPage.url() : this.baseUrl;
-            const isValidUrl = jobUrl && !jobUrl.includes('chrome-error://') && !jobUrl.includes('about:blank');
-            const failedJob = {
-              company: jobCard.company,
-              title: jobCard.title,
-              url: isValidUrl ? jobUrl : this.baseUrl,
-              is_remote: false,
-              is_startup: false,
-              salary: jobCard.salaryFromCard || 'Unknown',
-              tech_stack: '',
-              location: jobCard.location || 'Unknown'
-            };
-            const saved = this.saveJob(failedJob);
-            if (saved) {
-              const jobs = this.db.getAllJobs();
-              const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
-              if (savedJob) {
-                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot - Content failed to load');
-                console.log(`${this.platform}: 💾 Saved failed job to database (Content timeout): ${jobUrl}`);
-              }
+          // Mark the already-saved job as applied by Bot
+          if (savedJobId) {
+            try {
+              this.db.updateJobAppliedStatus(savedJobId, true, 'Bot - Content failed to load');
+              console.log(`${this.platform}: 🏷️ Marked job as applied (Content timeout)`);
+            } catch (err) {
+              console.log(`${this.platform}: ⚠️ Could not mark job: ${err.message}`);
             }
-          } catch (saveErr) {
-            console.log(`${this.platform}: ⚠️ Could not save failed job: ${saveErr.message}`);
           }
           
             // Close tab and mark as applied
@@ -2194,31 +2204,23 @@ class JobrightScraper extends BaseScraper {
             // Send skip notification to UI
             this.sendSkipNotification(jobCard, `GPT Analysis: ${skipReason}`);
             
-            // Save job to database as "applied by Bot"
-            try {
-              const skippedJob = {
-                company: jobCard.company,
-                title: jobCard.title,
-                url: finalJobUrl,
-                is_remote: gptResult.isRemote,
-                is_startup: gptResult.isStartup,
-                salary: `Skipped: ${skipReason}`,
-                tech_stack: gptResult.techStack,
-                location: gptResult.location
-              };
-              
-              const saved = this.saveJob(skippedJob);
-              if (saved) {
-                // Mark as applied by Bot
-                const jobs = this.db.getAllJobs();
-                const savedJob = jobs.find(j => j.url === finalJobUrl);
-                if (savedJob) {
-                  this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
-                  console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (Reason: ${skipReason})`);
-                }
+            // Update job with AI details and mark as applied by Bot
+            if (savedJobId) {
+              try {
+                this.db.updateJobDetails(savedJobId, {
+                  is_remote: gptResult.isRemote,
+                  is_startup: gptResult.isStartup,
+                  salary: `Skipped: ${skipReason}`,
+                  tech_stack: gptResult.techStack,
+                  location: gptResult.location,
+                  job_type: gptResult.jobType,
+                  industry: gptResult.industry
+                });
+                this.db.updateJobAppliedStatus(savedJobId, true, 'Bot');
+                console.log(`${this.platform}: 💾 Updated job and marked as applied by Bot (Reason: ${skipReason})`);
+              } catch (err) {
+                console.log(`${this.platform}: ⚠️ Error updating skipped job: ${err.message}`);
               }
-            } catch (saveErr) {
-              console.log(`${this.platform}: ⚠️ Error saving skipped job: ${saveErr.message}`);
             }
             
             // Close the job tab first
@@ -2308,24 +2310,45 @@ class JobrightScraper extends BaseScraper {
               console.log(`${this.platform}: 📝 Using job card title: "${finalTitle}"`);
             }
             
-            // Save job - Use Ollama AI data when available, fall back to card data
-            const saved = this.saveJob({
-              company: finalCompany,
-              title: finalTitle,
-              url: finalJobUrl,
-              is_remote: gptResult.isRemote,
-              is_startup: gptResult.isStartup,
-              location: gptResult.location || 'United States',
-              salary: gptResult.salary,
-              tech_stack: gptResult.techStack,
-              job_type: gptResult.jobType,
-              industry: gptResult.industry
-            });
+            // Update job with AI-extracted details if already saved, otherwise save new
+            let saved = false;
+            if (savedJobId) {
+              // Update existing job with AI details
+              const updated = this.db.updateJobDetails(savedJobId, {
+                is_remote: gptResult.isRemote,
+                is_startup: gptResult.isStartup,
+                location: gptResult.location || 'United States',
+                salary: gptResult.salary,
+                tech_stack: gptResult.techStack,
+                job_type: gptResult.jobType,
+                industry: gptResult.industry
+              });
+              if (updated) {
+                saved = true;
+                newJobsCount++;
+                console.log(`${this.platform}: ✅ Updated job with AI details - ${finalCompany} - ${finalTitle}`);
+              }
+            } else {
+              // Save as new job (fallback if early save failed)
+              saved = this.saveJob({
+                company: finalCompany,
+                title: finalTitle,
+                url: finalJobUrl,
+                is_remote: gptResult.isRemote,
+                is_startup: gptResult.isStartup,
+                location: gptResult.location || 'United States',
+                salary: gptResult.salary,
+                tech_stack: gptResult.techStack,
+                job_type: gptResult.jobType,
+                industry: gptResult.industry
+              });
+              if (saved) {
+                newJobsCount++;
+                console.log(`${this.platform}: ✅ Saved job - ${finalCompany} - ${finalTitle}`);
+              }
+            }
 
             if (saved) {
-              newJobsCount++;
-              console.log(`${this.platform}: ✅ Saved job - ${finalCompany} - ${finalTitle}`);
-              
               // Send toast notification and update job count
               const path = require('path');
               const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
