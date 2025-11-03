@@ -4,9 +4,9 @@
   "description": "Automated Job Search Application for Remote Positions",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "set NODE_OPTIONS=--no-deprecation && electron . --no-cache",
-    "start-auto": "set NODE_OPTIONS=--no-deprecation && electron . --no-cache",
-    "start-manual": "concurrently \"ollama serve\" \"npm run start-auto\" --names \"Ollama,App\" --prefix-colors \"blue,green\"",
+    "start": "cross-env NODE_OPTIONS=--no-deprecation electron . --no-cache",
+    "start-auto": "cross-env NODE_OPTIONS=--no-deprecation electron . --no-cache",
+    "start-manual": "npm run start-auto",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
@@ -22,6 +22,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
     "electron-rebuild": "^3.2.9"
