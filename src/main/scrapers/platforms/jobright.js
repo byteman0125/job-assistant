@@ -3,8 +3,8 @@ const path = require('path');
 const { BrowserWindow } = require('electron');
 
 class JobrightScraper extends BaseScraper {
-  constructor(database, gptExtractor) {
-    super(database, 'Jobright', gptExtractor);
+  constructor(database) {
+    super(database, 'Jobright');
     this.baseUrl = 'https://jobright.ai/jobs/recommend';
     this.currentSalarySettings = null; // Cache salary settings per batch
   }
@@ -534,49 +534,6 @@ class JobrightScraper extends BaseScraper {
       
       console.log(`${this.platform}: Navigating to ${this.baseUrl}`);
       await this.navigateToUrl(this.baseUrl);
-      // If rate limited or login required, rotate cookie set (if available)
-      try {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const limited = await this.page.evaluate(() => {
-            const text = document.body.innerText || '';
-            const signals = [
-              'too many requests',
-              'rate limit',
-              'verify you are human',
-              'captcha',
-              'access denied',
-              'sign in',
-              'log in'
-            ];
-            return signals.some(s => text.toLowerCase().includes(s));
-          });
-          if (!limited) break;
-          console.log(`${this.platform}: ⚠️ Detected limitation/login page. Rotating cookie set...`);
-          const nextSet = this.db.rotateCookieSet(this.platform);
-          if (!nextSet) { console.log(`${this.platform}: ❌ No alternate cookie sets available`); break; }
-          // Clear existing cookies for domain and apply new set
-          try {
-            const client = await this.page.target().createCDPSession();
-            await client.send('Network.clearBrowserCookies');
-          } catch (_) {}
-          const cookies = nextSet.cookies || [];
-          if (cookies.length > 0) {
-            await this.page.setCookie(...cookies.map(c => ({
-              name: c.name,
-              value: c.value,
-              domain: c.domain || this.getBaseDomain(),
-              path: c.path || '/',
-              httpOnly: c.httpOnly || false,
-              secure: c.secure !== false,
-              expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
-            })));
-          }
-          console.log(`${this.platform}: 🔄 Reloading with rotated cookies...`);
-          await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        }
-      } catch (e) {
-        console.log(`${this.platform}: ⚠️ Cookie rotation check failed: ${e.message}`);
-      }
       console.log(`${this.platform}: ⏳ Waiting 1.5-2s for page to load...`);
       await this.randomDelay(1500, 2000);
 
@@ -649,7 +606,7 @@ class JobrightScraper extends BaseScraper {
             const buttonText = applyBtn ? applyBtn.textContent.trim().toUpperCase() : '';
             const isDirectApply = buttonText.includes('DIRECT') || buttonText.includes('EASY');
             
-            // Extract metadata: location, salary, and work type (Remote/Hybrid/Onsite)
+            // Extract metadata: location and salary
             // Try multiple selectors for metadata items
             let metadataItems = card.querySelectorAll('.index_job-metadata-item__ThMv4');
             if (metadataItems.length === 0) {
@@ -661,34 +618,16 @@ class JobrightScraper extends BaseScraper {
             
             let jobLocation = 'Unknown';
             let salaryText = null;
-            // Removed work location type parsing per requirement
             
             // Loop through metadata items to identify each by icon or content
             metadataItems.forEach((item) => {
               const img = item.querySelector('img');
               const iconAlt = img ? img.getAttribute('alt') : '';
               
-              // Check for Remote/Hybrid/Onsite by keyword-highlight (it's inside keyword-highlight-container)
-              const highlightEl = item.querySelector('.keyword-highlight');
-              if (highlightEl) {
-                const workTypeText = highlightEl.textContent.trim().toUpperCase();
-                if (workTypeText === 'REMOTE' || workTypeText === 'HYBRID' || workTypeText === 'ONSITE') {
-                  // skip: work location parsing not needed
-                  return; // Found work type, skip other checks for this item
-                }
-              }
-              
               // Get text from span (handle nested spans)
               const span = item.querySelector('span');
               if (!span) return;
               const text = span.textContent.trim();
-              
-              // Skip if this looks like work type but we didn't get highlight element
-              if (text.toUpperCase().includes('REMOTE') || text.toUpperCase().includes('HYBRID') || text.toUpperCase().includes('ONSITE')) {
-                // Extract work type from text as fallback
-                // skip: work location parsing not needed
-                return;
-              }
               
               // Location: has 'position' icon
               if (iconAlt === 'position' || iconAlt === 'location') {
@@ -708,8 +647,6 @@ class JobrightScraper extends BaseScraper {
               }
             });
             
-            // skip: work location flags not needed
-            
             return {
               index: index,
               title: titleEl ? titleEl.textContent.trim() : null,
@@ -718,7 +655,6 @@ class JobrightScraper extends BaseScraper {
               hasApplyButton: !!applyBtn,
               buttonText: buttonText,
               isDirectApply: isDirectApply,
-              // work location fields removed
               location: jobLocation,
               salaryFromCard: salaryText
             };
@@ -732,88 +668,19 @@ class JobrightScraper extends BaseScraper {
         console.log(`${this.platform}: ⚠️ No job cards found (attempt ${consecutiveEmptyCount}/5)`);
         
         if (consecutiveEmptyCount >= 5) {
-          // Before stopping, rotate through all available cookie sets to try recovering
-          try {
-            const sets = this.db.getCookieSets(this.platform) || [];
-            if (sets.length > 1) {
-              console.log(`${this.platform}: 🔄 No cards after 5 tries. Trying cookie set rotation across ${sets.length} set(s)...`);
-              let recovered = false;
-              for (let i = 0; i < sets.length; i++) {
-                const next = this.db.rotateCookieSet(this.platform);
-                if (!next) break;
-                // Clear cookies and apply new set
-                try {
-                  const client = await this.page.target().createCDPSession();
-                  await client.send('Network.clearBrowserCookies');
-                } catch (_) {}
-                // Clear persistent data and apply cookies
-                const origin = 'https://jobright.ai';
-                try { await client.send('Network.clearBrowserCache'); } catch (_) {}
-                try { await client.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' }); } catch (_) {}
-                try {
-                  await this.page.evaluate(async () => {
-                    try { localStorage.clear(); } catch (e) {}
-                    try { sessionStorage.clear(); } catch (e) {}
-                    try {
-                      const regs = await navigator.serviceWorker?.getRegistrations?.();
-                      if (Array.isArray(regs)) { for (const r of regs) { try { await r.unregister(); } catch (e) {} } }
-                    } catch (e) {}
-                    try {
-                      const keys = await caches?.keys?.();
-                      if (Array.isArray(keys)) { for (const k of keys) { try { await caches.delete(k); } catch (e) {} } }
-                    } catch (e) {}
-                  });
-                } catch (_) {}
-                const cookies = next.cookies || [];
-                if (cookies.length > 0) {
-                  await this.page.setCookie(...cookies.map(c => ({
-                    name: c.name,
-                    value: c.value,
-                    domain: c.domain || this.getBaseDomain(),
-                    path: c.path || '/',
-                    httpOnly: c.httpOnly || false,
-                    secure: c.secure !== false,
-                    expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
-                  })));
-                }
-                // Disable cache for next navigation and reload
-                try { await this.page.setCacheEnabled(false); } catch (_) {}
-                console.log(`${this.platform}: 🔁 Reloading page with rotated cookies (attempt ${i + 1}/${sets.length})...`);
-                await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-                try { await this.page.setCacheEnabled(true); } catch (_) {}
-                await this.randomDelay(1500, 2000);
-                // Quick check for cards
-                const cardCount = await this.page.evaluate(() => {
-                  const list = document.querySelector('.ant-list-items');
-                  const cards = list ? list.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC') : document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-                  return cards ? cards.length : 0;
-                });
-                console.log(`${this.platform}: 🔎 Cards after rotation: ${cardCount}`);
-                if (cardCount > 0) {
-                  consecutiveEmptyCount = 0;
-                  recovered = true;
-                  break;
-                }
-              }
-              if (recovered) {
-                continue; // Resume main loop with new cookies
-              }
-            }
-          } catch (e) {
-            console.log(`${this.platform}: ⚠️ Rotation attempt failed: ${e.message}`);
-          }
-
-          console.log(`${this.platform}: ❌ No cards found after rotation attempts - stopping`);
-          // Send warning to UI
+          console.log(`${this.platform}: ❌ No cards found after 5 attempts - stopping`);
+          
+          // Send warning to UI  
           const path = require('path');
           const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
           const mainWindow = getMainWindow();
           if (mainWindow) {
             mainWindow.webContents.send('scraper-warning', {
               platform: this.platform,
-              message: 'No job cards found. Tried rotating cookie sets; please update cookies.'
+              message: 'No job cards found. Please save Jobright cookies and login.'
             });
           }
+          
           await this.closeBrowser();
           this.isRunning = false;
           return newJobsCount;
@@ -856,74 +723,9 @@ class JobrightScraper extends BaseScraper {
         
         // Stop if we've seen 10 consecutive old jobs
         if (consecutiveOldJobs >= 10) {
-          // Before exiting, rotate cookie sets to see if another account has fresh feed
-          let rotatedFound = false;
-          try {
-            const sets = this.db.getCookieSets(this.platform) || [];
-            if (sets.length > 1) {
-              console.log(`${this.platform}: 🔄 10 old jobs in a row. Rotating cookie sets across ${sets.length} set(s)...`);
-              for (let i = 0; i < sets.length; i++) {
-                const next = this.db.rotateCookieSet(this.platform);
-                if (!next) break;
-                try {
-                  const client = await this.page.target().createCDPSession();
-                  await client.send('Network.clearBrowserCookies');
-                } catch (_) {}
-                const origin2 = 'https://jobright.ai';
-                try { await client.send('Network.clearBrowserCache'); } catch (_) {}
-                try { await client.send('Storage.clearDataForOrigin', { origin: origin2, storageTypes: 'all' }); } catch (_) {}
-                try {
-                  await this.page.evaluate(async () => {
-                    try { localStorage.clear(); } catch (e) {}
-                    try { sessionStorage.clear(); } catch (e) {}
-                    try {
-                      const regs = await navigator.serviceWorker?.getRegistrations?.();
-                      if (Array.isArray(regs)) { for (const r of regs) { try { await r.unregister(); } catch (e) {} } }
-                    } catch (e) {}
-                    try {
-                      const keys = await caches?.keys?.();
-                      if (Array.isArray(keys)) { for (const k of keys) { try { await caches.delete(k); } catch (e) {} } }
-                    } catch (e) {}
-                  });
-                } catch (_) {}
-                const cookies = next.cookies || [];
-                if (cookies.length > 0) {
-                  await this.page.setCookie(...cookies.map(c => ({
-                    name: c.name,
-                    value: c.value,
-                    domain: c.domain || this.getBaseDomain(),
-                    path: c.path || '/',
-                    httpOnly: c.httpOnly || false,
-                    secure: c.secure !== false,
-                    expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
-                  })));
-                }
-                try { await this.page.setCacheEnabled(false); } catch (_) {}
-                console.log(`${this.platform}: 🔁 Reloading page with rotated cookies (attempt ${i + 1}/${sets.length})...`);
-                await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-                try { await this.page.setCacheEnabled(true); } catch (_) {}
-                await this.randomDelay(1500, 2000);
-                // Quick probe for a fresh-looking first card
-                const hasAnyCard = await this.page.evaluate(() => {
-                  const list = document.querySelector('.ant-list-items');
-                  const cards = list ? list.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC') : document.querySelectorAll('.job-card-flag-classname.index_job-card__AsPKC');
-                  return (cards && cards.length > 0);
-                });
-                if (hasAnyCard) {
-                  consecutiveOldJobs = 0;
-                  rotatedFound = true;
-                  break;
-                }
-              }
-            }
-          } catch (e) {
-            console.log(`${this.platform}: ⚠️ Rotation attempt failed: ${e.message}`);
-          }
-          if (rotatedFound) {
-            continue; // Resume with reset counters on new cookie set
-          }
           console.log(`\n${this.platform}: ═══════════════════════════════════════════`);
-          console.log(`${this.platform}: 🛑 STOPPING - Found 10 consecutive old jobs (after rotation attempts)`);
+          console.log(`${this.platform}: 🛑 STOPPING - Found 10 consecutive old jobs`);
+          console.log(`${this.platform}: All remaining jobs are likely older than 7 days`);
           console.log(`${this.platform}: ═══════════════════════════════════════════\n`);
           break; // Exit the while loop
         }
@@ -970,11 +772,6 @@ class JobrightScraper extends BaseScraper {
         await this.randomDelay(1000, 1500);
         continue; // Get next card from refreshed list
       }
-      
-      // CHECK: Work location type - Only process REMOTE jobs
-      // skip: no work location logging
-
-      // skip: no work location checks
       
       // CHECK: Job location - Must be USA
       console.log(`${this.platform}: 📍 Job Location: ${jobCard.location}`);
@@ -1155,64 +952,39 @@ class JobrightScraper extends BaseScraper {
           // Set up promise to wait for new tab with countdown
           const newTabPromise = new Promise((resolve) => {
             let tabOpened = false;
-            let resolved = false;
             
-            const targetHandler = async (target) => {
-              // Ignore if already resolved
-              if (resolved) return;
-              
+            this.browser.once('targetcreated', async (target) => {
               try {
                 if (target.type() === 'page') {
+                  tabOpened = true;
                   console.log(`${this.platform}: 🆕 New tab detected, getting page object...`);
                   const newPage = await target.page();
+                  console.log(`${this.platform}: ✅ Page object obtained successfully`);
                   
-                  // Validate URL - ignore chrome-error, about:blank, empty
-                  const pageUrl = newPage.url();
-                  const isValidUrl = pageUrl && 
-                                     !pageUrl.includes('chrome-error://') && 
-                                     !pageUrl.includes('about:blank') &&
-                                     pageUrl !== '' &&
-                                     (pageUrl.startsWith('http://') || pageUrl.startsWith('https://'));
-                  
-                  if (!isValidUrl) {
-                    console.log(`${this.platform}: ⚠️ Ignoring invalid target URL: ${pageUrl}`);
-                    return;
-                  }
-                  
-                  // Valid page found
-                  tabOpened = true;
-                  resolved = true;
-                  console.log(`${this.platform}: ✅ Valid page obtained successfully`);
-                  console.log(`${this.platform}: 📺 INSTANT MIRROR: ${pageUrl}`);
-                  this.mirrorToWebview(pageUrl);
-                  
-                  // Cleanup listener
-                  this.browser.removeListener('targetcreated', targetHandler);
+                  // IMMEDIATELY show the page to user
+                  const quickUrl = newPage.url();
+                  console.log(`${this.platform}: 📺 INSTANT MIRROR: ${quickUrl}`);
+                  this.mirrorToWebview(quickUrl);
                   
                   resolve(newPage);
                 }
               } catch (err) {
-                console.log(`${this.platform}: ⚠️ Error getting page: ${err.message}`);
+                console.log(`${this.platform}: ❌ Error getting page: ${err.message}`);
+                resolve(null);
               }
-            };
-            
-            this.browser.on('targetcreated', targetHandler);
+            });
             
             // Countdown with status updates and isRunning checks
             const countdownInterval = setInterval(() => {
               if (!this.isRunning) {
                 clearInterval(countdownInterval);
-                this.browser.removeListener('targetcreated', targetHandler);
                 console.log(`${this.platform}: 🛑 Stopped by user during wait`);
-                if (!resolved) {
-                  resolved = true;
-                  resolve(null);
-                }
+                resolve(null);
               }
             }, 500);
             
             // Show countdown every 2 seconds
-            let timeLeft = 12;
+            let timeLeft = 8;
             const countdownDisplay = setInterval(() => {
               if (tabOpened) {
                 clearInterval(countdownDisplay);
@@ -1223,19 +995,15 @@ class JobrightScraper extends BaseScraper {
               }
             }, 2000);
             
-            // Timeout after 12 seconds (increased from 8s for slower sites)
+            // Timeout after 8 seconds (reduced from 20s)
             setTimeout(() => {
               clearInterval(countdownDisplay);
               clearInterval(countdownInterval);
-              this.browser.removeListener('targetcreated', targetHandler);
-              if (!resolved) {
-                resolved = true;
-                if (!tabOpened) {
-                  console.log(`${this.platform}: ⏰ No tab after 12s`);
-                }
+              if (!tabOpened) {
+                console.log(`${this.platform}: ⏰ No tab after 8s`);
                 resolve(null);
               }
-            }, 12000);
+            }, 8000);
           });
         
           // Click the button (try to match by company/title, fallback to first card)
@@ -1332,31 +1100,6 @@ class JobrightScraper extends BaseScraper {
         // If no tab opened after 3 attempts, skip job
         if (!newPage) {
           console.log(`${this.platform}: ❌ Failed to open tab after 3 attempts - skipping job`);
-          
-          // Save job to database with failure reason
-          try {
-            const failedJob = {
-              company: jobCard.company,
-              title: jobCard.title,
-              url: this.baseUrl, // No real URL available
-              is_remote: false,
-              is_startup: false,
-              salary: jobCard.salaryFromCard || 'Unknown',
-              tech_stack: '',
-              location: jobCard.location || 'Unknown'
-            };
-            const saved = this.saveJob(failedJob);
-            if (saved) {
-              const jobs = this.db.getAllJobs();
-              const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
-              if (savedJob) {
-                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot - Tab failed to open');
-                console.log(`${this.platform}: 💾 Saved failed job to database (Tab failed)`);
-              }
-            }
-          } catch (saveErr) {
-            console.log(`${this.platform}: ⚠️ Could not save failed job: ${saveErr.message}`);
-          }
           
           // Mark as "Not Interested" so we don't keep trying
           try {
@@ -1608,33 +1351,6 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: ✅ Final job URL: ${finalJobUrl}`);
         }
         
-        // Save job IMMEDIATELY with basic info before analysis
-        let savedJobId = null;
-        try {
-          const isValidUrl = finalJobUrl && !finalJobUrl.includes('chrome-error://') && !finalJobUrl.includes('about:blank');
-          const earlyJob = {
-            company: jobCard.company,
-            title: jobCard.title,
-            url: isValidUrl ? finalJobUrl : this.baseUrl,
-            is_remote: false,
-            is_startup: false,
-            salary: jobCard.salaryFromCard || 'Unknown',
-            tech_stack: '',
-            location: jobCard.location || 'Unknown'
-          };
-          const saved = this.saveJob(earlyJob);
-          if (saved) {
-            const jobs = this.db.getAllJobs();
-            const savedJob = jobs.find(j => j.company === jobCard.company && j.title === jobCard.title);
-            if (savedJob) {
-              savedJobId = savedJob.id;
-              console.log(`${this.platform}: 💾 Saved job to database (ID: ${savedJobId}): ${finalJobUrl}`);
-            }
-          }
-        } catch (saveErr) {
-          console.log(`${this.platform}: ⚠️ Could not save job early: ${saveErr.message}`);
-        }
-        
         // CRITICAL: Wait for page content to fully load (not just DOM)
         console.log(`${this.platform}: Waiting for content to fully render...`);
         
@@ -1677,16 +1393,6 @@ class JobrightScraper extends BaseScraper {
         
         if (!contentLoaded) {
           console.log(`${this.platform}: ❌ Content didn't load after 20s - SKIPPING (stuck on Cloudflare)`);
-          
-          // Mark the already-saved job as applied by Bot
-          if (savedJobId) {
-            try {
-              this.db.updateJobAppliedStatus(savedJobId, true, 'Bot - Content failed to load');
-              console.log(`${this.platform}: 🏷️ Marked job as applied (Content timeout)`);
-            } catch (err) {
-              console.log(`${this.platform}: ⚠️ Could not mark job: ${err.message}`);
-            }
-          }
           
             // Close tab and mark as applied
             try {
@@ -2041,98 +1747,20 @@ class JobrightScraper extends BaseScraper {
         }
         
         // Step 4: Send to Ollama AI for analysis
-        this.updateStatus(`[4/5] 🤖 Analyzing with Ollama AI...`, `Processed: ${totalProcessedCount}`);
-        console.log(`${this.platform}: 📤 Sending to Ollama AI for COMBINED analysis...`);
+        this.updateStatus(`[4/5] 📄 Extracting job data...`, `Processed: ${totalProcessedCount}`);
+        console.log(`${this.platform}: 📄 Using basic extraction (no AI)...`);
         
-        let gptResult = null;
+        // Simple pattern matching for remote detection
+        const pageText = quickContent.bodyText.toLowerCase();
+        const isRemote = pageText.includes('remote') || pageText.includes('work from home');
+        const isHybrid = pageText.includes('hybrid');
+        const isOnsite = pageText.includes('onsite') || pageText.includes('on-site') || pageText.includes('in-office');
         
-        if (this.gptExtractor) {
-          try {
-            gptResult = await this.gptExtractor.extractJobData(
-              quickContent,
-              this.platform,
-              finalJobUrl
-            );
-            
-            if (gptResult) {
-              console.log(`${this.platform}: ✅ Ollama AI analysis complete`);
-            } else {
-              console.log(`${this.platform}: ⚠️ Ollama AI extraction returned null - Using fallback data`);
-            }
-            
-            // Check if scraper was stopped during AI analysis
-            if (!this.isRunning) {
-              console.log(`${this.platform}: 🛑 Scraper stopped by user during analysis`);
-              
-              // Clean up tab
-              try {
-                await newPage.close();
-                console.log(`${this.platform}: ✅ Tab closed`);
-              } catch (closeErr) {
-                console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
-              }
-              
-              // Memory cleanup - close ALL extra pages
-              const pages = await this.browser.pages();
-              if (pages.length > 1) {
-                for (let i = 1; i < pages.length; i++) {
-                  try { await pages[i].close(); } catch (err) {}
-                }
-              }
-              
-              break;
-            }
-          } catch (gptError) {
-            console.log(`${this.platform}: ⚠️ Ollama AI error: ${gptError.message}`);
-          }
-        }
-        
-        // Fallback if Ollama AI fails or doesn't provide company/title
-        if (!gptResult) {
-          console.log(`${this.platform}: Using basic extraction - no AI result`);
-          gptResult = {
-            isVerificationPage: false,
-            isExpired: false,
-            company: jobCard.company,
-            title: jobCard.title,
-            isRemote: true,
-            isOnsite: false,
-            isHybrid: false,
-            isStartup: false,
-            location: 'United States',
-            salary: null,
-            techStack: null
-          };
-        } else {
-          // AI result exists - check if company and title are valid
-          // If AI didn't extract valid company/title, fallback to job card data
-          const aiCompanyValid = gptResult.company && 
-                                 gptResult.company.trim() !== '' && 
-                                 gptResult.company.toLowerCase() !== 'unknown';
-          const aiTitleValid = gptResult.title && 
-                               gptResult.title.trim() !== '' && 
-                               gptResult.title.toLowerCase() !== 'unknown';
+        // Check if scraper was stopped
+        if (!this.isRunning) {
+          console.log(`${this.platform}: 🛑 Scraper stopped by user`);
           
-          if (!aiCompanyValid || !aiTitleValid) {
-            console.log(`${this.platform}: AI result incomplete - using job card for missing data`);
-            if (!aiCompanyValid) {
-              gptResult.company = jobCard.company;
-              console.log(`${this.platform}: Using job card company: ${jobCard.company}`);
-            }
-            if (!aiTitleValid) {
-              gptResult.title = jobCard.title;
-              console.log(`${this.platform}: Using job card title: ${jobCard.title}`);
-            }
-          } else {
-            console.log(`${this.platform}: Using AI-extracted company: "${gptResult.company}" and title: "${gptResult.title}"`);
-          }
-        }
-
-        // CHECK: Is this a verification page?
-        if (gptResult.isVerificationPage) {
-          console.log(`${this.platform}: ❌ Ollama AI confirmed: Verification page - SKIPPING`);
-          
-          // Close tab and go back
+          // Clean up tab
           try {
             await newPage.close();
             console.log(`${this.platform}: ✅ Tab closed`);
@@ -2140,146 +1768,108 @@ class JobrightScraper extends BaseScraper {
             console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
           }
           
-          // Navigate back and continue
-          try {
-            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
-            console.log(`${this.platform}: ✅ Back on job list`);
-          } catch (navErr) {
-            console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
+          // Memory cleanup - close ALL extra pages
+          const pages = await this.browser.pages();
+          if (pages.length > 1) {
+            for (let i = 1; i < pages.length; i++) {
+              try { await pages[i].close(); } catch (err) {}
+            }
           }
           
-          continue; // Skip to next job
+          break;
         }
         
-        // CHECK: Is this an EXPIRED or NO LONGER AVAILABLE page?
-        if (gptResult.isExpired) {
-          console.log(`${this.platform}: ⏰ Ollama AI confirmed: Job posting is EXPIRED or NO LONGER AVAILABLE - SKIPPING`);
+        // Use job card data (no AI extraction needed)
+        const jobData = {
+          company: jobCard.company,
+          title: jobCard.title,
+          isRemote: isRemote,
+          isOnsite: isOnsite,
+          isHybrid: isHybrid,
+          location: jobCard.location || 'United States',
+          salary: jobCard.salaryFromCard,
+          techStack: null
+        };
+        
+        console.log(`${this.platform}: ✅ Basic extraction complete`);
+        console.log(`${this.platform}: 📍 Work type: ${isRemote ? 'Remote' : isHybrid ? 'Hybrid' : isOnsite ? 'Onsite' : 'Unknown'}`);
+        
+        // Check if job should be filtered out
+        let shouldSkip = false;
+        let skipReason = '';
+        
+        if (isHybrid) {
+          console.log(`${this.platform}: ⚠️ Skipping - Job is hybrid`);
+          shouldSkip = true;
+          skipReason = 'Hybrid';
+        } else if (isOnsite && !isRemote) {
+          console.log(`${this.platform}: ⚠️ Skipping - Job is onsite`);
+          shouldSkip = true;
+          skipReason = 'Onsite';
+        }
+        
+        if (shouldSkip) {
+          // FAST METHOD: Click "Not Interested" button to remove card
+          console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
           
-          // Send skip notification
-          this.sendSkipNotification(jobCard, 'Expired/No Longer Available');
+          // Send skip notification to UI
+          this.sendSkipNotification(jobCard, `Filtered: ${skipReason}`);
           
-          // Close tab
+          // Save job to database as "applied by Bot"
+          try {
+            const skippedJob = {
+              company: jobData.company,
+              title: jobData.title,
+              url: finalJobUrl,
+              is_remote: isRemote,
+              is_startup: false,
+              salary: `Skipped: ${skipReason}`,
+              tech_stack: null,
+              location: jobData.location
+            };
+            
+            const saved = this.saveJob(skippedJob);
+            if (saved) {
+              // Mark as applied by Bot
+              const jobs = this.db.getAllJobs();
+              const savedJob = jobs.find(j => j.url === finalJobUrl);
+              if (savedJob) {
+                this.db.updateJobAppliedStatus(savedJob.id, true, 'Bot');
+                console.log(`${this.platform}: 💾 Saved and marked as applied by Bot (Reason: ${skipReason})`);
+              }
+            }
+          } catch (saveErr) {
+            console.log(`${this.platform}: ⚠️ Error saving skipped job: ${saveErr.message}`);
+          }
+          
+          // Close the job tab first
           try {
             await newPage.close();
             console.log(`${this.platform}: ✅ Tab closed`);
           } catch (closeErr) {
             console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
           }
+          
+          // Memory cleanup
+          const pages = await this.browser.pages();
+          if (pages.length > 1) {
+            for (let i = 1; i < pages.length; i++) {
+              try { await pages[i].close(); } catch (err) {}
+            }
+          }
+          this.page = pages[0];
+          
+          // INSTANT MIRROR: Show Jobright.ai immediately
+          this.mirrorToWebview(this.baseUrl);
           
           // Navigate back to job list
-          try {
-            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
-            console.log(`${this.platform}: ✅ Back on job list`);
-          } catch (navErr) {
-            console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
-          }
+          await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          console.log(`${this.platform}: ✅ Back on job list`);
           
-          // Refresh page to reload cards
-          console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-          try {
-            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-          } catch (reloadErr) {
-            console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
-          }
-          await this.randomDelay(1000, 1500);
-          
-          continue;
-        }
-        
-        console.log(`${this.platform}: ✅ Real job page confirmed`);
-
-        if (gptResult) {
-          // Check if job should be filtered out
-          let shouldSkip = false;
-          
-          if (gptResult.isSoftwareJob === false) {
-            console.log(`${this.platform}: ⚠️ Skipping - Not a software/tech job`);
-            shouldSkip = true;
-          } else if (gptResult.isOnsite || gptResult.isHybrid) {
-            console.log(`${this.platform}: ⚠️ Skipping - Job is onsite/hybrid`);
-            shouldSkip = true;
-          } else if (gptResult.platform && ['indeed', 'linkedin', 'dice'].includes(gptResult.platform.toLowerCase())) {
-            console.log(`${this.platform}: ⚠️ Skipping - Job is from ${gptResult.platform} (blocked platform)`);
-            shouldSkip = true;
-          } else {
-            // Check salary requirements (using cached settings from batch start)
-            const salaryComparator = require(path.join(__dirname, '../../utils/salaryComparator'));
-            const salaryCheck = salaryComparator.compareToMinimum(gptResult.salary, this.currentSalarySettings);
-            console.log(`${this.platform}: 💰 Salary check: ${salaryCheck.reason}`);
-            
-            if (!salaryCheck.meetsRequirement) {
-              console.log(`${this.platform}: ⚠️ Skipping - Salary below minimum requirement`);
-              shouldSkip = true;
-            }
-          }
-          
-          if (shouldSkip) {
-            // FAST METHOD: Click "Not Interested" button to remove card
-            console.log(`${this.platform}: 🚀 Using FAST method - clicking "Not Interested" button`);
-            
-            // Determine skip reason
-            let skipReason = 'Filtered';
-            if (gptResult.isSoftwareJob === false) {
-              skipReason = 'Not software/tech job';
-            } else if (gptResult.isOnsite || gptResult.isHybrid) {
-              skipReason = gptResult.isOnsite ? 'Onsite' : 'Hybrid';
-            } else if (gptResult.platform && ['indeed', 'linkedin', 'dice'].includes(gptResult.platform.toLowerCase())) {
-              skipReason = `Blocked: ${gptResult.platform}`;
-            } else {
-              // Must be salary-based skip
-              skipReason = 'Salary below minimum';
-            }
-            
-            // Send skip notification to UI
-            this.sendSkipNotification(jobCard, `GPT Analysis: ${skipReason}`);
-            
-            // Update job with AI details and mark as applied by Bot
-            if (savedJobId) {
-              try {
-                this.db.updateJobDetails(savedJobId, {
-                  is_remote: gptResult.isRemote,
-                  is_startup: gptResult.isStartup,
-                  salary: `Skipped: ${skipReason}`,
-                  tech_stack: gptResult.techStack,
-                  location: gptResult.location,
-                  job_type: gptResult.jobType,
-                  industry: gptResult.industry
-                });
-                this.db.updateJobAppliedStatus(savedJobId, true, 'Bot');
-                console.log(`${this.platform}: 💾 Updated job and marked as applied by Bot (Reason: ${skipReason})`);
-              } catch (err) {
-                console.log(`${this.platform}: ⚠️ Error updating skipped job: ${err.message}`);
-              }
-            }
-            
-            // Close the job tab first
-            try {
-              await newPage.close();
-              console.log(`${this.platform}: ✅ Tab closed`);
-            } catch (closeErr) {
-              console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
-            }
-            
-            // Memory cleanup
-            const pages = await this.browser.pages();
-            if (pages.length > 1) {
-              for (let i = 1; i < pages.length; i++) {
-                try { await pages[i].close(); } catch (err) {}
-              }
-            }
-            this.page = pages[0];
-            
-            // INSTANT MIRROR: Show Jobright.ai immediately
-            this.mirrorToWebview(this.baseUrl);
-            
-            // Navigate back to job list
-            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-            console.log(`${this.platform}: ✅ Back on job list`);
-            
-            // REFRESH to ensure cards are loaded
-            console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
-            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-            console.log(`${this.platform}: ✅ Page refreshed`);
+          // REFRESH to ensure cards are loaded
+          console.log(`${this.platform}: 🔄 Refreshing page to load cards...`);
+          await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+          console.log(`${this.platform}: ✅ Page refreshed`);
             
             // Smart wait: Wait for cards to actually appear (up to 10s)
             console.log(`${this.platform}: ⏳ Waiting for cards to appear...`);
@@ -2315,131 +1905,96 @@ class JobrightScraper extends BaseScraper {
             }
             
             continue; // Skip to next job
-          } else {
-            // Step 5: Save job
-            this.updateStatus(`[5/5] 💾 Saving job to database...`, `Processed: ${totalProcessedCount}`);
-            
-            // Use Ollama AI-extracted company/title if available, otherwise fall back to job card
-            const finalCompany = (gptResult.company && gptResult.company !== 'Unknown') 
-              ? gptResult.company 
-              : jobCard.company;
-            const finalTitle = (gptResult.title && gptResult.title !== 'Unknown') 
-              ? gptResult.title 
-              : jobCard.title;
-            
-            // Log which source we're using
-            if (gptResult.company && gptResult.company !== 'Unknown') {
-              console.log(`${this.platform}: 📝 Using Ollama AI-extracted company: "${finalCompany}"`);
-            } else {
-              console.log(`${this.platform}: 📝 Using job card company: "${finalCompany}"`);
-            }
-            if (gptResult.title && gptResult.title !== 'Unknown') {
-              console.log(`${this.platform}: 📝 Using Ollama AI-extracted title: "${finalTitle}"`);
-            } else {
-              console.log(`${this.platform}: 📝 Using job card title: "${finalTitle}"`);
-            }
-            
-            // Update job with AI-extracted details if already saved, otherwise save new
-            let saved = false;
-            if (savedJobId) {
-              // Update existing job with AI details
-              const updated = this.db.updateJobDetails(savedJobId, {
-                is_remote: gptResult.isRemote,
-                is_startup: gptResult.isStartup,
-                location: gptResult.location || 'United States',
-                salary: gptResult.salary,
-                tech_stack: gptResult.techStack,
-                job_type: gptResult.jobType,
-                industry: gptResult.industry
-              });
-              if (updated) {
-                saved = true;
-                newJobsCount++;
-                console.log(`${this.platform}: ✅ Updated job with AI details - ${finalCompany} - ${finalTitle}`);
-              }
-            } else {
-              // Save as new job (fallback if early save failed)
-              saved = this.saveJob({
-                company: finalCompany,
-                title: finalTitle,
-                url: finalJobUrl,
-                is_remote: gptResult.isRemote,
-                is_startup: gptResult.isStartup,
-                location: gptResult.location || 'United States',
-                salary: gptResult.salary,
-                tech_stack: gptResult.techStack,
-                job_type: gptResult.jobType,
-                industry: gptResult.industry
-              });
-              if (saved) {
-                newJobsCount++;
-                console.log(`${this.platform}: ✅ Saved job - ${finalCompany} - ${finalTitle}`);
-              }
-            }
+        }
+        
+        // Step 5: Save job (it passed all filters)
+        this.updateStatus(`[5/5] 💾 Saving job to database...`, `Processed: ${totalProcessedCount}`);
+        
+        // Use job card data (no AI)
+        const finalCompany = jobCard.company;
+        const finalTitle = jobCard.title;
+        
+        console.log(`${this.platform}: 📝 Using job card company: "${finalCompany}"`);
+        console.log(`${this.platform}: 📝 Using job card title: "${finalTitle}"`);
+        
+        // Save job
+        const saved = this.saveJob({
+          company: finalCompany,
+          title: finalTitle,
+          url: finalJobUrl,
+          is_remote: jobData.isRemote,
+          is_startup: false,
+          location: jobData.location,
+          salary: jobData.salary,
+          tech_stack: jobData.techStack,
+          job_type: null,
+          industry: null
+        });
 
-            if (saved) {
-              // Send toast notification and update job count
-              const path = require('path');
-              const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
-              const mainWindow = getMainWindow();
-              if (mainWindow) {
-                mainWindow.webContents.send('new-job-found', {
-                  company: jobCard.company,
-                  title: jobCard.title,
-                  platform: this.platform
-                });
-                
-                // Update today's count
-                const todayJobs = this.db.getJobsToday();
-                mainWindow.webContents.send('update-today-count', todayJobs.length);
-              }
-            } else {
-              console.log(`${this.platform}: ℹ️ DUPLICATE - Already in database: ${jobCard.company} - ${jobCard.title}`);
-            }
+        if (saved) {
+          newJobsCount++;
+          console.log(`${this.platform}: ✅ Saved job - ${finalCompany} - ${finalTitle}`);
+          
+          // Send toast notification and update job count
+          const path = require('path');
+          const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
+          const mainWindow = getMainWindow();
+          if (mainWindow) {
+            mainWindow.webContents.send('new-job-found', {
+              company: jobCard.company,
+              title: jobCard.title,
+              platform: this.platform
+            });
             
-            // Card was already removed at the beginning (quick action)
-            console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
-            
-            // Close the job tab and ensure cleanup
+            // Update today's count
+            const todayJobs = this.db.getJobsToday();
+            mainWindow.webContents.send('update-today-count', todayJobs.length);
+          }
+        } else {
+          console.log(`${this.platform}: ℹ️ DUPLICATE - Already in database: ${jobCard.company} - ${jobCard.title}`);
+        }
+        
+        // Card was already removed at the beginning (quick action)
+        console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
+        
+        // Close the job tab and ensure cleanup
+        try {
+          await newPage.close();
+          console.log(`${this.platform}: ✅ Tab closed successfully`);
+        } catch (closeErr) {
+          console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+        }
+        
+        // Get all pages and close any extra ones (memory cleanup)
+        const pages = await this.browser.pages();
+        console.log(`${this.platform}: 📊 Total open pages: ${pages.length}`);
+        
+        // Close any extra pages (should only have 1 - the main Jobright page)
+        if (pages.length > 1) {
+          for (let i = 1; i < pages.length; i++) {
             try {
-              await newPage.close();
-              console.log(`${this.platform}: ✅ Tab closed successfully`);
-            } catch (closeErr) {
-              console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+              await pages[i].close();
+              console.log(`${this.platform}: 🧹 Closed extra page ${i}`);
+            } catch (err) {
+              // Ignore
             }
-            
-            // Get all pages and close any extra ones (memory cleanup)
-            const pages = await this.browser.pages();
-            console.log(`${this.platform}: 📊 Total open pages: ${pages.length}`);
-            
-            // Close any extra pages (should only have 1 - the main Jobright page)
-            if (pages.length > 1) {
-              for (let i = 1; i < pages.length; i++) {
-                try {
-                  await pages[i].close();
-                  console.log(`${this.platform}: 🧹 Closed extra page ${i}`);
-                } catch (err) {
-                  // Ignore
-                }
-              }
-            }
-            
-            this.page = pages[0];
-            
-            // ⚡ Navigate back to Jobright job list for next iteration
-            try {
-              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
-              console.log(`${this.platform}: ✅ Back on job list`);
-            } catch (navErr) {
-              console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
-            }
-            
-            // INSTANT MIRROR: Show Jobright.ai immediately
-            this.mirrorToWebview(this.baseUrl);
-            
-            continue; // Skip to next job
           }
         }
+        
+        this.page = pages[0];
+        
+        // ⚡ Navigate back to Jobright job list for next iteration
+        try {
+          await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+          console.log(`${this.platform}: ✅ Back on job list`);
+        } catch (navErr) {
+          console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
+        }
+        
+        // INSTANT MIRROR: Show Jobright.ai immediately
+        this.mirrorToWebview(this.baseUrl);
+        
+        continue; // Skip to next job
 
       } catch (processError) {
         console.error(`${this.platform}: ❌ Error processing job:`, processError.message);
@@ -2535,8 +2090,7 @@ class JobrightScraper extends BaseScraper {
     return newJobsCount;
   }
 
-  // Send job content to Ollama AI and extract detailed info (legacy method)
-  // Note: This method appears to be unused - the main extraction now uses gptExtractor.extractJobData()
+  // Legacy method - no longer used (AI extraction removed)
   async sendToGPTAndExtract(jobContent, company, title) {
     try {
       const path = require('path');

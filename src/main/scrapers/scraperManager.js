@@ -16,7 +16,7 @@ class ScraperManager {
     this.actionRecorder = new ActionRecorder();
     
     this.scrapers = [
-      new JobrightScraper(database, this.gptExtractor),  // START WITH JOBRIGHT FIRST!
+      new JobrightScraper(database),  // START WITH JOBRIGHT FIRST! (No AI)
       new HimalayasScraper(database, this.gptExtractor),
       new JobgetherScraper(database, this.gptExtractor),
       new BuiltInScraper(database, this.gptExtractor),
