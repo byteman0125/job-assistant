@@ -1326,6 +1326,44 @@ class JobrightScraper extends BaseScraper {
         // ⚡ FAST PATH: Get URL immediately, don't wait for page load!
         let finalJobUrl = newPage.url();
         
+        // ⚡ VALIDATE: Check if URL is valid (not chrome-error or other invalid URLs)
+        if (!finalJobUrl || 
+            finalJobUrl.startsWith('chrome-error://') || 
+            finalJobUrl.startsWith('about:') ||
+            finalJobUrl.startsWith('data:') ||
+            !finalJobUrl.startsWith('http')) {
+          console.log(`${this.platform}: ❌ INVALID URL detected: ${finalJobUrl}`);
+          console.log(`${this.platform}: ⏭️ SKIPPING - Page failed to load properly`);
+          
+          // Close the tab
+          try {
+            await newPage.close();
+            console.log(`${this.platform}: ✅ Tab closed`);
+          } catch (closeErr) {
+            console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+          }
+          
+          // Memory cleanup
+          const pages = await this.browser.pages();
+          if (pages.length > 1) {
+            for (let i = 1; i < pages.length; i++) {
+              try { await pages[i].close(); } catch (err) {}
+            }
+          }
+          this.page = pages[0];
+          
+          // Navigate back to job list
+          this.mirrorToWebview(this.baseUrl);
+          try {
+            await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+            console.log(`${this.platform}: ✅ Back on job list`);
+          } catch (navErr) {
+            console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
+          }
+          
+          continue; // Skip to next job
+        }
+        
         // Clean URL if needed (remove /apply, /application suffixes)
         if (finalJobUrl.includes('/apply')) {
           finalJobUrl = finalJobUrl.split('/apply')[0] + '/';
