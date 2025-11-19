@@ -6,7 +6,6 @@ class JobrightScraper extends BaseScraper {
   constructor(database) {
     super(database, 'Jobright');
     this.baseUrl = 'https://jobright.ai/jobs/recommend';
-    this.currentSalarySettings = null; // Cache salary settings per batch
   }
   
   getBaseDomain() {
@@ -563,14 +562,6 @@ class JobrightScraper extends BaseScraper {
       let consecutiveOldJobs = 0; // Track consecutive old jobs (stop after 10)
       let scrollAttempts = 0; // Track scroll attempts to trigger periodic scrolling
       
-      // Reload salary settings once at start
-      this.currentSalarySettings = {
-        annual: this.db.getSetting('min_salary_annual'),
-        monthly: this.db.getSetting('min_salary_monthly'),
-        hourly: this.db.getSetting('min_salary_hourly')
-      };
-      console.log(`${this.platform}: 💰 Loaded salary settings: Annual=$${this.currentSalarySettings.annual || 'N/A'}`);
-      
       while (continueScraping && this.isRunning) {
         // Get FIRST job card from the current list (it will change as we process)
         const jobCards = await this.page.evaluate(() => {
@@ -670,7 +661,7 @@ class JobrightScraper extends BaseScraper {
         if (consecutiveEmptyCount >= 5) {
           console.log(`${this.platform}: ❌ No cards found after 5 attempts - stopping`);
           
-          // Send warning to UI  
+          // Send warning to UI
           const path = require('path');
           const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
           const mainWindow = getMainWindow();
@@ -804,43 +795,6 @@ class JobrightScraper extends BaseScraper {
       }
       
       console.log(`${this.platform}: ✅ USA location confirmed - Will process this job`);
-      
-      // CHECK: Primary salary check from job card (if available)
-      if (jobCard.salaryFromCard) {
-        console.log(`${this.platform}: 💰 Salary from card: ${jobCard.salaryFromCard}`);
-        
-        const salaryCheckResult = this.checkSalaryFromCard(jobCard.salaryFromCard);
-        
-        if (!salaryCheckResult.meetsRequirement) {
-          console.log(`${this.platform}: 🚫 SKIPPING - Salary too low: ${jobCard.salaryFromCard}`);
-          console.log(`${this.platform}: ${salaryCheckResult.reason}`);
-          console.log(`${this.platform}: Job: "${jobCard.title}" at ${jobCard.company}`);
-          
-          this.sendSkipNotification(jobCard, `Salary Too Low: ${jobCard.salaryFromCard} (${salaryCheckResult.reason})`);
-          
-          // Click "Not Interested" to remove it and reveal next card
-          try {
-            await this.clickNotInterestedButton(jobCard);
-            console.log(`${this.platform}: ✅ Marked as "Not Interested" and removed from feed`);
-          } catch (err) {
-            console.log(`${this.platform}: ⚠️ Could not remove job: ${err.message}`);
-          }
-          
-          // Refresh page after skip to ensure clean state
-          console.log(`${this.platform}: 🔄 Refreshing page after skip...`);
-          try {
-            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-          } catch (reloadErr) {
-            console.log(`${this.platform}: ⚠️ Page reload timeout - continuing anyway`);
-          }
-          await this.randomDelay(1000, 1500);
-          continue; // Get next card from refreshed list
-        }
-        
-        console.log(`${this.platform}: ✅ Salary meets requirement: ${salaryCheckResult.reason}`);
-      } else {
-        console.log(`${this.platform}: 💰 No salary info on card - will check after opening job`);
-      }
       
       // CHECK: Ignore keywords in job title
       const ignoreKeywords = this.db.getSetting('ignore_keywords') || [];
@@ -979,7 +933,7 @@ class JobrightScraper extends BaseScraper {
               if (!this.isRunning) {
                 clearInterval(countdownInterval);
                 console.log(`${this.platform}: 🛑 Stopped by user during wait`);
-                resolve(null);
+                  resolve(null);
               }
             }, 500);
             
@@ -999,7 +953,7 @@ class JobrightScraper extends BaseScraper {
             setTimeout(() => {
               clearInterval(countdownDisplay);
               clearInterval(countdownInterval);
-              if (!tabOpened) {
+                if (!tabOpened) {
                 console.log(`${this.platform}: ⏰ No tab after 8s`);
                 resolve(null);
               }
@@ -1336,24 +1290,24 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: ⏭️ SKIPPING - Page failed to load properly`);
           
           // Close the tab
-          try {
-            await newPage.close();
-            console.log(`${this.platform}: ✅ Tab closed`);
-          } catch (closeErr) {
-            console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
-          }
-          
-          // Memory cleanup
-          const pages = await this.browser.pages();
-          if (pages.length > 1) {
-            for (let i = 1; i < pages.length; i++) {
-              try { await pages[i].close(); } catch (err) {}
+            try {
+              await newPage.close();
+              console.log(`${this.platform}: ✅ Tab closed`);
+            } catch (closeErr) {
+              console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
             }
-          }
-          this.page = pages[0];
-          
+            
+            // Memory cleanup
+            const pages = await this.browser.pages();
+            if (pages.length > 1) {
+              for (let i = 1; i < pages.length; i++) {
+                try { await pages[i].close(); } catch (err) {}
+              }
+            }
+            this.page = pages[0];
+            
           // Navigate back to job list
-          this.mirrorToWebview(this.baseUrl);
+            this.mirrorToWebview(this.baseUrl);
           try {
             await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
             console.log(`${this.platform}: ✅ Back on job list`);
@@ -1371,7 +1325,7 @@ class JobrightScraper extends BaseScraper {
         } else if (finalJobUrl.includes('/application')) {
           finalJobUrl = finalJobUrl.split('/application')[0];
           console.log(`${this.platform}: 🔗 Cleaned URL (removed /application): ${finalJobUrl}`);
-        } else {
+                    } else {
           console.log(`${this.platform}: 🔗 Job URL: ${finalJobUrl}`);
         }
         
@@ -1486,9 +1440,9 @@ class JobrightScraper extends BaseScraper {
         
         // Save job (assume remote since we don't filter anymore)
         const saved = this.saveJob({
-          company: finalCompany,
-          title: finalTitle,
-          url: finalJobUrl,
+                company: finalCompany,
+                title: finalTitle,
+                url: finalJobUrl,
           is_remote: true,
           is_startup: false,
           location: jobCard.location || 'United States',
@@ -1498,70 +1452,70 @@ class JobrightScraper extends BaseScraper {
           industry: null
         });
 
-        if (saved) {
-          newJobsCount++;
-          console.log(`${this.platform}: ✅ Saved job - ${finalCompany} - ${finalTitle}`);
-          
-          // Send toast notification and update job count
-          const path = require('path');
-          const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
-          const mainWindow = getMainWindow();
-          if (mainWindow) {
-            mainWindow.webContents.send('new-job-found', {
-              company: jobCard.company,
-              title: jobCard.title,
-              platform: this.platform
-            });
-            
-            // Update today's count
-            const todayJobs = this.db.getJobsToday();
-            mainWindow.webContents.send('update-today-count', todayJobs.length);
-          }
-        } else {
-          console.log(`${this.platform}: ℹ️ DUPLICATE - Already in database: ${jobCard.company} - ${jobCard.title}`);
-        }
-        
-        // Card was already removed at the beginning (quick action)
-        console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
-        
-        // Close the job tab and ensure cleanup
-        try {
-          await newPage.close();
-          console.log(`${this.platform}: ✅ Tab closed successfully`);
-        } catch (closeErr) {
-          console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
-        }
-        
-        // Get all pages and close any extra ones (memory cleanup)
-        const pages = await this.browser.pages();
-        console.log(`${this.platform}: 📊 Total open pages: ${pages.length}`);
-        
-        // Close any extra pages (should only have 1 - the main Jobright page)
-        if (pages.length > 1) {
-          for (let i = 1; i < pages.length; i++) {
-            try {
-              await pages[i].close();
-              console.log(`${this.platform}: 🧹 Closed extra page ${i}`);
-            } catch (err) {
-              // Ignore
+              if (saved) {
+                newJobsCount++;
+                console.log(`${this.platform}: ✅ Saved job - ${finalCompany} - ${finalTitle}`);
+
+              // Send toast notification and update job count
+              const path = require('path');
+              const { getMainWindow } = require(path.join(__dirname, '../../windowManager'));
+              const mainWindow = getMainWindow();
+              if (mainWindow) {
+                mainWindow.webContents.send('new-job-found', {
+                  company: jobCard.company,
+                  title: jobCard.title,
+                  platform: this.platform
+                });
+                
+                // Update today's count
+                const todayJobs = this.db.getJobsToday();
+                mainWindow.webContents.send('update-today-count', todayJobs.length);
+              }
+            } else {
+              console.log(`${this.platform}: ℹ️ DUPLICATE - Already in database: ${jobCard.company} - ${jobCard.title}`);
             }
-          }
-        }
-        
-        this.page = pages[0];
-        
-        // ⚡ Navigate back to Jobright job list for next iteration
-        try {
-          await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
-          console.log(`${this.platform}: ✅ Back on job list`);
-        } catch (navErr) {
-          console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
-        }
-        
-        // INSTANT MIRROR: Show Jobright.ai immediately
-        this.mirrorToWebview(this.baseUrl);
-        
-        continue; // Skip to next job
+            
+            // Card was already removed at the beginning (quick action)
+            console.log(`${this.platform}: ℹ️ Card already removed from feed (clicked immediately after opening)`);
+            
+            // Close the job tab and ensure cleanup
+            try {
+              await newPage.close();
+              console.log(`${this.platform}: ✅ Tab closed successfully`);
+            } catch (closeErr) {
+              console.log(`${this.platform}: ⚠️ Error closing tab: ${closeErr.message}`);
+            }
+            
+            // Get all pages and close any extra ones (memory cleanup)
+            const pages = await this.browser.pages();
+            console.log(`${this.platform}: 📊 Total open pages: ${pages.length}`);
+            
+            // Close any extra pages (should only have 1 - the main Jobright page)
+            if (pages.length > 1) {
+              for (let i = 1; i < pages.length; i++) {
+                try {
+                  await pages[i].close();
+                  console.log(`${this.platform}: 🧹 Closed extra page ${i}`);
+                } catch (err) {
+                  // Ignore
+                }
+              }
+            }
+            
+            this.page = pages[0];
+            
+            // ⚡ Navigate back to Jobright job list for next iteration
+            try {
+              await this.page.goto(this.baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+              console.log(`${this.platform}: ✅ Back on job list`);
+            } catch (navErr) {
+              console.log(`${this.platform}: ⚠️ Navigation error: ${navErr.message}`);
+            }
+            
+            // INSTANT MIRROR: Show Jobright.ai immediately
+            this.mirrorToWebview(this.baseUrl);
+            
+            continue; // Skip to next job
 
       } catch (processError) {
         console.error(`${this.platform}: ❌ Error processing job:`, processError.message);
