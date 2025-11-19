@@ -202,8 +202,7 @@ class BuiltInScraper extends BaseScraper {
             const jobPageUrl = newPage.url();
             console.log(`${this.platform}: ✅ New tab opened: ${jobPageUrl}`);
             
-            // Mirror the job page to webview
-            this.mirrorToWebview(jobPageUrl);
+            // Don't mirror new tab to webview (causes ERR_ABORTED errors)
             this.updateStatus(`[${i + 1}/${jobCards.length}] Extracting URL...`, `Found: ${newJobsCount}`);
             
             // Extract redirected URL from Apply button
@@ -239,8 +238,7 @@ class BuiltInScraper extends BaseScraper {
               continue;
             }
             
-            // Show redirected URL in webview
-            this.mirrorToWebview(redirectedUrl);
+            // Don't mirror redirected URL to webview (causes ERR_ABORTED errors)
             this.updateStatus(`[${i + 1}/${jobCards.length}] 💾 Saving job...`, `Found: ${newJobsCount}`);
             
             // Save job to database
