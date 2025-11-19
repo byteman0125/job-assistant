@@ -377,57 +377,6 @@ ipcMain.handle('get-cookies', async (event, platform) => {
   return db.getCookies(platform);
 });
 
-// Cookie Sets IPC: manage multiple cookie sets per platform
-ipcMain.handle('save-cookie-set', async (event, platform, label, cookies) => {
-  try {
-    const id = db.saveCookieSet(platform, label, cookies);
-    return { success: true, id };
-  } catch (err) {
-    console.error('Error saving cookie set:', err);
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('list-cookie-sets', async (event, platform) => {
-  try {
-    const sets = db.getCookieSets(platform);
-    return { success: true, data: sets };
-  } catch (err) {
-    console.error('Error listing cookie sets:', err);
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('rotate-cookie-set', async (event, platform) => {
-  try {
-    const active = db.rotateCookieSet(platform);
-    return { success: !!active, activeId: active?.id || null };
-  } catch (err) {
-    console.error('Error rotating cookie set:', err);
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('delete-cookie-set', async (event, id) => {
-  try {
-    const ok = db.deleteCookieSet(id);
-    return { success: ok };
-  } catch (err) {
-    console.error('Error deleting cookie set:', err);
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('clear-cookies', async (event, platform) => {
-  try {
-    db.clearCookies(platform);
-    return { success: true };
-  } catch (err) {
-    console.error('Error clearing cookies:', err);
-    return { success: false, error: err.message };
-  }
-});
-
 ipcMain.handle('save-actions', async (event, platform, actions) => {
   return db.saveActions(platform, actions);
 });
@@ -447,6 +396,18 @@ ipcMain.handle('save-settings', async (event, settings) => {
     db.saveSetting(key, value);
   }
   return { success: true };
+});
+
+// Google Sheets handlers
+ipcMain.handle('test-google-sheets', async () => {
+  try {
+    const GoogleSheetsService = require('./googleSheets');
+    const sheetsService = new GoogleSheetsService(db);
+    const result = await sheetsService.testConnection();
+    return result;
+  } catch (error) {
+    return { success: false, message: `Error: ${error.message}` };
+  }
 });
 
 // Profile handlers

@@ -284,27 +284,10 @@ class BaseScraper {
         isMobile: false
       });
       
-      // Load cookies: prefer active cookie set (supports multiple), fallback to legacy single set
-      let cookieSetInfo = this.db.getActiveCookieSet(this.platform);
-      if (!cookieSetInfo) {
-        const legacyCookies = this.db.getCookies(this.platform);
-        if (legacyCookies && Array.isArray(legacyCookies) && legacyCookies.length > 0) {
-          console.log(`${this.platform}: Loading ${legacyCookies.length} cookies (legacy)...`);
-          const puppeteerCookies = legacyCookies.map(c => ({
-            name: c.name,
-            value: c.value,
-            domain: c.domain || this.getBaseDomain(),
-            path: c.path || '/',
-            httpOnly: c.httpOnly || false,
-            secure: c.secure !== false,
-            expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
-          }));
-          await this.page.setCookie(...puppeteerCookies);
-          console.log(`${this.platform}: ✅ Cookies loaded (legacy)`);
-        }
-      } else {
-        const cookies = cookieSetInfo.cookies || [];
-        console.log(`${this.platform}: Loading ${cookies.length} cookies from active set #${cookieSetInfo.id}...`);
+      // Load cookies if available
+      const cookies = this.db.getCookies(this.platform);
+      if (cookies && Array.isArray(cookies)) {
+        console.log(`${this.platform}: Loading ${cookies.length} cookies...`);
         const puppeteerCookies = cookies.map(c => ({
           name: c.name,
           value: c.value,
@@ -314,11 +297,9 @@ class BaseScraper {
           secure: c.secure !== false,
           expires: c.expirationDate || (Date.now() / 1000 + 86400 * 365)
         }));
+        
         await this.page.setCookie(...puppeteerCookies);
-        if (cookieSetInfo.id) {
-          try { this.db.markCookieSetUsed(cookieSetInfo.id); } catch (e) {}
-        }
-        console.log(`${this.platform}: ✅ Cookies loaded (active set)`);
+        console.log(`${this.platform}: ✅ Cookies loaded`);
       }
       
       // Note: Tab creation is now handled per-scraper with promises
@@ -465,15 +446,43 @@ class BaseScraper {
   // Save job to database
   saveJob(job) {
     try {
-      const success = this.db.addJob({
+      const jobData = {
         ...job,
         platform: this.platform,
         timestamp: Date.now()
-      });
+      };
+      
+      const success = this.db.addJob(jobData);
+      
+      // If successfully saved to database, also save to Google Sheet
+      if (success) {
+        this.saveToGoogleSheet(jobData).catch(err => {
+          // Don't fail the save if Google Sheets fails
+          console.error(`${this.platform}: Error saving to Google Sheet:`, err.message);
+        });
+      }
+      
       return success;
     } catch (error) {
       console.error(`${this.platform}: Error saving job:`, error.message);
       return false;
+    }
+  }
+
+  // Save job to Google Sheet (async, non-blocking)
+  async saveToGoogleSheet(job) {
+    try {
+      // Lazy load Google Sheets service
+      if (!this.googleSheetsService) {
+        const GoogleSheetsService = require('../googleSheets');
+        this.googleSheetsService = new GoogleSheetsService(this.db);
+      }
+
+      // Save to Google Sheet (only if DB save was successful)
+      await this.googleSheetsService.appendJob(job);
+    } catch (error) {
+      // Silently fail - don't break the scraping process
+      console.error(`${this.platform}: Google Sheets error:`, error.message);
     }
   }
 
