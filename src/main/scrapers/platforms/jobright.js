@@ -915,10 +915,9 @@ class JobrightScraper extends BaseScraper {
                   const newPage = await target.page();
                   console.log(`${this.platform}: ✅ Page object obtained successfully`);
                   
-                  // IMMEDIATELY show the page to user
+                  // Don't mirror new tab to webview (causes ERR_ABORTED errors)
                   const quickUrl = newPage.url();
-                  console.log(`${this.platform}: 📺 INSTANT MIRROR: ${quickUrl}`);
-                  this.mirrorToWebview(quickUrl);
+                  console.log(`${this.platform}: 📺 New tab opened: ${quickUrl}`);
                   
                   resolve(newPage);
                 }
@@ -1329,8 +1328,7 @@ class JobrightScraper extends BaseScraper {
           console.log(`${this.platform}: 🔗 Job URL: ${finalJobUrl}`);
         }
         
-        // Show URL in webview for user visibility
-        this.mirrorToWebview(finalJobUrl);
+        // Don't mirror job URL to webview (causes ERR_ABORTED errors for new tabs)
         
         // ⚡ FILTER: Check if URL is from ignored domains (from settings)
         const ignoreDomains = this.db.getSetting('ignore_domains') || ['indeed.com', 'linkedin.com', 'dice.com'];
