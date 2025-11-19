@@ -19,7 +19,7 @@ class ScraperManager {
       new JobrightScraper(database),  // START WITH JOBRIGHT FIRST! (No AI)
       new HimalayasScraper(database, this.gptExtractor),
       new JobgetherScraper(database, this.gptExtractor),
-      new BuiltInScraper(database, this.gptExtractor),
+      new BuiltInScraper(database),  // No AI needed
       new ZipRecruiterScraper(database, this.gptExtractor),
       new RemoteOKScraper(database, this.gptExtractor),
       new WeWorkRemotelyScraper(database, this.gptExtractor)
