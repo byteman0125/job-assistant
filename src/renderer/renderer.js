@@ -88,174 +88,6 @@ let currentSettings = {
 
 let allJobs = [];
 
-// Jobright multi-cookie UI elements
-const jrCookieLabel = document.getElementById('jrCookieLabel');
-const jrCookieJson = document.getElementById('jrCookieJson');
-const addJRCookieSetBtn = document.getElementById('addJRCookieSetBtn');
-const listJRCookieSetsBtn = document.getElementById('listJRCookieSetsBtn');
-const rotateJRCookieSetBtn = document.getElementById('rotateJRCookieSetBtn');
-const jrCookieSetsStatus = document.getElementById('jrCookieSetsStatus');
-const jrCookieSetsList = document.getElementById('jrCookieSetsList');
-
-function getCurrentCookieSetPlatform() {
-  const p = cookiePlatform?.value || 'Jobright';
-  return p;
-}
-
-function updateCookieSetLabels() {
-  const p = getCurrentCookieSetPlatform();
-  const labelEl = document.getElementById('csPlatformLabel');
-  const subEl = document.getElementById('csPlatformLabelSub');
-  const l3 = document.getElementById('csPlatformLabel3');
-  if (labelEl) labelEl.textContent = p;
-  if (subEl) subEl.textContent = p;
-  if (l3) l3.textContent = p;
-}
-
-function renderJRCookieSets(sets) {
-  if (!jrCookieSetsList) return;
-  if (!Array.isArray(sets) || sets.length === 0) {
-    jrCookieSetsList.innerHTML = '<div class="jr-empty">No cookie sets saved yet.</div>';
-    return;
-  }
-  jrCookieSetsList.innerHTML = sets.map(s => {
-    const activeClass = s.is_active ? 'active' : '';
-    const activeBadge = s.is_active ? '<span class="jr-badge active">Active</span>' : '<span class="jr-badge">Inactive</span>';
-    const lastUsed = s.last_used ? new Date(s.last_used * 1000).toLocaleString() : 'Never';
-    const label = (s.label || 'Untitled').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return `
-      <div class="jr-card ${activeClass}" data-id="${s.id}">
-        <div class="jr-card-header">
-          <div class="jr-card-title"><span class="dot"></span><strong>${label}</strong></div>
-          ${activeBadge}
-        </div>
-        <div class="jr-card-meta">
-          <span>Usage: ${s.usage_count}</span>
-          <span>Last used: ${lastUsed}</span>
-        </div>
-        <div class="jr-card-actions">
-          <button class="jr-mini-btn" data-action="rotate" data-id="${s.id}">Make Active</button>
-          <button class="jr-mini-btn" data-action="copy" data-id="${s.id}">Copy JSON</button>
-          <button class="jr-mini-btn" data-action="delete" data-id="${s.id}">Delete</button>
-        </div>
-      </div>
-    `;
-  }).join('');
-  // Attach actions
-  jrCookieSetsList.querySelectorAll('button[data-action="rotate"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      await rotateJRCookieSet();
-    });
-  });
-  jrCookieSetsList.querySelectorAll('button[data-action="copy"]').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const id = e.currentTarget.getAttribute('data-id');
-      try {
-        const platform = getCurrentCookieSetPlatform();
-        const res = await ipcRenderer.invoke('list-cookie-sets', platform);
-        if (res?.success) {
-          const set = (res.data || []).find(x => String(x.id) === String(id));
-          if (!set) throw new Error('Set not found');
-          showMessage(jrCookieSetsStatus, 'For security, raw cookies aren\'t shown. Re-paste your source JSON if needed.', 'info');
-        }
-      } catch (err) {
-        showMessage(jrCookieSetsStatus, err.message, 'error');
-      }
-    });
-  });
-  jrCookieSetsList.querySelectorAll('button[data-action="delete"]').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const id = Number(e.currentTarget.getAttribute('data-id'));
-      try {
-        const res = await ipcRenderer.invoke('delete-cookie-set', id);
-        if (res?.success) {
-          showMessage(jrCookieSetsStatus, 'Cookie set deleted.', 'success');
-          refreshJRCookieSets();
-        } else {
-          showMessage(jrCookieSetsStatus, res?.error || 'Failed to delete cookie set', 'error');
-        }
-      } catch (err) {
-        showMessage(jrCookieSetsStatus, err.message, 'error');
-      }
-    });
-  });
-}
-
-async function refreshJRCookieSets() {
-  try {
-    const platform = getCurrentCookieSetPlatform();
-    const res = await ipcRenderer.invoke('list-cookie-sets', platform);
-    if (res && res.success) {
-      renderJRCookieSets(res.data);
-      showMessage(jrCookieSetsStatus, `Loaded ${res.data.length} cookie set(s) for ${platform}.`, 'success');
-    } else {
-      showMessage(jrCookieSetsStatus, res?.error || 'Failed to load cookie sets', 'error');
-    }
-  } catch (e) {
-    showMessage(jrCookieSetsStatus, e.message, 'error');
-  }
-}
-
-async function addJRCookieSet() {
-  try {
-    const platform = getCurrentCookieSetPlatform();
-    const label = (jrCookieLabel?.value || '').trim();
-    let cookies = [];
-    try {
-      cookies = JSON.parse(jrCookieJson.value || '[]');
-    } catch (e) {
-      throw new Error('Invalid JSON');
-    }
-    if (!Array.isArray(cookies) || cookies.length === 0) {
-      throw new Error('Provide a non-empty cookies array');
-    }
-    const res = await ipcRenderer.invoke('save-cookie-set', platform, label, cookies);
-    if (res && res.success) {
-      showMessage(jrCookieSetsStatus, `Cookie set saved for ${platform}.`, 'success');
-      jrCookieJson.value = '';
-      refreshJRCookieSets();
-    } else {
-      showMessage(jrCookieSetsStatus, res?.error || 'Failed to save cookie set', 'error');
-    }
-  } catch (e) {
-    showMessage(jrCookieSetsStatus, e.message, 'error');
-  }
-}
-
-async function rotateJRCookieSet() {
-  try {
-    const platform = getCurrentCookieSetPlatform();
-    const res = await ipcRenderer.invoke('rotate-cookie-set', platform);
-    if (res && res.success) {
-      showMessage(jrCookieSetsStatus, `Rotated active set for ${platform} (id: ${res.activeId || 'unknown'}).`, 'success');
-      refreshJRCookieSets();
-    } else {
-      showMessage(jrCookieSetsStatus, res?.error || 'Failed to rotate', 'error');
-    }
-  } catch (e) {
-    showMessage(jrCookieSetsStatus, e.message, 'error');
-  }
-}
-
-if (addJRCookieSetBtn) addJRCookieSetBtn.addEventListener('click', addJRCookieSet);
-if (listJRCookieSetsBtn) listJRCookieSetsBtn.addEventListener('click', refreshJRCookieSets);
-if (rotateJRCookieSetBtn) rotateJRCookieSetBtn.addEventListener('click', rotateJRCookieSet);
-
-// Auto-refresh when Cookies tab opens and when platform changes
-const cookiesTabBtn = document.querySelector('.tab-btn-vertical[data-tab="cookies"]');
-if (cookiesTabBtn) {
-  cookiesTabBtn.addEventListener('click', () => {
-    updateCookieSetLabels();
-    setTimeout(refreshJRCookieSets, 200);
-  });
-}
-
-if (cookiePlatform) {
-  cookiePlatform.addEventListener('change', () => {
-    updateCookieSetLabels();
-    refreshJRCookieSets();
-  });
-}
 
 // Listen for job skip notifications
 ipcRenderer.on('job-skipped', (event, data) => {
@@ -531,6 +363,217 @@ function setupEventListeners() {
   if (addKeywordBtn) addKeywordBtn.addEventListener('click', addKeyword);
   if (addDomainBtn) addDomainBtn.addEventListener('click', addDomain);
   if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
+  
+  // Google Sheets
+  const testGoogleSheetsBtn = document.getElementById('testGoogleSheetsBtn');
+  if (testGoogleSheetsBtn) {
+    testGoogleSheetsBtn.addEventListener('click', testGoogleSheets);
+  }
+  
+  // Manual save credentials button
+  const saveGoogleSheetsCredentialsBtn = document.getElementById('saveGoogleSheetsCredentialsBtn');
+  if (saveGoogleSheetsCredentialsBtn) {
+    saveGoogleSheetsCredentialsBtn.addEventListener('click', async () => {
+      const credentialsInput = document.getElementById('googleSheetsCredentials');
+      const testStatus = document.getElementById('googleSheetsTestStatus');
+      
+      if (!credentialsInput) return;
+      
+      const credentials = credentialsInput.value.trim();
+      if (!credentials) {
+        if (testStatus) {
+          testStatus.textContent = '⚠️ Please enter credentials first';
+          testStatus.className = 'status-message error';
+        }
+        return;
+      }
+      
+      try {
+        // Validate JSON
+        JSON.parse(credentials);
+        
+        if (testStatus) {
+          testStatus.textContent = '💾 Saving credentials...';
+          testStatus.className = 'status-message';
+        }
+        
+        // Save to database
+        await ipcRenderer.invoke('save-settings', {
+          google_sheets_credentials: credentials
+        });
+        
+        console.log('Google Sheets credentials manually saved');
+        
+        if (testStatus) {
+          testStatus.textContent = '✅ Credentials saved successfully!';
+          testStatus.className = 'status-message success';
+          setTimeout(() => {
+            if (testStatus.textContent === '✅ Credentials saved successfully!') {
+              testStatus.textContent = '';
+              testStatus.className = 'status-message';
+            }
+          }, 3000);
+        }
+      } catch (error) {
+        console.error('Error saving credentials:', error);
+        if (testStatus) {
+          testStatus.textContent = `❌ Invalid JSON: ${error.message}`;
+          testStatus.className = 'status-message error';
+        }
+      }
+    });
+  }
+  
+  // Auto-save Google Sheets credentials
+  const googleSheetsCredentials = document.getElementById('googleSheetsCredentials');
+  if (googleSheetsCredentials) {
+    let saveTimeout = null;
+    const testStatus = document.getElementById('googleSheetsTestStatus');
+    
+    // Save credentials function with visual feedback
+    const saveCredentials = async (showFeedback = false) => {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      
+      saveTimeout = setTimeout(async () => {
+        try {
+          const credentials = googleSheetsCredentials.value.trim();
+          if (credentials) {
+            // Validate JSON format
+            try {
+              JSON.parse(credentials);
+              
+              // Show saving indicator
+              if (showFeedback && testStatus) {
+                testStatus.textContent = '💾 Saving credentials...';
+                testStatus.className = 'status-message';
+              }
+              
+              // Save to database
+              await ipcRenderer.invoke('save-settings', {
+                google_sheets_credentials: credentials
+              });
+              
+              console.log('Google Sheets credentials auto-saved');
+              
+              // Show success indicator
+              if (showFeedback && testStatus) {
+                testStatus.textContent = '✅ Credentials saved!';
+                testStatus.className = 'status-message success';
+                setTimeout(() => {
+                  if (testStatus.textContent === '✅ Credentials saved!') {
+                    testStatus.textContent = '';
+                    testStatus.className = 'status-message';
+                  }
+                }, 3000);
+              }
+            } catch (jsonError) {
+              // Invalid JSON, don't save yet
+              console.log('Invalid JSON format, waiting for complete input...', jsonError.message);
+              if (showFeedback && testStatus) {
+                testStatus.textContent = '⚠️ Invalid JSON format';
+                testStatus.className = 'status-message error';
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error auto-saving credentials:', error);
+          if (showFeedback && testStatus) {
+            testStatus.textContent = `❌ Error: ${error.message}`;
+            testStatus.className = 'status-message error';
+          }
+        }
+      }, 1000); // Debounce: save 1 second after user stops typing
+    };
+    
+    // Save on paste (immediate with longer delay)
+    googleSheetsCredentials.addEventListener('paste', async (e) => {
+      // Wait for paste to complete (increased delay)
+      setTimeout(async () => {
+        const credentials = googleSheetsCredentials.value.trim();
+        if (credentials) {
+          try {
+            JSON.parse(credentials); // Validate JSON
+            
+            // Show saving indicator
+            if (testStatus) {
+              testStatus.textContent = '💾 Saving credentials...';
+              testStatus.className = 'status-message';
+            }
+            
+            await ipcRenderer.invoke('save-settings', {
+              google_sheets_credentials: credentials
+            });
+            
+            console.log('Google Sheets credentials auto-saved (paste)');
+            
+            // Show success
+            if (testStatus) {
+              testStatus.textContent = '✅ Credentials saved!';
+              testStatus.className = 'status-message success';
+              setTimeout(() => {
+                if (testStatus.textContent === '✅ Credentials saved!') {
+                  testStatus.textContent = '';
+                  testStatus.className = 'status-message';
+                }
+              }, 3000);
+            }
+          } catch (error) {
+            console.error('Error saving credentials on paste:', error);
+            if (testStatus) {
+              testStatus.textContent = `❌ Invalid JSON: ${error.message}`;
+              testStatus.className = 'status-message error';
+            }
+          }
+        }
+      }, 300); // Increased delay to ensure paste completes
+    });
+    
+    // Save on blur (when user leaves the field)
+    googleSheetsCredentials.addEventListener('blur', async () => {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      const credentials = googleSheetsCredentials.value.trim();
+      if (credentials) {
+        try {
+          JSON.parse(credentials); // Validate JSON
+          
+          if (testStatus) {
+            testStatus.textContent = '💾 Saving credentials...';
+            testStatus.className = 'status-message';
+          }
+          
+          await ipcRenderer.invoke('save-settings', {
+            google_sheets_credentials: credentials
+          });
+          
+          console.log('Google Sheets credentials auto-saved (blur)');
+          
+          if (testStatus) {
+            testStatus.textContent = '✅ Credentials saved!';
+            testStatus.className = 'status-message success';
+            setTimeout(() => {
+              if (testStatus.textContent === '✅ Credentials saved!') {
+                testStatus.textContent = '';
+                testStatus.className = 'status-message';
+              }
+            }, 3000);
+          }
+        } catch (error) {
+          console.error('Invalid JSON format in credentials:', error);
+          if (testStatus) {
+            testStatus.textContent = `❌ Invalid JSON: ${error.message}`;
+            testStatus.className = 'status-message error';
+          }
+        }
+      }
+    });
+    
+    // Save on input (debounced)
+    googleSheetsCredentials.addEventListener('input', () => saveCredentials(false));
+  }
   if (newKeyword) {
     newKeyword.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') addKeyword();
@@ -1149,6 +1192,50 @@ async function testCookies() {
   }
 }
 
+async function testGoogleSheets() {
+  const testStatus = document.getElementById('googleSheetsTestStatus');
+  const credentialsInput = document.getElementById('googleSheetsCredentials');
+  
+  try {
+    testStatus.textContent = 'Testing connection...';
+    testStatus.className = 'status-message';
+    
+    // Get credentials from input
+    const credentials = credentialsInput ? credentialsInput.value.trim() : '';
+    
+    if (!credentials) {
+      throw new Error('Please enter Service Account JSON credentials');
+    }
+    
+    // Validate JSON format
+    try {
+      JSON.parse(credentials);
+    } catch (jsonError) {
+      throw new Error('Invalid JSON format. Please check your credentials.');
+    }
+    
+    // Auto-save credentials before testing
+    await ipcRenderer.invoke('save-settings', {
+      google_sheets_credentials: credentials
+    });
+    console.log('Google Sheets credentials auto-saved before test');
+    
+    // Test connection via IPC
+    const result = await ipcRenderer.invoke('test-google-sheets', credentials);
+    
+    if (result.success) {
+      testStatus.textContent = `✅ ${result.message}`;
+      testStatus.className = 'status-message success';
+    } else {
+      testStatus.textContent = `❌ ${result.message}`;
+      testStatus.className = 'status-message error';
+    }
+  } catch (error) {
+    testStatus.textContent = `❌ Error: ${error.message}`;
+    testStatus.className = 'status-message error';
+  }
+}
+
 // Settings Functions
 // Lock/Unlock settings during scraping
 function lockSettings() {
@@ -1205,7 +1292,8 @@ function renderPlatforms() {
     { id: 'BuiltIn', name: 'BuiltIn', desc: 'tech/startup' },
     { id: 'ZipRecruiter', name: 'ZipRecruiter', desc: 'volume + variety' },
     { id: 'RemoteOK', name: 'RemoteOK', desc: 'pure remote tech' },
-    { id: 'WeWorkRemotely', name: 'We Work Remotely', desc: 'quality remote' }
+    { id: 'WeWorkRemotely', name: 'We Work Remotely', desc: 'quality remote' },
+    { id: 'Jungle', name: 'Jungle', desc: 'Welcome to the Jungle' }
   ];
   
   // Sort platforms by current order
@@ -1310,6 +1398,24 @@ async function loadSettings() {
       if (minSalaryAnnual) minSalaryAnnual.value = settings.min_salary_annual || 120000;
       if (minSalaryMonthly) minSalaryMonthly.value = settings.min_salary_monthly || '';
       if (minSalaryHourly) minSalaryHourly.value = settings.min_salary_hourly || '';
+      
+      // Update Google Sheets settings
+      const googleSheetsCredentials = document.getElementById('googleSheetsCredentials');
+      const enableGoogleSheets = document.getElementById('enableGoogleSheets');
+      
+      if (googleSheetsCredentials) {
+        const credentials = settings.google_sheets_credentials || '';
+        console.log('Loading Google Sheets credentials, length:', credentials.length);
+        googleSheetsCredentials.value = credentials;
+        
+        // If credentials exist but are empty in the UI, log for debugging
+        if (credentials && credentials.length > 0 && !googleSheetsCredentials.value) {
+          console.warn('Credentials exist in settings but not loaded to textarea');
+        }
+      }
+      if (enableGoogleSheets) {
+        enableGoogleSheets.checked = settings.enable_google_sheets !== false; // Default to true if not set
+      }
     }
   } catch (error) {
     console.error('Error loading settings:', error);
@@ -1345,6 +1451,13 @@ async function saveSettings() {
     currentSettings.min_salary_annual = minSalaryAnnual ? minSalaryAnnual.value : 120000;
     currentSettings.min_salary_monthly = minSalaryMonthly ? minSalaryMonthly.value : '';
     currentSettings.min_salary_hourly = minSalaryHourly ? minSalaryHourly.value : '';
+    
+    // Get Google Sheets settings
+    const googleSheetsCredentials = document.getElementById('googleSheetsCredentials');
+    const enableGoogleSheets = document.getElementById('enableGoogleSheets');
+    
+    currentSettings.google_sheets_credentials = googleSheetsCredentials ? googleSheetsCredentials.value : '';
+    currentSettings.enable_google_sheets = enableGoogleSheets ? enableGoogleSheets.checked : true;
     
     await ipcRenderer.invoke('save-settings', currentSettings);
     showMessage(settingsStatus, '✅ Settings saved successfully!', 'success');
@@ -4452,31 +4565,4 @@ function initChatTab() {
   console.log('Chat tab initialization completed successfully');
 }
 
-// Optional: clear all cookies for selected platform
-const clearAllBtnId = 'clearAllCookieSetsBtn';
-(function ensureClearAllButton(){
-  const container = document.getElementById('jrCookieSetsStatus');
-  if (container && !document.getElementById(clearAllBtnId)) {
-    const btn = document.createElement('button');
-    btn.id = clearAllBtnId;
-    btn.className = 'btn btn-danger';
-    btn.textContent = '🗑️ Clear All for Platform';
-    btn.style.marginTop = '8px';
-    btn.addEventListener('click', async () => {
-      const platform = getCurrentCookieSetPlatform();
-      try {
-        const res = await ipcRenderer.invoke('clear-cookies', platform);
-        if (res?.success) {
-          showMessage(jrCookieSetsStatus, `Cleared all cookies for ${platform}.`, 'success');
-          refreshJRCookieSets();
-        } else {
-          showMessage(jrCookieSetsStatus, res?.error || 'Failed to clear cookies', 'error');
-        }
-      } catch (e) {
-        showMessage(jrCookieSetsStatus, e.message, 'error');
-      }
-    });
-    container.parentNode.insertBefore(btn, container.nextSibling);
-  }
-})();
 

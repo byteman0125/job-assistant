@@ -3,6 +3,28 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 const { app } = require('electron');
+const GoogleSheetsService = require('./googleSheets');
+
+const JOBS_TABLE_COLUMNS = `
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company TEXT NOT NULL,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        salary TEXT,
+        tech_stack TEXT,
+        is_remote BOOLEAN DEFAULT 1,
+        is_startup BOOLEAN DEFAULT 0,
+        location TEXT,
+        job_type TEXT,
+        industry TEXT,
+        applied BOOLEAN DEFAULT 0,
+        applied_by TEXT DEFAULT 'None',
+        applied_date INTEGER,
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        UNIQUE(company, title)
+`;
 
 class JobDatabase {
   constructor() {
@@ -19,32 +41,32 @@ class JobDatabase {
     this.db = new Database(dbPath);
     this.initTables();
     console.log('Database opened at:', dbPath);
+    
+    // Initialize Google Sheets service (lazy initialization)
+    this.googleSheets = null;
+  }
+  
+  // Get or initialize Google Sheets service
+  getGoogleSheets() {
+    if (!this.googleSheets) {
+      this.googleSheets = new GoogleSheetsService(this);
+    }
+    return this.googleSheets;
   }
 
   initTables() {
     // Jobs table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS jobs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        company TEXT NOT NULL,
-        title TEXT NOT NULL,
-        url TEXT UNIQUE NOT NULL,
-        platform TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
-        salary TEXT,
-        tech_stack TEXT,
-        is_remote BOOLEAN DEFAULT 1,
-        is_startup BOOLEAN DEFAULT 0,
-        location TEXT,
-        job_type TEXT,
-        industry TEXT,
-        applied BOOLEAN DEFAULT 0,
-        applied_by TEXT DEFAULT 'None',
-        applied_date INTEGER,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        UNIQUE(company, title)
-      )
-    `);
+    this.createJobsTable();
+    
+    // Remove URL UNIQUE constraint if it exists (migration for existing databases)
+    // URLs can be reused for different positions, so we don't want URL to be unique
+    try {
+      // SQLite doesn't support DROP CONSTRAINT directly, so we'll handle duplicates in code
+      // The UNIQUE(company, title) constraint is sufficient for duplicate detection
+      console.log('Database: Using UNIQUE(company, title) for duplicate detection (URL is not unique)');
+    } catch (err) {
+      // Ignore
+    }
     
     // Add applied column if it doesn't exist (for existing databases)
     try {
@@ -256,14 +278,61 @@ class JobDatabase {
     `);
 
     // Create indexes
+    this.createJobIndexes();
+    
+    // Initialize default settings if not exists
+    this.initializeDefaultSettings();
+    this.ensureJobsUniqueConstraint();
+  }
+
+  createJobsTable(tableName = 'jobs', includeIfNotExists = true) {
+    const clause = includeIfNotExists ? 'IF NOT EXISTS ' : '';
+    this.db.exec(`
+      CREATE TABLE ${clause}${tableName} (
+${JOBS_TABLE_COLUMNS}
+      )
+    `);
+  }
+
+  createJobIndexes() {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_jobs_timestamp ON jobs(timestamp);
       CREATE INDEX IF NOT EXISTS idx_jobs_platform ON jobs(platform);
       CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
     `);
-    
-    // Initialize default settings if not exists
-    this.initializeDefaultSettings();
+  }
+
+  ensureJobsUniqueConstraint() {
+    try {
+      const result = this.db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='jobs'`).get();
+      if (!result || !result.sql) return;
+      const sql = result.sql;
+      const hasCompanyTitleUnique = /unique\s*\(\s*company\s*,\s*title\s*\)/i.test(sql);
+      const hasCompanyOnlyUnique = /unique\s*\(\s*company\s*\)/i.test(sql);
+      if (!hasCompanyTitleUnique && hasCompanyOnlyUnique) {
+        console.log('Database: Legacy jobs schema detected. Migrating to allow multiple titles per company...');
+        this.migrateJobsTable();
+      }
+    } catch (error) {
+      console.error('Database: Error checking jobs schema:', error.message);
+    }
+  }
+
+  migrateJobsTable() {
+    try {
+      this.db.exec('BEGIN IMMEDIATE TRANSACTION');
+      this.createJobsTable('jobs_new', false);
+      const columns = this.db.prepare(`PRAGMA table_info(jobs)`).all().map(col => `"${col.name}"`).join(', ');
+      this.db.exec(`INSERT OR IGNORE INTO jobs_new (${columns}) SELECT ${columns} FROM jobs`);
+      this.db.exec('DROP TABLE jobs');
+      this.db.exec('ALTER TABLE jobs_new RENAME TO jobs');
+      this.db.exec('COMMIT');
+      this.createJobIndexes();
+      console.log('Database: Jobs table migration complete.');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      console.error('Database: Jobs table migration failed:', error.message);
+    }
   }
 
   // Encryption/Decryption for cookies
@@ -289,19 +358,138 @@ class JobDatabase {
     return decrypted;
   }
 
+  // Normalize text for duplicate detection (case-insensitive, trim, collapse spaces)
+  // Preserves important punctuation like +, #, / for tech stack (e.g., "C++", "C#", "Node.js")
+  normalizeForDuplicate(text) {
+    if (!text || typeof text !== 'string') return '';
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ') // Collapse multiple spaces to single space
+      .replace(/[^\w\s+\-#/.]/g, '') // Remove most punctuation but keep: +, -, #, /, . (for tech names)
+      .trim();
+  }
+
+  // Normalize URL for duplicate detection (remove trailing slash, query params, fragments)
+  normalizeUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    try {
+      const urlObj = new URL(url);
+      // Remove trailing slash, query params, and fragments
+      let normalized = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}`;
+      normalized = normalized.replace(/\/$/, ''); // Remove trailing slash
+      return normalized.toLowerCase();
+    } catch (e) {
+      // If URL parsing fails, just normalize the string
+      return url.toLowerCase().trim();
+    }
+  }
+
+  // Check if job is duplicate before inserting
+  // Uses normalized comparison to catch duplicates with different casing, whitespace, or URL variations
+  isDuplicate(company, title, url) {
+    const normalizedCompany = this.normalizeForDuplicate(company);
+    const normalizedTitle = this.normalizeForDuplicate(title);
+    const normalizedUrl = this.normalizeUrl(url);
+
+    // Get all jobs with the same company (case-insensitive) for normalized comparison
+    // This is necessary because titles might have slight variations (punctuation, spacing)
+    const sameCompanyJobs = this.db.prepare(`
+      SELECT id, company, title, url FROM jobs 
+      WHERE LOWER(TRIM(company)) = LOWER(TRIM(?))
+    `).all(company.trim());
+
+    // Check each job with same company for normalized title match
+    for (const existingJob of sameCompanyJobs) {
+      const existingCompany = this.normalizeForDuplicate(existingJob.company);
+      const existingTitle = this.normalizeForDuplicate(existingJob.title);
+      
+      // Only check title match if companies match (normalized)
+      if (existingCompany === normalizedCompany) {
+        // Companies match, now check titles
+        if (existingTitle === normalizedTitle) {
+          console.log(`Database: ⚠️ DUPLICATE by company+title:`);
+          console.log(`  New: "${company}" - "${title}"`);
+          console.log(`  Existing: "${existingJob.company}" - "${existingJob.title}"`);
+          console.log(`  Normalized new: "${normalizedCompany}" - "${normalizedTitle}"`);
+          console.log(`  Normalized existing: "${existingCompany}" - "${existingTitle}"`);
+          return true; // Duplicate found by company + title
+        } else {
+          // Same company but different title - log for debugging
+          console.log(`Database: ℹ️ Same company, different title:`);
+          console.log(`  New: "${company}" - "${title}" (normalized: "${normalizedTitle}")`);
+          console.log(`  Existing: "${existingJob.company}" - "${existingJob.title}" (normalized: "${existingTitle}")`);
+        }
+      }
+    }
+
+    // Check by normalized URL (if URL is provided and valid)
+    // BUT: Only consider it a duplicate if company+title also match (URLs can be reused for different positions)
+    // This prevents false positives where same URL is used for different job postings
+    if (normalizedUrl && normalizedUrl.startsWith('http')) {
+      // Get all jobs with similar URLs (same domain + path) for normalization check
+      const urlDomain = normalizedUrl.split('/').slice(0, 3).join('/'); // Get protocol + domain
+      const urlPath = normalizedUrl.split('/').slice(3).join('/').split('?')[0].split('#')[0]; // Get path without query/fragment
+      
+      if (urlPath) {
+        const urlMatches = this.db.prepare(`
+          SELECT id, url, company, title FROM jobs 
+          WHERE LOWER(url) LIKE ?
+          LIMIT 50
+        `).all(`${urlDomain}%${urlPath}%`);
+
+        for (const match of urlMatches) {
+          const existingUrl = this.normalizeUrl(match.url);
+          if (existingUrl === normalizedUrl) {
+            // URL matches, but also check if company+title match (normalized)
+            // This prevents false positives where same URL is used for different positions
+            const existingCompany = this.normalizeForDuplicate(match.company);
+            const existingTitle = this.normalizeForDuplicate(match.title);
+            
+            if (existingCompany === normalizedCompany && existingTitle === normalizedTitle) {
+              console.log(`Database: ⚠️ DUPLICATE by URL + company+title:`);
+              console.log(`  New: "${company}" - "${title}" - "${url}"`);
+              console.log(`  Existing: "${match.company}" - "${match.title}" - "${match.url}"`);
+              return true; // Duplicate found by URL AND company+title
+            } else {
+              // Same URL but different company/title - this is OK (same URL can be used for different positions)
+              console.log(`Database: ℹ️ Same URL but different position:`);
+              console.log(`  New: "${company}" - "${title}"`);
+              console.log(`  Existing: "${match.company}" - "${match.title}"`);
+              console.log(`  URL: "${url}"`);
+            }
+          }
+        }
+      }
+    }
+
+    return false; // Not a duplicate
+  }
+
   // Jobs operations
   addJob(job) {
+    // Normalize values for duplicate detection
+    const company = String(job.company || 'Unknown').trim();
+    const title = String(job.title || 'Unknown').trim();
+    const url = String(job.url || '').trim();
+
+    // Check for duplicate BEFORE inserting
+    if (this.isDuplicate(company, title, url)) {
+      console.log(`Database: ⚠️ DUPLICATE detected - ${company} - ${title}`);
+      return false; // Duplicate, don't save
+    }
+
     const stmt = this.db.prepare(`
-      INSERT OR IGNORE INTO jobs 
+      INSERT INTO jobs 
       (company, title, url, platform, timestamp, salary, tech_stack, is_remote, is_startup, location, job_type, industry)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     // Ensure all values are proper types for SQLite
     const result = stmt.run(
-      String(job.company || 'Unknown'),
-      String(job.title || 'Unknown'),
-      String(job.url || ''),
+      company,
+      title,
+      url,
       String(job.platform || ''),
       Number(job.timestamp || Date.now()),
       job.salary ? String(job.salary) : null,
@@ -313,7 +501,26 @@ class JobDatabase {
       job.industry ? String(job.industry) : null
     );
     
-    return result.changes > 0;
+    const saved = result.changes > 0;
+    
+    // If job was successfully saved to database, also save to Google Sheets
+    if (saved) {
+      // Check if Google Sheets is enabled
+      const enableGoogleSheets = this.getSetting('enable_google_sheets');
+      console.log(`Database: Job saved to DB. Platform: ${job.platform}, Google Sheets enabled: ${enableGoogleSheets}`);
+      if (enableGoogleSheets !== false) { // Default to true if not set
+        // Save to Google Sheets asynchronously (don't block database operation)
+        const sheetsService = this.getGoogleSheets();
+        console.log(`Database: Attempting to save to Google Sheets - ${job.platform}: ${job.company} - ${job.title}`);
+        sheetsService.addJob(job).catch(err => {
+          console.error(`Google Sheets: Error saving job (${job.platform}):`, err.message);
+        });
+      } else {
+        console.log(`Database: Google Sheets sync is disabled, skipping for ${job.platform}`);
+      }
+    }
+    
+    return saved;
   }
 
   getAllJobs() {
@@ -600,10 +807,17 @@ class JobDatabase {
     const rows = this.db.prepare('SELECT key, value FROM settings').all();
     const settings = {};
     rows.forEach(row => {
-      try {
-        settings[row.key] = JSON.parse(row.value);
-      } catch (err) {
-        settings[row.key] = row.value;
+      // Special handling for google_sheets_credentials - keep as string (it's a JSON string)
+      if (row.key === 'google_sheets_credentials') {
+        settings[row.key] = row.value; // Keep as string, don't parse
+      } else {
+        try {
+          // Try to parse as JSON for other settings
+          settings[row.key] = JSON.parse(row.value);
+        } catch (err) {
+          // Not JSON, use as-is
+          settings[row.key] = row.value;
+        }
       }
     });
     return settings;

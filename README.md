@@ -23,13 +23,32 @@ Automated job search application for finding remote positions across multiple pl
 - ✅ **Modern UI**: Dark theme with intuitive interface
 - ✅ **Cross-Platform**: Windows, macOS, and Linux support
 
+## Prerequisites
+
+**Important**: Job Assistant now requires an **external Ollama service** to be running.
+
+### 1. Install and Start Ollama Service
+```bash
+# Option A: Use the deployment script (recommended)
+cd /path/to/Job\ Radar1.3/
+sudo ./llama-service-deploy.sh
+
+# Option B: Manual setup
+ollama serve  # In a separate terminal/service
+```
+
+### 2. Ensure Model is Available
+```bash
+ollama pull llama3.2:3b
+```
+
 ## Installation
 
 ```bash
 # Install dependencies
 npm install
 
-# Run in development
+# Run in development (requires external Ollama service)
 npm start
 
 # Build for production
@@ -40,6 +59,8 @@ npm run build:win   # Windows
 npm run build:mac   # macOS
 npm run build:linux # Linux
 ```
+
+**Note**: The `start-manual` script no longer starts Ollama automatically. You must start the Ollama service separately.
 
 ## Usage
 

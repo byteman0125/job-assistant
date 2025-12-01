@@ -8,6 +8,26 @@ class BaseScraper {
     this.page = null;
     this.isRunning = false;
     this.gptExtractor = gptExtractor;
+    this.viewportSettings = {
+      width: 1920,
+      height: 1080,
+      deviceScaleFactor: 1,
+      hasTouch: false,
+      isLandscape: true,
+      isMobile: false
+    };
+    this.extraHTTPHeaders = {
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-User': '?1',
+      'Sec-Fetch-Dest': 'document',
+      'Cache-Control': 'max-age=0'
+    };
+    this.currentUserAgent = null;
   }
 
   // User agents for bot avoidance
@@ -128,40 +148,8 @@ class BaseScraper {
     }
   }
 
-  // Initialize browser with Puppeteer (HEADLESS - we'll mirror to webview)
-  async initBrowser() {
-    try {
-      console.log(`${this.platform}: Launching browser (headless, mirroring to scraping tab)...`);
-      
-      this.browser = await puppeteer.launch({
-        headless: true,  // NO SEPARATE WINDOW! All work happens in background
-        defaultViewport: { width: 1920, height: 1080 },
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gpu',
-          '--window-size=1920,1080',
-          '--start-maximized',
-          '--disable-infobars',
-          '--disable-notifications',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding'
-        ]
-      });
-
-      this.page = await this.browser.newPage();
-      
-      // Set realistic user agent
-      await this.page.setUserAgent(this.getUserAgent());
-      
-      // ADVANCED: Remove webdriver property (key bot detection)
-      await this.page.evaluateOnNewDocument(() => {
+  async applyStealthScripts(page) {
+    await page.evaluateOnNewDocument(() => {
         // 1. Remove navigator.webdriver flag ⭐ CRITICAL
         Object.defineProperty(navigator, 'webdriver', {
           get: () => false,
@@ -260,29 +248,51 @@ class BaseScraper {
           get: () => 'Google Inc.'
         });
       });
+  }
+
+  async configurePage(page) {
+    if (!this.currentUserAgent) {
+      this.currentUserAgent = this.getUserAgent();
+    }
+    await page.setUserAgent(this.currentUserAgent);
+    await this.applyStealthScripts(page);
+    if (this.extraHTTPHeaders) {
+      await page.setExtraHTTPHeaders(this.extraHTTPHeaders);
+    }
+    if (this.viewportSettings) {
+      await page.setViewport(this.viewportSettings);
+    }
+  }
+
+  // Initialize browser with Puppeteer (HEADLESS - we'll mirror to webview)
+  async initBrowser() {
+    try {
+      console.log(`${this.platform}: Launching browser (headless, mirroring to scraping tab)...`);
       
-      // Set extra HTTP headers (more realistic)
-      await this.page.setExtraHTTPHeaders({
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-User': '?1',
-        'Sec-Fetch-Dest': 'document',
-        'Cache-Control': 'max-age=0'
+      this.browser = await puppeteer.launch({
+        headless: true,  // NO SEPARATE WINDOW! All work happens in background
+        defaultViewport: { width: 1920, height: 1080 },
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--window-size=1920,1080',
+          '--start-maximized',
+          '--disable-infobars',
+          '--disable-notifications',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
+        ]
       });
-      
-      // Set viewport to match common screen resolution
-      await this.page.setViewport({
-        width: 1920,
-        height: 1080,
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isLandscape: true,
-        isMobile: false
-      });
+
+      this.page = await this.browser.newPage();
+      await this.configurePage(this.page);
       
       // Load cookies if available
       const cookies = this.db.getCookies(this.platform);
@@ -310,6 +320,15 @@ class BaseScraper {
       console.error(`${this.platform}: Failed to initialize browser:`, error.message);
       throw error;
     }
+  }
+
+  async createWorkerPage(label = 'worker') {
+    if (!this.browser) {
+      throw new Error(`${this.platform}: Browser is not initialized`);
+    }
+    const workerPage = await this.browser.newPage();
+    await this.configurePage(workerPage);
+    return workerPage;
   }
 
   // Close browser
@@ -446,43 +465,15 @@ class BaseScraper {
   // Save job to database
   saveJob(job) {
     try {
-      const jobData = {
+      const success = this.db.addJob({
         ...job,
         platform: this.platform,
         timestamp: Date.now()
-      };
-      
-      const success = this.db.addJob(jobData);
-      
-      // If successfully saved to database, also save to Google Sheet
-      if (success) {
-        this.saveToGoogleSheet(jobData).catch(err => {
-          // Don't fail the save if Google Sheets fails
-          console.error(`${this.platform}: Error saving to Google Sheet:`, err.message);
-        });
-      }
-      
+      });
       return success;
     } catch (error) {
       console.error(`${this.platform}: Error saving job:`, error.message);
       return false;
-    }
-  }
-
-  // Save job to Google Sheet (async, non-blocking)
-  async saveToGoogleSheet(job) {
-    try {
-      // Lazy load Google Sheets service
-      if (!this.googleSheetsService) {
-        const GoogleSheetsService = require('../googleSheets');
-        this.googleSheetsService = new GoogleSheetsService(this.db);
-      }
-
-      // Save to Google Sheet (only if DB save was successful)
-      await this.googleSheetsService.appendJob(job);
-    } catch (error) {
-      // Silently fail - don't break the scraping process
-      console.error(`${this.platform}: Google Sheets error:`, error.message);
     }
   }
 

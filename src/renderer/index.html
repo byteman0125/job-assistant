@@ -127,6 +127,7 @@
               <option value="Jobright">Jobright</option>
               <option value="RemoteOK">RemoteOK</option>
               <option value="WeWorkRemotely">WeWorkRemotely</option>
+              <option value="Jungle">Jungle</option>
             </select>
             <select id="appliedFilter" class="filter-select">
               <option value="not-applied">Not Applied</option>
@@ -605,6 +606,7 @@
                 <option value="Jobright">Jobright</option>
                 <option value="RemoteOK">RemoteOK</option>
                 <option value="WeWorkRemotely">WeWorkRemotely</option>
+                <option value="Jungle">Jungle</option>
               </select>
             </div>
 
@@ -620,26 +622,6 @@
             </div>
 
             <div id="cookieStatus" class="status-message"></div>
-
-            <!-- Multi-Cookie Sets (for selected platform) -->
-            <div class="settings-section" style="margin-top: 24px;">
-              <h3>🍪 <span id="csPlatformLabel">Jobright</span> Cookie Sets (Rotation)</h3>
-              <p class="help-text">Manage multiple <span id="csPlatformLabelSub">Jobright</span> cookie sets. The scraper will auto-rotate if a set is limited.</p>
-              <div class="input-group" style="margin-bottom: 8px;">
-                <input type="text" id="jrCookieLabel" placeholder="Label (e.g., Account 1)" class="form-control">
-              </div>
-              <div class="form-group">
-                <label for="jrCookieJson"><span id="csPlatformLabel3">Jobright</span> Cookie JSON:</label>
-                <textarea id="jrCookieJson" class="form-textarea" rows="6" placeholder='[{"name":"session","value":"...","domain":".example.com","path":"/"}]'></textarea>
-              </div>
-              <div class="form-actions">
-                <button id="addJRCookieSetBtn" class="btn btn-primary">+ Add Cookie Set</button>
-                <button id="listJRCookieSetsBtn" class="btn btn-secondary">🔄 Refresh List</button>
-                <button id="rotateJRCookieSetBtn" class="btn btn-info">🔁 Rotate Active</button>
-              </div>
-              <div id="jrCookieSetsStatus" class="status-message"></div>
-              <div id="jrCookieSetsList" class="jr-sets-grid"></div>
-            </div>
           </div>
         </div>
 
@@ -679,6 +661,41 @@
               </div>
             </div>
 
+            <!-- Google Sheets Integration -->
+            <div class="settings-section">
+              <h3>📊 Google Sheets Integration</h3>
+              <p class="help-text">Automatically save new jobs to Google Sheet after saving to database. Sheet URL: <a href="https://docs.google.com/spreadsheets/d/1hBW6XlTRz5wiFKF3g4FE_aRpGJ4g-DRLRBIynJ0rwMY/edit" target="_blank">View Sheet</a></p>
+              
+              <div class="form-group">
+                <label for="googleSheetsCredentials">Service Account JSON Credentials</label>
+                <textarea id="googleSheetsCredentials" class="form-control" rows="8" placeholder='Paste your Service Account JSON here:
+{
+  "type": "service_account",
+  "project_id": "...",
+  "private_key_id": "...",
+  "private_key": "...",
+  "client_email": "...",
+  ...
+}'></textarea>
+                <span class="help-text">Get this from Google Cloud Console → IAM & Admin → Service Accounts → Create Service Account → Download JSON key. Then share the Google Sheet with the service account email.</span>
+              </div>
+              
+              <div class="form-group">
+                <div class="button-group" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                  <button id="saveGoogleSheetsCredentialsBtn" class="btn btn-secondary">💾 Save Credentials</button>
+                  <button id="testGoogleSheetsBtn" class="btn btn-info">🔍 Test Connection</button>
+                  <span id="googleSheetsTestStatus" class="status-message"></span>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="enableGoogleSheets" checked>
+                  <span>Enable Google Sheets sync (saves jobs automatically)</span>
+                </label>
+              </div>
+            </div>
+
             <div class="form-actions">
               <button id="saveSettingsBtn" class="btn btn-success">💾 Save All Settings</button>
             </div>
@@ -711,6 +728,7 @@
                   <option value="ZipRecruiter">ZipRecruiter</option>
                   <option value="RemoteOK">RemoteOK</option>
                   <option value="WeWorkRemotely">WeWorkRemotely</option>
+                  <option value="Jungle">Jungle</option>
                 </select>
               </div>
               

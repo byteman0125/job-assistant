@@ -1,144 +1,134 @@
-# Google Sheets Integration Setup Guide
+# Google Sheets Setup Guide
 
-## 📋 Overview
+This guide will walk you through getting Google Service Account credentials to enable automatic job syncing to your Google Sheet.
 
-This guide will help you set up Google Sheets integration to automatically save new jobs to a public Google Sheet.
-
-## 🔑 Why Authentication is Needed
-
-Even if your Google Sheet is **public** (anyone can view/edit via web), the **Google Sheets API** still requires authentication for programmatic write access. This is a security requirement from Google.
-
-**Solution:** Use a **Service Account** (automated, no user interaction needed)
-
-## 📝 Step-by-Step Setup
-
-### Step 1: Create Google Cloud Project
+## Step 1: Access Google Cloud Console
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select existing)
-3. Name it: "Job Assistant" (or any name)
+2. Sign in with your Google account (the same account that owns the Google Sheet)
 
-### Step 2: Enable APIs
+## Step 2: Create a New Project (or Select Existing)
 
-1. Go to **APIs & Services** → **Library**
-2. Search and enable:
-   - **Google Sheets API**
-   - **Google Drive API** (if needed)
+1. Click on the project dropdown at the top of the page (next to "Google Cloud")
+2. Click **"NEW PROJECT"**
+3. Enter a project name (e.g., "Job Assistant")
+4. Click **"CREATE"**
+5. Wait for the project to be created, then select it from the dropdown
 
-### Step 3: Create Service Account
+## Step 3: Enable Google Sheets API
 
-1. Go to **APIs & Services** → **Credentials**
-2. Click **Create Credentials** → **Service Account**
-3. Fill in:
-   - **Service account name**: `job-assistant-sheets`
-   - **Service account ID**: (auto-generated)
-   - Click **Create and Continue**
-4. Skip role assignment (click **Continue**)
-5. Click **Done**
+1. In the left sidebar, click **"APIs & Services"** → **"Library"**
+2. Search for **"Google Sheets API"**
+3. Click on **"Google Sheets API"** from the results
+4. Click **"ENABLE"** button
+5. Wait for it to enable (usually takes a few seconds)
 
-### Step 4: Create Service Account Key
+## Step 4: Create a Service Account
 
-1. Click on the service account you just created
-2. Go to **Keys** tab
-3. Click **Add Key** → **Create new key**
-4. Choose **JSON** format
-5. Click **Create**
-6. **Download the JSON file** - this is your credentials!
+1. In the left sidebar, go to **"IAM & Admin"** → **"Service Accounts"**
+2. Click **"CREATE SERVICE ACCOUNT"** button at the top
+3. Fill in the details:
+   - **Service account name**: `job-assistant-sheets` (or any name you prefer)
+   - **Service account ID**: Will auto-fill (you can change it if needed)
+   - **Description**: `Service account for Job Assistant Google Sheets integration`
+4. Click **"CREATE AND CONTINUE"**
+5. **Skip** the "Grant this service account access to project" step (click **"CONTINUE"**)
+6. **Skip** the "Grant users access to this service account" step (click **"DONE"**)
 
-### Step 5: Create Google Sheet
+## Step 5: Create and Download JSON Key
 
-1. Go to [Google Sheets](https://sheets.google.com)
-2. Create a new sheet
-3. Set up headers in Row 1:
-   ```
-   Company | Title | URL | Platform | Location | Salary | Tech Stack | Remote | Startup | Date | Job Type | Industry
-   ```
-4. **Make sheet public OR share with service account:**
-   - **Option A (Public):**
-     - Click **Share** → **Change to anyone with the link** → **Editor**
-   - **Option B (Private but shared):**
-     - Click **Share**
-     - Add the service account email (from JSON file: `client_email`)
-     - Give it **Editor** permission
+1. You should now see your service account in the list
+2. Click on the service account email (it will look like: `job-assistant-sheets@your-project-id.iam.gserviceaccount.com`)
+3. Go to the **"KEYS"** tab
+4. Click **"ADD KEY"** → **"Create new key"**
+5. Select **"JSON"** as the key type
+6. Click **"CREATE"**
+7. A JSON file will automatically download to your computer (usually to your Downloads folder)
+8. **IMPORTANT**: Keep this file secure! It contains credentials that allow access to your Google Sheet.
 
-### Step 6: Get Sheet ID
+## Step 6: Get the Service Account Email
 
-From your Google Sheet URL:
+1. In the Service Account details page, you'll see the **"Email"** field
+2. Copy this email address (it looks like: `job-assistant-sheets@your-project-id.iam.gserviceaccount.com`)
+3. You'll need this to share the Google Sheet
+
+## Step 7: Share Google Sheet with Service Account
+
+1. Open your Google Sheet: https://docs.google.com/spreadsheets/d/1hBW6XlTRz5wiFKF3g4FE_aRpGJ4g-DRLRBIynJ0rwMY/edit
+2. Click the **"Share"** button (top right)
+3. In the "Add people and groups" field, paste the **Service Account email** you copied in Step 6
+4. Make sure the permission is set to **"Editor"** (not Viewer or Commenter)
+5. **Uncheck** "Notify people" (service accounts don't have email)
+6. Click **"Share"**
+
+## Step 8: Get the JSON Credentials Content
+
+1. Open the downloaded JSON file (from Step 5) in a text editor
+2. The file will look something like this:
+```json
+{
+  "type": "service_account",
+  "project_id": "your-project-id",
+  "private_key_id": "abc123...",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+  "client_email": "job-assistant-sheets@your-project-id.iam.gserviceaccount.com",
+  "client_id": "123456789",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/..."
+}
 ```
-https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit
-```
 
-Copy the `SHEET_ID_HERE` part.
+3. **Copy the entire JSON content** (all of it, from `{` to `}`)
 
-### Step 7: Configure in Job Assistant
+## Step 9: Add Credentials to Job Assistant App
 
-1. Open Job Assistant app
-2. Go to **Settings** tab
-3. Find **Google Sheets** section
-4. Enter:
-   - **Sheet ID**: Paste the sheet ID from Step 6
-   - **Credentials**: Open the JSON file from Step 4, copy entire contents, paste here
-5. Click **Save**
-6. Click **Test Connection** to verify
+1. Open the Job Assistant app
+2. Go to the **"Settings"** tab
+3. Scroll down to **"📊 Google Sheets Integration"** section
+4. Paste the **entire JSON content** into the **"Service Account JSON Credentials"** textarea
+5. Click **"🔍 Test Connection"** to verify it works
+6. If successful, you'll see: **"✅ Connection successful!"**
+7. Make sure **"Enable Google Sheets sync"** checkbox is checked
+8. Click **"💾 Save All Settings"**
 
-## ✅ Verification
+## Troubleshooting
 
-After setup:
-1. Start scraping jobs
-2. When a new job is found and saved to database
-3. It will automatically appear in your Google Sheet
-4. Check console logs for: `📊 Google Sheets: ✅ Job saved to sheet`
+### Test Connection Fails
 
-## 🔧 Troubleshooting
+- **"No credentials found"**: Make sure you pasted the entire JSON content
+- **"Invalid credentials"**: Check that the JSON is valid (no extra characters, proper formatting)
+- **"Permission denied"**: Make sure you shared the Google Sheet with the service account email (Step 7)
+- **"API not enabled"**: Go back to Step 3 and make sure Google Sheets API is enabled
 
-### Error: "Not initialized"
-- Check if credentials JSON is valid
-- Verify Sheet ID is correct
+### Jobs Not Syncing to Sheet
 
-### Error: "Permission denied"
-- Make sure sheet is shared with service account email
-- Or make sheet public with edit permissions
+- Check that **"Enable Google Sheets sync"** is checked in Settings
+- Check the app console/logs for any error messages
+- Verify the service account has Editor access to the sheet
+- Make sure the sheet name is "Sheet1" (or update the code if you use a different name)
 
-### Error: "Sheet not found"
-- Verify Sheet ID is correct
-- Check if sheet exists and is accessible
+## Security Notes
 
-### Jobs not appearing
-- Check console logs for errors
-- Verify Google Sheets API is enabled
-- Test connection in Settings
+⚠️ **Important Security Information:**
 
-## 📊 Sheet Structure
+- The JSON key file gives full access to your Google Sheet
+- Never share this file publicly or commit it to version control
+- If the key is compromised, you can delete it in Google Cloud Console and create a new one
+- The credentials are stored encrypted in the app's database
 
-Default columns (you can customize):
-1. **Company** - Company name
-2. **Title** - Job title
-3. **URL** - Job application URL
-4. **Platform** - Source platform (Jobright, BuiltIn, etc.)
-5. **Location** - Job location
-6. **Salary** - Salary information
-7. **Tech Stack** - Technologies required
-8. **Remote** - Yes/No
-9. **Startup** - Yes/No
-10. **Date** - Date found (YYYY-MM-DD)
-11. **Job Type** - Full-time, Contract, etc.
-12. **Industry** - Industry sector
+## Quick Checklist
 
-## 🔒 Security Notes
+- [ ] Created Google Cloud project
+- [ ] Enabled Google Sheets API
+- [ ] Created Service Account
+- [ ] Downloaded JSON key file
+- [ ] Shared Google Sheet with service account email (Editor permission)
+- [ ] Pasted JSON credentials into app Settings
+- [ ] Tested connection successfully
+- [ ] Enabled Google Sheets sync
+- [ ] Saved settings
 
-- **Service Account JSON** contains sensitive credentials
-- Keep it secure - don't share publicly
-- The JSON is stored encrypted in the app's database
-- Service account has access only to sheets you explicitly share
-
-## 💡 Tips
-
-- **Duplicate Prevention**: System checks for duplicates by URL or Company+Title
-- **Non-blocking**: If Google Sheets fails, database save still succeeds
-- **Async**: Google Sheets save happens in background, doesn't slow down scraping
-- **Public Sheet**: You can share the sheet URL with others to view jobs
-
-## 🚀 Ready to Use!
-
-Once configured, all new jobs will automatically sync to your Google Sheet! 🎉
+Once all steps are complete, new jobs saved to the database will automatically sync to your Google Sheet! 🎉
 

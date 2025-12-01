@@ -1,7 +1,7 @@
 // AI Data Extractor - Uses Ollama with llama3.2:3b model (local, offline)
 const axios = require('axios');
 const os = require('os');
-const { spawn } = require('child_process');
+// Note: spawn import removed - no longer starting Ollama processes
 const path = require('path');
 
 class GPTExtractor {
@@ -14,13 +14,13 @@ class GPTExtractor {
     this.model = 'llama3.2:3b'; // Medium model (~2GB) - better quality, balanced performance
     this.maxRetries = 3;
     this.gpuAvailable = false;
-    this.ollamaProcess = null; // Reference to Ollama server process
+    // Note: ollamaProcess removed - now using external Ollama service
   }
 
   async initialize() {
-    console.log('🤖 AI Extractor: Initializing with Ollama support');
+    console.log('🤖 AI Extractor: Initializing (expects external Ollama service)');
     try {
-      // Check if Ollama is available and install model if needed
+      // Only check if external Ollama service is available - NO auto-starting or model installation
       await this.checkOllamaAvailability();
       await this.checkGPUAvailability();
       await this.ensureModelInstalled();
@@ -28,25 +28,26 @@ class GPTExtractor {
       // Test AI connection to ensure it's working
       const aiTestResult = await this.testAIConnection();
       if (aiTestResult) {
-        console.log(`✅ AI Extractor: Ollama is ready for job analysis (${this.gpuAvailable ? 'GPU' : 'CPU'} mode)`);
+        console.log(`✅ AI Extractor: External Ollama service connected and ready (${this.gpuAvailable ? 'GPU' : 'CPU'} mode)`);
         this.ollamaInitialized = true;
       } else {
-        console.log('⚠️ AI test failed, but Ollama server is running - will retry during job processing');
+        console.log('⚠️ AI test failed - external Ollama service may not be ready');
         this.ollamaInitialized = false;
       }
       
       this.isReady = true;
     } catch (error) {
-      console.log('⚠️ Ollama initialization failed:', error.message);
-      console.log('💡 Continuing without AI extraction - jobs will be processed with basic data');
+      console.log('⚠️ External Ollama service not available:', error.message);
+      console.log('💡 Job Assistant requires an external Ollama service to be running');
+      console.log('   Please start Ollama service separately before running Job Assistant');
       this.isReady = true;
       this.ollamaInitialized = false;
     }
   }
 
-  // Check if Ollama server is running, start it if not
+  // Check if Ollama server is running (expects external service)
   async checkOllamaAvailability() {
-    console.log('🔍 Checking Ollama server availability...');
+    console.log('🔍 Checking for external Ollama server...');
     
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
@@ -54,26 +55,19 @@ class GPTExtractor {
           timeout: 3000,
         });
         
-        console.log('✅ Ollama server is running');
+        console.log('✅ External Ollama server is running');
         this.ollamaInitialized = true;
         return true;
       } catch (error) {
         console.log(`⏳ Ollama server check attempt ${attempt}/${this.maxRetries}: ${error.message}`);
         
-        if (attempt === 1) {
-          // Try to start Ollama server on first attempt
-          console.log('🚀 Attempting to start Ollama server...');
-          try {
-            await this.startOllamaServer();
-            console.log('⏳ Waiting 5 seconds for Ollama server to start...');
-            await new Promise(resolve => setTimeout(resolve, 5000));
-          } catch (startError) {
-            console.log(`⚠️ Could not start Ollama server: ${startError.message}`);
-          }
-        }
-        
         if (attempt === this.maxRetries) {
-          throw new Error(`Ollama server not available after ${this.maxRetries} attempts. Please ensure Ollama is installed and start it manually: ollama serve`);
+          console.log('❌ External Ollama server not available.');
+          console.log('💡 Please start Ollama service manually:');
+          console.log('   1. Run: export OLLAMA_ORIGINS="chrome-extension://*,moz-extension://*,*://localhost:*"');
+          console.log('   2. Run: ollama serve');
+          console.log('   3. Or use the startup script from Job Radar extension');
+          throw new Error(`External Ollama server not available after ${this.maxRetries} attempts. Please start Ollama service manually.`);
         }
         
         // Wait before retry
@@ -82,59 +76,11 @@ class GPTExtractor {
     }
   }
 
-  // Start Ollama server automatically
-  async startOllamaServer() {
-    return new Promise((resolve, reject) => {
-      console.log('🔧 Starting Ollama server in background...');
-      
-      const ollamaProcess = spawn('ollama', ['serve'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true // Allow server to continue running after this process
-      });
-      
-      // Store reference to kill later if needed
-      this.ollamaProcess = ollamaProcess;
-      
-      let started = false;
-      
-      ollamaProcess.stdout.on('data', (data) => {
-        const message = data.toString();
-        if (!started && (message.includes('listening') || message.includes('server'))) {
-          console.log('✅ Ollama server started successfully');
-          started = true;
-          resolve();
-        }
-      });
-      
-      ollamaProcess.stderr.on('data', (data) => {
-        const message = data.toString();
-        console.log(`🔧 Ollama: ${message.trim()}`);
-      });
-      
-      ollamaProcess.on('error', (error) => {
-        if (error.code === 'ENOENT') {
-          reject(new Error('Ollama command not found. Please install Ollama first: https://ollama.ai'));
-        } else {
-          reject(error);
-        }
-      });
-      
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (!started) {
-          console.log('⏰ Ollama server starting... (may take a moment)');
-          resolve(); // Don't reject, let the retry mechanism handle it
-        }
-      }, 10000);
-      
-      // Detach the process so it can run independently
-      ollamaProcess.unref();
-    });
-  }
+  // Note: startOllamaServer() method removed - now expects external Ollama service
 
-  // Ensure the model is installed
+  // Check if model is available (expects external service to have it)
   async ensureModelInstalled() {
-    console.log(`🔍 Checking if model '${this.model}' is installed...`);
+    console.log(`🔍 Checking if model '${this.model}' is available in external service...`);
     
     try {
       const response = await axios.get(`${this.ollamaUrl}/api/tags`, {
@@ -145,15 +91,23 @@ class GPTExtractor {
       const modelExists = models.some(model => model.name.includes(this.model));
       
       if (modelExists) {
-        console.log(`✅ Model '${this.model}' is already installed`);
+        console.log(`✅ Model '${this.model}' is available in external service`);
         return;
       }
       
-      console.log(`📥 Model '${this.model}' not found. Installing...`);
-      await this.installModel();
+      console.log(`❌ Model '${this.model}' not found in external service.`);
+      console.log('💡 Please install the model in the external Ollama service:');
+      console.log(`   1. Make sure Ollama service is running`);
+      console.log(`   2. Run: ollama pull ${this.model}`);
+      console.log(`   3. Or use the deployment script to install models`);
+      throw new Error(`Model '${this.model}' not available in external Ollama service. Please install it manually.`);
       
     } catch (error) {
-      throw new Error(`Failed to check/install model: ${error.message}`);
+      if (error.response || error.code === 'ECONNREFUSED') {
+        throw new Error(`Cannot connect to external Ollama service: ${error.message}`);
+      } else {
+        throw error; // Re-throw our custom error
+      }
     }
   }
 
@@ -177,48 +131,7 @@ class GPTExtractor {
     }
   }
 
-  // Install the required model
-  async installModel() {
-    console.log(`📥 Installing Ollama model: ${this.model}`);
-    
-    return new Promise((resolve, reject) => {
-      const ollamaProcess = spawn('ollama', ['pull', this.model], {
-        stdio: ['inherit', 'pipe', 'pipe']
-      });
-      
-      let output = '';
-      let errorOutput = '';
-      
-      ollamaProcess.stdout.on('data', (data) => {
-        const message = data.toString();
-        output += message;
-        console.log(`📥 Ollama: ${message.trim()}`);
-      });
-      
-      ollamaProcess.stderr.on('data', (data) => {
-        const message = data.toString();
-        errorOutput += message;
-        console.log(`⚠️ Ollama: ${message.trim()}`);
-      });
-      
-      ollamaProcess.on('close', (code) => {
-        if (code === 0) {
-          console.log(`✅ Model '${this.model}' installed successfully`);
-          resolve();
-        } else {
-          reject(new Error(`Model installation failed with code ${code}: ${errorOutput}`));
-        }
-      });
-      
-      ollamaProcess.on('error', (error) => {
-        if (error.code === 'ENOENT') {
-          reject(new Error('Ollama command not found. Please install Ollama first: https://ollama.ai'));
-        } else {
-          reject(new Error(`Failed to start Ollama process: ${error.message}`));
-        }
-      });
-    });
-  }
+  // Note: installModel() method removed - models must be installed in external service
 
   async waitForRateLimit() {
     const now = Date.now();
@@ -561,14 +474,8 @@ Return ONLY the JSON object, no other text.`;
 
   // Cleanup method to handle app shutdown
   cleanup() {
-    if (this.ollamaProcess && !this.ollamaProcess.killed) {
-      console.log('🧹 Cleaning up Ollama server process...');
-      try {
-        this.ollamaProcess.kill();
-      } catch (error) {
-        console.log('⚠️ Could not clean up Ollama process:', error.message);
-      }
-    }
+    // Note: No longer managing Ollama process - it's external service
+    console.log('🧹 Job Assistant cleanup - external Ollama service continues running');
   }
 }
 

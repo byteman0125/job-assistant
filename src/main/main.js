@@ -12,14 +12,24 @@ let scraperManager = null;
 let isScraperRunning = false;
 let todayJobCount = 0;
 
-// Intercept console.log to send Jobright logs to UI
+// Intercept console.log to send platform logs to UI
 const originalConsoleLog = console.log;
+const trackedLogPlatforms = [
+  'Jobright',
+  'Himalayas',
+  'Jobgether',
+  'BuiltIn',
+  'ZipRecruiter',
+  'RemoteOK',
+  'WeWorkRemotely',
+  'Jungle'
+];
 console.log = function(...args) {
   originalConsoleLog.apply(console, args);
   
   // Send Jobright logs to UI
   const message = args.join(' ');
-  if (message.includes('Jobright:') && mainWindow) {
+  if (mainWindow && trackedLogPlatforms.some(name => message.includes(`${name}:`))) {
     mainWindow.webContents.send('console-log', {
       message: message,
       timestamp: new Date().toLocaleTimeString()
@@ -243,6 +253,7 @@ async function startScraping() {
             else if (platform === 'Jobgether') domain = '.jobgether.com';
             else if (platform === 'BuiltIn') domain = '.builtin.com';
             else if (platform === 'ZipRecruiter') domain = '.ziprecruiter.com';
+            else if (platform === 'Jungle') domain = '.welcometothejungle.com';
           }
           
           await scrapingSession.cookies.set({
@@ -398,15 +409,21 @@ ipcMain.handle('save-settings', async (event, settings) => {
   return { success: true };
 });
 
-// Google Sheets handlers
-ipcMain.handle('test-google-sheets', async () => {
+ipcMain.handle('test-google-sheets', async (event, credentialsJson) => {
   try {
-    const GoogleSheetsService = require('./googleSheets');
-    const sheetsService = new GoogleSheetsService(db);
+    // Temporarily save credentials to test
+    db.saveSetting('google_sheets_credentials', credentialsJson);
+    
+    // Get Google Sheets service and test
+    const sheetsService = db.getGoogleSheets();
     const result = await sheetsService.testConnection();
+    
     return result;
   } catch (error) {
-    return { success: false, message: `Error: ${error.message}` };
+    return { 
+      success: false, 
+      message: `Test failed: ${error.message}` 
+    };
   }
 });
 

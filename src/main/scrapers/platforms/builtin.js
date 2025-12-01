@@ -6,6 +6,7 @@ class BuiltInScraper extends BaseScraper {
   constructor(database) {
     super(database, 'BuiltIn');
     this.baseUrl = 'https://builtin.com/jobs/remote/engineering?daysSinceUpdated=1&earlyApplicant=true&country=USA&allLocations=true';
+    this.maxPagesToScan = 5;
   }
   
   getBaseDomain() {
@@ -43,7 +44,7 @@ class BuiltInScraper extends BaseScraper {
       let currentPage = 1;
       let hasMorePages = true;
       
-      while (hasMorePages && this.isRunning) {
+      while (hasMorePages && this.isRunning && currentPage <= this.maxPagesToScan) {
         // Build URL with page number
         const pageUrl = currentPage === 1 
           ? this.baseUrl 
@@ -303,10 +304,13 @@ class BuiltInScraper extends BaseScraper {
         
         // Move to next page
         currentPage++;
-        this.updateStatus(`Moving to page ${currentPage}...`, `Found: ${newJobsCount}`);
-        
-        // Small delay before next page
-        await this.randomDelay(2000, 3000);
+        if (currentPage > this.maxPagesToScan) {
+          hasMorePages = false;
+          console.log(`${this.platform}: Reached page limit (${this.maxPagesToScan}). Stopping pagination.`);
+        } else {
+          this.updateStatus(`Moving to page ${currentPage}...`, `Found: ${newJobsCount}`);
+          await this.randomDelay(2000, 3000);
+        }
       }
       
       this.updateStatus(`✅ Scraping complete!`, `Total: ${newJobsCount} new jobs`);
