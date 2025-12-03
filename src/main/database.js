@@ -759,6 +759,41 @@ ${JOBS_TABLE_COLUMNS}
     return cookies;
   }
 
+  migrateLegacyCookiesToSets() {
+    const allCookies = this.getAllCookies();
+    if (!allCookies || Object.keys(allCookies).length === 0) {
+      console.log('Cookie migration: No legacy cookies found.');
+      return { migratedPlatforms: [], skippedPlatforms: [] };
+    }
+
+    const migratedPlatforms = [];
+    const skippedPlatforms = [];
+
+    for (const [platform, cookies] of Object.entries(allCookies)) {
+      if (!Array.isArray(cookies) || cookies.length === 0) {
+        skippedPlatforms.push({ platform, reason: 'no legacy cookies' });
+        continue;
+      }
+
+      const existingSets = this.getCookieSets(platform) || [];
+      if (existingSets.length > 0) {
+        skippedPlatforms.push({ platform, reason: 'cookie_sets already exist' });
+        continue;
+      }
+
+      const label = 'Set 1';
+      const id = this.saveCookieSet(platform, label, cookies);
+      migratedPlatforms.push({ platform, id, count: cookies.length });
+    }
+
+    console.log(
+      'Cookie migration result:',
+      JSON.stringify({ migratedPlatforms, skippedPlatforms }, null, 2)
+    );
+
+    return { migratedPlatforms, skippedPlatforms };
+  }
+
   // Actions operations
   saveActions(platform, actions) {
     const actionsJson = JSON.stringify(actions);

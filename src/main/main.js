@@ -420,6 +420,16 @@ ipcMain.handle('reorder-cookie-sets', async (event, platform, orderedIds) => {
   return { success: ok };
 });
 
+ipcMain.handle('migrate-cookies-internal', async () => {
+  try {
+    const result = db.migrateLegacyCookiesToSets();
+    return { success: true, result };
+  } catch (error) {
+    console.error('Error in migrate-cookies-internal:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('save-actions', async (event, platform, actions) => {
   return db.saveActions(platform, actions);
 });

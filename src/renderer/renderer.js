@@ -66,6 +66,7 @@ const cookieSetList = document.getElementById('cookieSetList');
 const cookieSetLabelInput = document.getElementById('cookieSetLabel');
 const cookieEditorSection = document.getElementById('cookieEditorSection');
 const cookieStatus = document.getElementById('cookieStatus');
+const migrateCookiesBtn = document.getElementById('migrateCookiesBtn');
 
 // Settings Management
 const keywordList = document.getElementById('keywordList');
@@ -364,6 +365,7 @@ function setupEventListeners() {
   if (loadCookiesBtn) loadCookiesBtn.addEventListener('click', loadCookies);
   if (testCookiesBtn) testCookiesBtn.addEventListener('click', testCookies);
   if (addCookieSetBtn) addCookieSetBtn.addEventListener('click', addCookieSet);
+  if (migrateCookiesBtn) migrateCookiesBtn.addEventListener('click', migrateLegacyCookies);
   
   // Auto-load cookies when platform changes
   if (cookiePlatform) {
@@ -1370,6 +1372,30 @@ function addCookieSet() {
     cookieData.value = '[]';
   }
   showMessage(cookieStatus, `Creating new cookie set for ${platform}.`, 'info');
+}
+
+async function migrateLegacyCookies() {
+  try {
+    const res = await ipcRenderer.invoke('migrate-cookies-internal');
+    if (!res || !res.success) {
+      const msg = res && res.error ? res.error : 'Unknown error';
+      showMessage(cookieStatus, `Migration failed: ${msg}`, 'error');
+      return;
+    }
+    const { migratedPlatforms = [], skippedPlatforms = [] } = res.result || {};
+    const migratedNames = migratedPlatforms.map(p => p.platform).join(', ') || 'none';
+    showMessage(
+      cookieStatus,
+      `Migration complete. Migrated: ${migratedNames}.`,
+      'success'
+    );
+    // Reload current platform sets in case it was migrated
+    await loadCookies();
+    console.log('Cookie migration result:', res.result);
+  } catch (error) {
+    console.error('Error running cookie migration:', error);
+    showMessage(cookieStatus, `Migration error: ${error.message}`, 'error');
+  }
 }
 
 async function testGoogleSheets() {
