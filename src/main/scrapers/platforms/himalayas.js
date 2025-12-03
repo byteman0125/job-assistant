@@ -7,7 +7,9 @@ class HimalayasScraper extends BaseScraper {
     super(database, 'Himalayas', gptExtractor);
     this.baseUrl = 'https://himalayas.app/jobs/countries/united-states/software-engineer?sort=recent';
     this.maxPagesToScan = 2;
-    this.redirectWaitRangeMs = [5000, 15000];
+    // Wait for external redirects after clicking "I'm ready to apply"
+    // 5–10 seconds is enough for most Workday/Greenhouse flows
+    this.redirectWaitRangeMs = [5000, 10000];
   }
   
   getBaseDomain() {
@@ -207,22 +209,38 @@ class HimalayasScraper extends BaseScraper {
       jobPage = await this.createWorkerPage('job-detail');
       console.log(`${this.platform}: [1/5] Opening job detail page`);
       await jobPage.goto(jobCard.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      
+
+      // Give Next.js client-side rendering time to fully mount the job view (including "Apply now")
+      await this.randomDelay(5000, 10000);
+
       const details = await this.extractJobDetails(jobPage);
       console.log(`${this.platform}: [2/5] Job detail parsed`);
 
-      let applicationLink = await this.getApplicationLinkFromModal(jobPage);
-      if (!applicationLink && details.applicationLink) {
-        applicationLink = details.applicationLink;
-      }
-      let finalUrl = jobCard.url;
+      // Preferred path: fully simulate user flow in modal and capture final redirected URL
+      let finalUrlInfo = await this.getApplicationLinkFromModal(jobPage);
 
-      if (applicationLink) {
-        console.log(`${this.platform}: [3/5] Found application link → ${applicationLink}`);
-        finalUrl = await this.followApplicationLink(jobPage, applicationLink);
-      } else {
-        console.log(`${this.platform}: ⚠️ No application link found, using job detail URL`);
+      // Fallback path: use applicationLink from script tag, then follow redirects
+      if ((!finalUrlInfo || !finalUrlInfo.url) && details.applicationLink) {
+        console.log(`${this.platform}: [3/5] Found application link in script → ${details.applicationLink}`);
+        finalUrlInfo = await this.followApplicationLink(jobPage, details.applicationLink);
       }
+
+      // Last resort: keep using job detail URL
+      if (!finalUrlInfo || !finalUrlInfo.url) {
+        console.log(`${this.platform}: ⚠️ No application link found, using job detail URL`);
+        finalUrlInfo = { url: jobCard.url, expired: false };
+      }
+
+      if (finalUrlInfo.expired) {
+        console.log(`${this.platform}: ⏭️ SKIP (expired job after redirect) - ${finalUrlInfo.url}`);
+        this.sendSkipNotification(
+          { company: jobCard.company, title: jobCard.title },
+          'Expired job'
+        );
+        return false;
+      }
+
+      const finalUrl = finalUrlInfo.url;
 
       if (this.shouldSkipDomain(finalUrl, settings.ignoreDomains)) {
         console.log(`${this.platform}: ⏭️ SKIP (ignored domain) - ${finalUrl}`);
@@ -317,6 +335,7 @@ class HimalayasScraper extends BaseScraper {
 
   async getApplicationLinkFromModal(page) {
     try {
+      console.log(`${this.platform}: 🔍 Searching for "Apply now" button on job detail page...`);
       // Use CSS selector approach instead of XPath
       // Wait for any button that contains "apply now" text (case-insensitive)
       const buttonFound = await page.waitForFunction(() => {
@@ -329,7 +348,7 @@ class HimalayasScraper extends BaseScraper {
       
       if (!buttonFound) {
         console.log(`${this.platform}: ⚠️ Apply button not found`);
-        return null;
+        return { url: null, expired: false };
       }
       
       // Find and click the button using evaluate
@@ -347,10 +366,12 @@ class HimalayasScraper extends BaseScraper {
         
         // Try direct click first
         try {
+          console.log('[Himalayas] Clicking "Apply now" button via .click()');
           applyButton.click();
           return true;
         } catch (e) {
           // Fallback to synthetic click
+          console.log('[Himalayas] Falling back to synthetic click for "Apply now" button');
           applyButton.dispatchEvent(new MouseEvent('click', { 
             bubbles: true, 
             cancelable: true, 
@@ -362,43 +383,118 @@ class HimalayasScraper extends BaseScraper {
       
       if (!clicked) {
         console.log(`${this.platform}: ⚠️ Failed to click Apply button`);
-        return null;
+        return { url: null, expired: false };
       }
-      
-      await page.waitForTimeout(1000);
-      
-      const linkAppeared = await page.waitForFunction(() => {
+
+      console.log(`${this.platform}: ⏳ Waiting 5–10s for apply modal to appear...`);
+      // Wait a bit for the Radix modal to appear (5–10s for stability)
+      await this.randomDelay(5000, 10000);
+
+      // Wait for the Radix modal and the "I'm ready to apply" anchor inside it
+      const modalReady = await page.waitForFunction(() => {
         const modal = document.querySelector('div[role="dialog"][data-state="open"]');
         if (!modal) return false;
-        const anchor = modal.querySelector('a[href*="/apply/"]');
-        return !!anchor;
+        const anchors = Array.from(modal.querySelectorAll('a'));
+        return anchors.some(a => {
+          const text = (a.textContent || '').trim().toLowerCase();
+          return text === "i'm ready to apply" || text.includes("i'm ready to apply") || (a.getAttribute('href') || '').includes('/apply/');
+        });
       }, { timeout: 10000 }).catch(() => false);
-      
-      if (!linkAppeared) {
+
+      if (!modalReady) {
+        console.log(`${this.platform}: ⚠️ Apply modal or anchor not found`);
         return null;
       }
-      
-      const href = await page.evaluate(() => {
+
+      const browser = page.browser();
+      const beforePages = await browser.pages();
+
+      // Click the "I'm ready to apply" anchor (which opens a new tab)
+      console.log(`${this.platform}: 🖱️ Clicking "I'm ready to apply" anchor inside modal...`);
+      const clickedApplyAnchor = await page.evaluate(() => {
         const modal = document.querySelector('div[role="dialog"][data-state="open"]');
-        if (!modal) return null;
-        const anchor = modal.querySelector('a[href*="/apply/"]');
-        if (!anchor) return null;
-        return anchor.href || anchor.getAttribute('href');
+        if (!modal) return false;
+        const anchors = Array.from(modal.querySelectorAll('a'));
+        const target = anchors.find(a => {
+          const text = (a.textContent || '').trim().toLowerCase();
+          return text === "i'm ready to apply" || text.includes("i'm ready to apply") || (a.getAttribute('href') || '').includes('/apply/');
+        });
+        if (!target) return false;
+        try {
+          target.scrollIntoView({ block: 'center', behavior: 'instant' });
+        } catch (_) {}
+        try {
+          target.click();
+          return true;
+        } catch (e) {
+          target.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window
+          }));
+          return true;
+        }
       });
-      
-      if (!href) {
+
+      if (!clickedApplyAnchor) {
+        console.log(`${this.platform}: ⚠️ Failed to click "I'm ready to apply" anchor`);
         return null;
       }
-      
+
+      // Wait for a new page (tab) to open, if any
+      let targetPage = null;
       try {
-        const absolute = new URL(href, 'https://himalayas.app');
-        return absolute.href;
-      } catch {
-        return href;
+        const maxWaitMs = 8000;
+        const pollInterval = 250;
+        const start = Date.now();
+
+        while (Date.now() - start < maxWaitMs) {
+          const pages = await browser.pages();
+          if (pages.length > beforePages.length) {
+            // Pick the newest page that wasn't in beforePages
+            targetPage = pages.find(p => !beforePages.includes(p)) || pages[pages.length - 1];
+            break;
+          }
+          await new Promise(r => setTimeout(r, pollInterval));
+        }
+      } catch (_) {
+        targetPage = null;
       }
+
+      // If no new tab appeared, we assume redirect happens in the same page
+      const pageToWatch = targetPage || page;
+
+      const waitMs = this.getRandomInt(this.redirectWaitRangeMs[0], this.redirectWaitRangeMs[1]);
+      console.log(`${this.platform}: ⏳ Waiting ${Math.round(waitMs / 1000)}s for final redirect after applying...`);
+      await new Promise(r => setTimeout(r, waitMs));
+
+      const finalUrl = pageToWatch.url();
+      console.log(`${this.platform}: 🔗 Final redirected URL (modal flow): ${finalUrl}`);
+
+      // Check for expired job message on the final page
+      let expired = false;
+      try {
+        expired = await pageToWatch.evaluate(() => {
+          const text = document.body ? document.body.innerText || '' : '';
+          return text.toLowerCase().includes('the job you are looking for is no longer open');
+        });
+      } catch (_) {
+        expired = false;
+      }
+
+      // Close spawned tab if it is different from the original page
+      if (targetPage && targetPage !== page) {
+        try {
+          await targetPage.close();
+        } catch (_) {
+          // ignore close errors
+        }
+      }
+
+      return { url: finalUrl, expired };
     } catch (error) {
       console.log(`${this.platform}: ⚠️ Unable to capture apply link from modal: ${error.message}`);
-      return null;
+      return { url: null, expired: false };
     }
   }
 
@@ -407,13 +503,25 @@ class HimalayasScraper extends BaseScraper {
       await page.goto(applyUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       const waitMs = this.getRandomInt(this.redirectWaitRangeMs[0], this.redirectWaitRangeMs[1]);
       console.log(`${this.platform}: ⏳ Waiting ${Math.round(waitMs / 1000)}s for redirect...`);
-      await page.waitForTimeout(waitMs);
+      await new Promise(r => setTimeout(r, waitMs));
       const finalUrl = page.url();
       console.log(`${this.platform}: 🔗 Final redirected URL: ${finalUrl}`);
-      return finalUrl;
+
+      // Check for expired job message on the final page
+      let expired = false;
+      try {
+        expired = await page.evaluate(() => {
+          const text = document.body ? document.body.innerText || '' : '';
+          return text.toLowerCase().includes('the job you are looking for is no longer open');
+        });
+      } catch (_) {
+        expired = false;
+      }
+
+      return { url: finalUrl, expired };
     } catch (error) {
       console.error(`${this.platform}: ⚠️ Failed to follow application link:`, error.message);
-      return applyUrl;
+      return { url: applyUrl, expired: false };
     }
   }
 
@@ -440,7 +548,7 @@ class HimalayasScraper extends BaseScraper {
     const maxFloor = Math.floor(max);
     return Math.floor(Math.random() * (maxFloor - minCeil + 1)) + minCeil;
   }
+
 }
 
 module.exports = HimalayasScraper;
-
