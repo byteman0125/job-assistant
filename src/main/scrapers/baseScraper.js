@@ -294,9 +294,27 @@ class BaseScraper {
       this.page = await this.browser.newPage();
       await this.configurePage(this.page);
       
-      // Load cookies if available
-      const cookies = this.db.getCookies(this.platform);
-      if (cookies && Array.isArray(cookies)) {
+      // Load cookies if available (prefer multi-set rotation, fallback to legacy single set)
+      let cookies = null;
+      let activeSetId = null;
+
+      // Try rotating through cookie_sets (multiple sets per platform)
+      let activeSet = this.db.rotateCookieSet(this.platform);
+      if (!activeSet) {
+        activeSet = this.db.getActiveCookieSet(this.platform);
+      }
+      if (activeSet && activeSet.cookies && Array.isArray(activeSet.cookies) && activeSet.cookies.length > 0) {
+        cookies = activeSet.cookies;
+        activeSetId = activeSet.id;
+      } else {
+        // Fallback: legacy single-set cookies table
+        const legacyCookies = this.db.getCookies(this.platform);
+        if (legacyCookies && Array.isArray(legacyCookies) && legacyCookies.length > 0) {
+          cookies = legacyCookies;
+        }
+      }
+
+      if (cookies && Array.isArray(cookies) && cookies.length > 0) {
         console.log(`${this.platform}: Loading ${cookies.length} cookies...`);
         const puppeteerCookies = cookies.map(c => ({
           name: c.name,
@@ -310,6 +328,12 @@ class BaseScraper {
         
         await this.page.setCookie(...puppeteerCookies);
         console.log(`${this.platform}: ✅ Cookies loaded`);
+
+        if (activeSetId) {
+          this.db.markCookieSetUsed(activeSetId);
+        }
+      } else {
+        console.log(`${this.platform}: No cookies configured (cookie_sets or legacy)`);
       }
       
       // Note: Tab creation is now handled per-scraper with promises

@@ -1,5 +1,4 @@
 const HimalayasScraper = require('./platforms/himalayas');
-const JobgetherScraper = require('./platforms/jobgether');
 const BuiltInScraper = require('./platforms/builtin');
 const ZipRecruiterScraper = require('./platforms/ziprecruiter');
 const JobrightScraper = require('./platforms/jobright');
@@ -20,7 +19,6 @@ class ScraperManager {
     this.scrapers = [
       new JobrightScraper(database),  // START WITH JOBRIGHT FIRST! (No AI)
       new HimalayasScraper(database, this.gptExtractor),
-      new JobgetherScraper(database, this.gptExtractor),
       new BuiltInScraper(database),  // No AI needed
       new ZipRecruiterScraper(database, this.gptExtractor),
       new RemoteOKScraper(database, this.gptExtractor),
@@ -50,12 +48,25 @@ class ScraperManager {
     console.log(`⚙️ Enabled platforms (in order): ${enabledPlatforms.join(', ')}`);
     
     // Sort scrapers based on the order in enabledPlatforms
-    const activateScrapers = enabledPlatforms
+    const allScrapersInOrder = enabledPlatforms
       .map(platformName => this.scrapers.find(s => s.platform === platformName))
       .filter(scraper => scraper !== undefined); // Remove any platforms that don't have scrapers
+
+    // Filter out platforms with no cookies configured (neither cookie_sets nor legacy cookies)
+    const activateScrapers = allScrapersInOrder.filter(scraper => {
+      const cookieSets = this.db.getCookieSets(scraper.platform) || [];
+      const legacyCookies = this.db.getCookies(scraper.platform) || [];
+      const hasCookieConfig =
+        (Array.isArray(cookieSets) && cookieSets.length > 0) ||
+        (Array.isArray(legacyCookies) && legacyCookies.length > 0);
+      if (!hasCookieConfig) {
+        console.log(`${scraper.platform}: ⚠️ No cookies configured (cookie_sets or legacy) - skipping platform`);
+      }
+      return hasCookieConfig;
+    });
     
     if (activateScrapers.length === 0) {
-      console.log('⚠️ No platforms enabled in settings!');
+      console.log('⚠️ No platforms with cookies configured. Scraper will not run.');
       this.isRunning = false;
       return;
     }

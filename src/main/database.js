@@ -634,17 +634,29 @@ ${JOBS_TABLE_COLUMNS}
   }
 
   getCookieSets(platform) {
-    const rows = this.db.prepare('SELECT * FROM cookie_sets WHERE platform = ? ORDER BY is_active DESC, last_used ASC, id ASC').all(platform);
-    return rows.map(r => ({
-      id: r.id,
-      platform: r.platform,
-      label: r.label,
-      is_active: !!r.is_active,
-      usage_count: r.usage_count,
-      last_used: r.last_used,
-      created_at: r.created_at,
-      updated_at: r.updated_at
-    }));
+    const rows = this.db
+      .prepare('SELECT * FROM cookie_sets WHERE platform = ? ORDER BY is_active DESC, last_used ASC, id ASC')
+      .all(platform);
+    return rows.map(r => {
+      let cookies = [];
+      try {
+        const decrypted = this.decrypt(r.cookies_encrypted);
+        cookies = JSON.parse(decrypted);
+      } catch (e) {
+        console.error('Error decrypting cookies for cookie_set id', r.id, e);
+      }
+      return {
+        id: r.id,
+        platform: r.platform,
+        label: r.label,
+        is_active: !!r.is_active,
+        usage_count: r.usage_count,
+        last_used: r.last_used,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        cookies
+      };
+    });
   }
 
   getActiveCookieSet(platform) {
@@ -680,6 +692,32 @@ ${JOBS_TABLE_COLUMNS}
     const stmt = this.db.prepare('DELETE FROM cookie_sets WHERE id = ?');
     const res = stmt.run(id);
     return res.changes > 0;
+  }
+
+  updateCookieSet(id, label, cookies) {
+    const cookiesJson = JSON.stringify(cookies);
+    const encrypted = this.encrypt(cookiesJson);
+    const now = Math.floor(Date.now() / 1000);
+    const stmt = this.db.prepare(`
+      UPDATE cookie_sets
+      SET label = ?, cookies_encrypted = ?, updated_at = ?
+      WHERE id = ?
+    `);
+    const res = stmt.run(label || null, encrypted, now, id);
+    return res.changes > 0;
+  }
+
+  reorderCookieSets(platform, orderedIds) {
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) return false;
+    const tx = this.db.transaction(() => {
+      orderedIds.forEach((id, index) => {
+        this.db
+          .prepare('UPDATE cookie_sets SET last_used = ? WHERE id = ? AND platform = ?')
+          .run(index, id, platform);
+      });
+    });
+    tx();
+    return true;
   }
 
   clearCookies(platform) {

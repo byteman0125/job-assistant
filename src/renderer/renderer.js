@@ -61,6 +61,10 @@ const cookieData = document.getElementById('cookieData');
 const saveCookiesBtn = document.getElementById('saveCookiesBtn');
 const loadCookiesBtn = document.getElementById('loadCookiesBtn');
 const testCookiesBtn = document.getElementById('testCookiesBtn');
+const addCookieSetBtn = document.getElementById('addCookieSetBtn');
+const cookieSetList = document.getElementById('cookieSetList');
+const cookieSetLabelInput = document.getElementById('cookieSetLabel');
+const cookieEditorSection = document.getElementById('cookieEditorSection');
 const cookieStatus = document.getElementById('cookieStatus');
 
 // Settings Management
@@ -87,6 +91,10 @@ let currentSettings = {
 };
 
 let allJobs = [];
+
+// Cookie sets state
+let currentCookieSets = [];
+let selectedCookieSetId = null;
 
 
 // Listen for job skip notifications
@@ -352,12 +360,18 @@ function setupEventListeners() {
   });
 
   // Cookies
-  saveCookiesBtn.addEventListener('click', saveCookies);
-  loadCookiesBtn.addEventListener('click', loadCookies);
-  testCookiesBtn.addEventListener('click', testCookies);
+  if (saveCookiesBtn) saveCookiesBtn.addEventListener('click', saveCookies);
+  if (loadCookiesBtn) loadCookiesBtn.addEventListener('click', loadCookies);
+  if (testCookiesBtn) testCookiesBtn.addEventListener('click', testCookies);
+  if (addCookieSetBtn) addCookieSetBtn.addEventListener('click', addCookieSet);
   
   // Auto-load cookies when platform changes
-  cookiePlatform.addEventListener('change', loadCookies);
+  if (cookiePlatform) {
+    cookiePlatform.addEventListener('change', () => {
+      selectedCookieSetId = null;
+      loadCookies();
+    });
+  }
 
   // Settings
   if (addKeywordBtn) addKeywordBtn.addEventListener('click', addKeyword);
@@ -1135,15 +1149,31 @@ window.deleteJob = async (jobId) => {
 // Cookie Management
 async function saveCookies() {
   try {
+    if (!cookiePlatform) {
+      throw new Error('No platform selected');
+    }
     const platform = cookiePlatform.value;
-    const cookies = JSON.parse(cookieData.value);
+    const label = (cookieSetLabelInput.value || '').trim() || null;
+    const cookies = JSON.parse(cookieData.value || '[]');
     
     if (!Array.isArray(cookies)) {
       throw new Error('Cookies must be an array');
     }
-    
-    await ipcRenderer.invoke('save-cookies', platform, cookies);
-    showMessage(cookieStatus, 'Cookies saved successfully!', 'success');
+
+    const payload = {
+      id: selectedCookieSetId || null,
+      platform,
+      label,
+      cookies
+    };
+
+    const result = await ipcRenderer.invoke('save-cookie-set', payload);
+    if (result && result.id) {
+      selectedCookieSetId = result.id;
+    }
+
+    await loadCookies();
+    showMessage(cookieStatus, 'Cookie set saved successfully!', 'success');
   } catch (error) {
     showMessage(cookieStatus, `Error: ${error.message}`, 'error');
   }
@@ -1151,20 +1181,58 @@ async function saveCookies() {
 
 async function loadCookies() {
   try {
+    if (!cookiePlatform) return;
     const platform = cookiePlatform.value;
-    console.log(`Loading cookies for platform: ${platform}`);
+    console.log(`Loading cookie sets for platform: ${platform}`);
     
-    const cookies = await ipcRenderer.invoke('get-cookies', platform);
-    
-    if (cookies) {
-      cookieData.value = JSON.stringify(cookies, null, 2);
-      showMessage(cookieStatus, `✅ Cookies loaded! Found ${cookies.length} cookies for ${platform}`, 'success');
-      console.log(`Loaded ${cookies.length} cookies for ${platform}`);
-    } else {
-      showMessage(cookieStatus, `No cookies found for ${platform}`, 'info');
-      cookieData.value = '';
-      console.log(`No cookies found for ${platform}`);
+    const sets = await ipcRenderer.invoke('get-cookie-sets', platform);
+    currentCookieSets = Array.isArray(sets) ? sets : [];
+
+    // Render list
+    if (cookieSetList) {
+      if (currentCookieSets.length === 0) {
+        cookieSetList.innerHTML = '<p class="empty-state">No cookie sets for this platform. Click "Add Cookie Set" to create one.</p>';
+      } else {
+        cookieSetList.innerHTML = currentCookieSets
+          .map(set => {
+            const label = set.label || `Set ${set.id}`;
+            const activeMark = set.is_active ? ' (active)' : '';
+            return `
+              <div class="cookie-set-item" draggable="true" data-id="${set.id}">
+                <div class="cookie-set-main">
+                  <span class="cookie-set-drag">⋮⋮</span>
+                  <button class="cookie-set-select" type="button" data-id="${set.id}">
+                    <span class="cookie-set-name">${label}${activeMark}</span>
+                    <span class="cookie-set-meta">Used ${set.usage_count}× • Last: ${set.last_used ? new Date(set.last_used * 1000).toLocaleString() : 'never'}</span>
+                  </button>
+                </div>
+                <button class="cookie-set-delete btn btn-danger" type="button" data-id="${set.id}">🗑</button>
+              </div>
+            `;
+          })
+          .join('');
+      }
     }
+
+    // If there is at least one set, auto-select the first
+    if (currentCookieSets.length > 0) {
+      const firstId = currentCookieSets[0].id;
+      selectCookieSet(firstId);
+    } else {
+      selectedCookieSetId = null;
+      if (cookieEditorSection) cookieEditorSection.display = 'none';
+      if (cookieData) cookieData.value = '';
+      if (cookieSetLabelInput) cookieSetLabelInput.value = '';
+    }
+
+    // Attach event listeners for select/delete and drag & drop
+    attachCookieSetEventHandlers();
+
+    showMessage(
+      cookieStatus,
+      `✅ Loaded ${currentCookieSets.length} cookie set(s) for ${platform}`,
+      'success'
+    );
   } catch (error) {
     showMessage(cookieStatus, `Error: ${error.message}`, 'error');
     console.error('Error loading cookies:', error);
@@ -1173,7 +1241,7 @@ async function loadCookies() {
 
 async function testCookies() {
   try {
-    const cookies = JSON.parse(cookieData.value);
+    const cookies = JSON.parse(cookieData.value || '[]');
     
     if (!Array.isArray(cookies)) {
       throw new Error('Cookies must be an array');
@@ -1190,6 +1258,118 @@ async function testCookies() {
   } catch (error) {
     showMessage(cookieStatus, `Invalid cookies: ${error.message}`, 'error');
   }
+}
+
+function selectCookieSet(id) {
+  const set = currentCookieSets.find(s => s.id === id);
+  if (!set) return;
+  selectedCookieSetId = id;
+  if (cookieEditorSection) cookieEditorSection.style.display = 'block';
+  if (cookieSetLabelInput) {
+    cookieSetLabelInput.value = set.label || `Set ${currentCookieSets.indexOf(set) + 1}`;
+  }
+  if (cookieData) {
+    const json = Array.isArray(set.cookies) ? set.cookies : [];
+    cookieData.value = JSON.stringify(json, null, 2);
+  }
+}
+
+function attachCookieSetEventHandlers() {
+  if (!cookieSetList) return;
+
+  // Click handlers for select and delete
+  cookieSetList.querySelectorAll('.cookie-set-select').forEach(btn => {
+    btn.onclick = () => {
+      const id = parseInt(btn.dataset.id, 10);
+      if (!Number.isNaN(id)) {
+        selectCookieSet(id);
+      }
+    };
+  });
+
+  cookieSetList.querySelectorAll('.cookie-set-delete').forEach(btn => {
+    btn.onclick = async () => {
+      const id = parseInt(btn.dataset.id, 10);
+      if (Number.isNaN(id)) return;
+      if (!confirm('Delete this cookie set?')) return;
+      try {
+        const res = await ipcRenderer.invoke('delete-cookie-set', id);
+        if (res && res.success) {
+          showMessage(cookieStatus, 'Cookie set deleted.', 'success');
+          if (selectedCookieSetId === id) {
+            selectedCookieSetId = null;
+          }
+          await loadCookies();
+        } else {
+          showMessage(cookieStatus, 'Failed to delete cookie set.', 'error');
+        }
+      } catch (err) {
+        console.error('Error deleting cookie set:', err);
+        showMessage(cookieStatus, `Error deleting cookie set: ${err.message}`, 'error');
+      }
+    };
+  });
+
+  // Drag & drop for reordering
+  let dragSourceId = null;
+
+  cookieSetList.querySelectorAll('.cookie-set-item').forEach(item => {
+    item.addEventListener('dragstart', e => {
+      const id = parseInt(item.dataset.id, 10);
+      if (!Number.isNaN(id)) {
+        dragSourceId = id;
+        e.dataTransfer.effectAllowed = 'move';
+      }
+    });
+  });
+
+  cookieSetList.addEventListener('dragover', e => {
+    e.preventDefault();
+  });
+
+  cookieSetList.addEventListener('drop', async e => {
+    e.preventDefault();
+    const targetEl = e.target.closest('.cookie-set-item');
+    if (!targetEl || dragSourceId === null) return;
+    const targetId = parseInt(targetEl.dataset.id, 10);
+    if (Number.isNaN(targetId) || targetId === dragSourceId) return;
+
+    // Compute new order of IDs
+    const orderedIds = currentCookieSets.map(s => s.id);
+    const fromIndex = orderedIds.indexOf(dragSourceId);
+    const toIndex = orderedIds.indexOf(targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    orderedIds.splice(fromIndex, 1);
+    orderedIds.splice(toIndex, 0, dragSourceId);
+
+    try {
+      const platform = cookiePlatform ? cookiePlatform.value : null;
+      if (!platform) return;
+      await ipcRenderer.invoke('reorder-cookie-sets', platform, orderedIds);
+      await loadCookies();
+    } catch (err) {
+      console.error('Error reordering cookie sets:', err);
+      showMessage(cookieStatus, `Error reordering cookie sets: ${err.message}`, 'error');
+    } finally {
+      dragSourceId = null;
+    }
+  });
+}
+
+function addCookieSet() {
+  if (!cookiePlatform) return;
+  const platform = cookiePlatform.value;
+  const nextIndex = currentCookieSets.length + 1;
+  selectedCookieSetId = null;
+  if (cookieEditorSection) cookieEditorSection.style.display = 'block';
+  if (cookieSetLabelInput) {
+    cookieSetLabelInput.value = `Set ${nextIndex}`;
+  }
+  if (cookieData) {
+    cookieData.value = '[]';
+  }
+  showMessage(cookieStatus, `Creating new cookie set for ${platform}.`, 'info');
 }
 
 async function testGoogleSheets() {
@@ -1288,7 +1468,6 @@ function renderPlatforms() {
   const platforms = [
     { id: 'Jobright', name: 'Jobright', desc: 'AI-powered' },
     { id: 'Himalayas', name: 'Himalayas', desc: 'remote + startup' },
-    { id: 'Jobgether', name: 'Jobgether', desc: 'remote-first' },
     { id: 'BuiltIn', name: 'BuiltIn', desc: 'tech/startup' },
     { id: 'ZipRecruiter', name: 'ZipRecruiter', desc: 'volume + variety' },
     { id: 'RemoteOK', name: 'RemoteOK', desc: 'pure remote tech' },

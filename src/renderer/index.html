@@ -121,7 +121,6 @@
             <select id="platformFilter" class="filter-select">
               <option value="">All Platforms</option>
               <option value="Himalayas">Himalayas</option>
-              <option value="Jobgether">Jobgether</option>
               <option value="BuiltIn">BuiltIn</option>
               <option value="ZipRecruiter">ZipRecruiter</option>
               <option value="Jobright">Jobright</option>
@@ -595,32 +594,44 @@
         <div id="cookies-tab" class="tab-pane">
           <div class="cookies-manager">
             <h2>Cookie Management</h2>
-            <p class="help-text">Paste cookies in JSON format: [{"name":"cookie_name","value":"cookie_value"}, ...]</p>
+            <p class="help-text">Manage multiple cookie sets per platform. Cookies are rotated per platform run. Each set is a JSON array: [{"name":"cookie_name","value":"cookie_value"}, ...]</p>
             
             <div class="form-group">
-              <label for="cookiePlatform">Platform:</label>
-              <select id="cookiePlatform" class="form-control">
-                <option value="Himalayas">Himalayas</option>
-                <option value="Jobgether">Jobgether</option>
-                <option value="BuiltIn">BuiltIn</option>
-                <option value="ZipRecruiter">ZipRecruiter</option>
-                <option value="Jobright">Jobright</option>
-                <option value="RemoteOK">RemoteOK</option>
-                <option value="WeWorkRemotely">WeWorkRemotely</option>
-                <option value="Jungle">Jungle</option>
-                <option value="Rocketship">Rocketship</option>
-              </select>
+              <div class="cookie-platform-row">
+                <label for="cookiePlatform">Platform:</label>
+                <select id="cookiePlatform" class="form-control">
+                  <option value="Himalayas">Himalayas</option>
+                  <option value="BuiltIn">BuiltIn</option>
+                  <option value="ZipRecruiter">ZipRecruiter</option>
+                  <option value="Jobright">Jobright</option>
+                  <option value="RemoteOK">RemoteOK</option>
+                  <option value="WeWorkRemotely">WeWorkRemotely</option>
+                  <option value="Jungle">Jungle</option>
+                  <option value="Rocketship">Rocketship</option>
+                </select>
+                <button id="addCookieSetBtn" class="btn btn-primary" type="button">+ Add Cookie Set</button>
+              </div>
             </div>
 
             <div class="form-group">
-              <label for="cookieData">Cookie JSON:</label>
-              <textarea id="cookieData" class="form-textarea" rows="10" placeholder='[{"name":"session","value":"abc123"},...]'></textarea>
+              <label>Cookie Sets (drag to reorder):</label>
+              <div id="cookieSetList" class="cookie-set-list">
+                <!-- cookie sets will be rendered here -->
+              </div>
             </div>
 
-            <div class="form-actions">
-              <button id="saveCookiesBtn" class="btn btn-primary">💾 Save Cookies</button>
-              <button id="loadCookiesBtn" class="btn btn-secondary">📥 Load Cookies</button>
-              <button id="testCookiesBtn" class="btn btn-info">🧪 Test Cookies</button>
+            <div id="cookieEditorSection" class="form-group" style="display: none;">
+              <label for="cookieSetLabel">Selected Set Name:</label>
+              <input id="cookieSetLabel" class="form-control" type="text" placeholder="Set name (e.g. Set 1)">
+              
+              <label for="cookieData">Cookie JSON:</label>
+              <textarea id="cookieData" class="form-textarea" rows="10" placeholder='[{"name":"session","value":"abc123"},...]'></textarea>
+              
+              <div class="form-actions">
+                <button id="saveCookiesBtn" class="btn btn-primary" type="button">💾 Save Set</button>
+                <button id="loadCookiesBtn" class="btn btn-secondary" type="button">🔄 Refresh List</button>
+                <button id="testCookiesBtn" class="btn btn-info" type="button">🧪 Test JSON</button>
+              </div>
             </div>
 
             <div id="cookieStatus" class="status-message"></div>
@@ -725,7 +736,6 @@
                   <option value="">All Platforms</option>
                   <option value="Himalayas">Himalayas</option>
                   <option value="Jobright">Jobright</option>
-                  <option value="Jobgether">Jobgether</option>
                   <option value="BuiltIn">BuiltIn</option>
                   <option value="ZipRecruiter">ZipRecruiter</option>
                   <option value="RemoteOK">RemoteOK</option>

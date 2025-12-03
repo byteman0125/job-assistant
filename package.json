@@ -7,6 +7,7 @@
     "start": "cross-env NODE_OPTIONS=--no-deprecation electron . --no-cache",
     "start-auto": "cross-env NODE_OPTIONS=--no-deprecation electron . --no-cache",
     "start-manual": "npm run start-auto",
+    "migrate:cookies": "node scripts/migrateCookies.js",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",

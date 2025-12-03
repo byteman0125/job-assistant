@@ -17,7 +17,6 @@ const originalConsoleLog = console.log;
 const trackedLogPlatforms = [
   'Jobright',
   'Himalayas',
-  'Jobgether',
   'BuiltIn',
   'ZipRecruiter',
   'RemoteOK',
@@ -251,7 +250,6 @@ async function startScraping() {
             else if (platform === 'Himalayas') domain = '.himalayas.app';
             else if (platform === 'RemoteOK') domain = '.remoteok.com';
             else if (platform === 'WeWorkRemotely') domain = '.weworkremotely.com';
-            else if (platform === 'Jobgether') domain = '.jobgether.com';
             else if (platform === 'BuiltIn') domain = '.builtin.com';
             else if (platform === 'ZipRecruiter') domain = '.ziprecruiter.com';
             else if (platform === 'Jungle') domain = '.welcometothejungle.com';
@@ -388,6 +386,38 @@ ipcMain.handle('save-cookies', async (event, platform, cookies) => {
 
 ipcMain.handle('get-cookies', async (event, platform) => {
   return db.getCookies(platform);
+});
+
+// Cookie set management (multiple sets per platform)
+ipcMain.handle('get-cookie-sets', async (event, platform) => {
+  return db.getCookieSets(platform);
+});
+
+ipcMain.handle('save-cookie-set', async (event, payload) => {
+  const { id, platform, label, cookies } = payload || {};
+  if (!platform || !Array.isArray(cookies)) {
+    throw new Error('Invalid cookie set payload');
+  }
+  if (id) {
+    db.updateCookieSet(id, label, cookies);
+    return { success: true, id };
+  }
+  const newId = db.saveCookieSet(platform, label, cookies);
+  return { success: true, id: newId };
+});
+
+ipcMain.handle('delete-cookie-set', async (event, id) => {
+  if (!id) throw new Error('Missing cookie set id');
+  const ok = db.deleteCookieSet(id);
+  return { success: ok };
+});
+
+ipcMain.handle('reorder-cookie-sets', async (event, platform, orderedIds) => {
+  if (!platform || !Array.isArray(orderedIds)) {
+    throw new Error('Invalid reorder payload');
+  }
+  const ok = db.reorderCookieSets(platform, orderedIds);
+  return { success: ok };
 });
 
 ipcMain.handle('save-actions', async (event, platform, actions) => {
