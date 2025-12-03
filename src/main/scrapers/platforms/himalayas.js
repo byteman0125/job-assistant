@@ -6,7 +6,7 @@ class HimalayasScraper extends BaseScraper {
   constructor(database, gptExtractor) {
     super(database, 'Himalayas', gptExtractor);
     this.baseUrl = 'https://himalayas.app/jobs/countries/united-states/software-engineer?sort=recent';
-    this.maxPagesToScan = 2;
+    this.maxPagesToScan = 5;
     // Wait for external redirects after clicking "I'm ready to apply"
     // 5–20 seconds to reliably catch slower ATS redirects
     this.redirectWaitRangeMs = [5000, 20000];
