@@ -6,6 +6,7 @@ const JobrightScraper = require('./platforms/jobright');
 const RemoteOKScraper = require('./platforms/remoteok');
 const WeWorkRemotelyScraper = require('./platforms/weworkremotely');
 const JungleScraper = require('./platforms/jungle');
+const RocketshipScraper = require('./platforms/rocketship');
 const GPTExtractor = require('../gptExtractor');
 const ActionRecorder = require('../actionRecorder');
 
@@ -24,7 +25,8 @@ class ScraperManager {
       new ZipRecruiterScraper(database, this.gptExtractor),
       new RemoteOKScraper(database, this.gptExtractor),
       new WeWorkRemotelyScraper(database, this.gptExtractor),
-      new JungleScraper(database, this.gptExtractor)
+      new JungleScraper(database, this.gptExtractor),
+      new RocketshipScraper(database)
     ];
     this.onJobFoundCallback = null;
   }

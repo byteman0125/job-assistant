@@ -22,7 +22,8 @@ const trackedLogPlatforms = [
   'ZipRecruiter',
   'RemoteOK',
   'WeWorkRemotely',
-  'Jungle'
+  'Jungle',
+  'Rocketship'
 ];
 console.log = function(...args) {
   originalConsoleLog.apply(console, args);
@@ -254,6 +255,7 @@ async function startScraping() {
             else if (platform === 'BuiltIn') domain = '.builtin.com';
             else if (platform === 'ZipRecruiter') domain = '.ziprecruiter.com';
             else if (platform === 'Jungle') domain = '.welcometothejungle.com';
+            else if (platform === 'Rocketship') domain = '.remoterocketship.com';
           }
           
           await scrapingSession.cookies.set({

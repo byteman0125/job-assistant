@@ -1293,7 +1293,8 @@ function renderPlatforms() {
     { id: 'ZipRecruiter', name: 'ZipRecruiter', desc: 'volume + variety' },
     { id: 'RemoteOK', name: 'RemoteOK', desc: 'pure remote tech' },
     { id: 'WeWorkRemotely', name: 'We Work Remotely', desc: 'quality remote' },
-    { id: 'Jungle', name: 'Jungle', desc: 'Welcome to the Jungle' }
+    { id: 'Jungle', name: 'Jungle', desc: 'Welcome to the Jungle' },
+    { id: 'Rocketship', name: 'Rocketship', desc: 'Remote Rocketship' }
   ];
   
   // Sort platforms by current order
