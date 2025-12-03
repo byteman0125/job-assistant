@@ -11,8 +11,16 @@ class GoogleSheetsService {
     this.initialized = false;
   }
 
-  // Determine which tab a job should go to based on URL (case-insensitive)
-  detectTabName(url) {
+  // Determine which tab a job should go to based on platform and/or URL (case-insensitive)
+  detectTabName(url, platform) {
+    // Platform-specific tabs take priority when available
+    if (platform) {
+      const p = String(platform).toLowerCase();
+      if (p === 'himalayas') {
+        return 'Himalayas';
+      }
+    }
+
     if (!url) return 'others';
     
     const urlLower = url.toLowerCase();
@@ -256,7 +264,7 @@ class GoogleSheetsService {
       }
 
       // Detect which tab this job should go to
-      const tabName = this.detectTabName(job.url);
+      const tabName = this.detectTabName(job.url, job.platform);
       console.log(`Google Sheets: Detected tab: "${tabName}" for URL: ${job.url}`);
 
       // Check for duplicate in specific tab (extra safety check, though DB already checks)
