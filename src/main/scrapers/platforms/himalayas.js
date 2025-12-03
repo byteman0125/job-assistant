@@ -8,8 +8,8 @@ class HimalayasScraper extends BaseScraper {
     this.baseUrl = 'https://himalayas.app/jobs/countries/united-states/software-engineer?sort=recent';
     this.maxPagesToScan = 2;
     // Wait for external redirects after clicking "I'm ready to apply"
-    // 5–10 seconds is enough for most Workday/Greenhouse flows
-    this.redirectWaitRangeMs = [5000, 10000];
+    // 5–20 seconds to reliably catch slower ATS redirects
+    this.redirectWaitRangeMs = [5000, 20000];
   }
   
   getBaseDomain() {
