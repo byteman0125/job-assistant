@@ -594,7 +594,6 @@
         <div id="cookies-tab" class="tab-pane">
           <div class="cookies-manager">
             <h2>Cookie Management</h2>
-            <p class="help-text">Manage multiple cookie sets per platform. Cookies are rotated per platform run. Each set is a JSON array: [{"name":"cookie_name","value":"cookie_value"}, ...]</p>
             
             <div class="form-group">
               <div class="cookie-platform-row">
@@ -617,21 +616,6 @@
               <label>Cookie Sets (drag to reorder):</label>
               <div id="cookieSetList" class="cookie-set-list">
                 <!-- cookie sets will be rendered here -->
-              </div>
-            </div>
-
-            <div id="cookieEditorSection" class="form-group" style="display: none;">
-              <label for="cookieSetLabel">Selected Set Name:</label>
-              <input id="cookieSetLabel" class="form-control" type="text" placeholder="Set name (e.g. Set 1)">
-              
-              <label for="cookieData">Cookie JSON:</label>
-              <textarea id="cookieData" class="form-textarea" rows="10" placeholder='[{"name":"session","value":"abc123"},...]'></textarea>
-              
-              <div class="form-actions">
-                <button id="saveCookiesBtn" class="btn btn-primary" type="button">💾 Save Set</button>
-                <button id="loadCookiesBtn" class="btn btn-secondary" type="button">🔄 Refresh List</button>
-                <button id="testCookiesBtn" class="btn btn-info" type="button">🧪 Test JSON</button>
-                <button id="migrateCookiesBtn" class="btn btn-warning" type="button">⬆️ Migrate Legacy Cookies</button>
               </div>
             </div>
 
@@ -995,6 +979,33 @@
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Cookie Set Modal -->
+  <div id="cookieSetModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3 id="cookieSetModalTitle">Cookie Set</h3>
+        <button class="modal-close" onclick="closeCookieSetModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="cookieSetLabel">Set Name</label>
+          <input id="cookieSetLabel" class="form-control" type="text" placeholder="Set name (e.g. Set 1)">
+        </div>
+        <div class="form-group">
+          <label for="cookieData">Cookie JSON</label>
+          <textarea id="cookieData" class="form-textarea" rows="12" placeholder='[{"name":"session","value":"abc123"},...]'></textarea>
+          <p class="help-text">Paste an array of cookie objects. Each must include at least <code>name</code> and <code>value</code>.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="testCookiesBtn" class="btn btn-info" type="button">🧪 Validate JSON</button>
+        <button id="saveCookiesBtn" class="btn btn-primary" type="button">💾 Save Set</button>
+        <button class="btn btn-secondary" type="button" onclick="closeCookieSetModal()">Cancel</button>
+        <button id="migrateCookiesBtn" class="btn btn-warning" type="button">⬆️ Migrate Legacy Cookies</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Bug Details Modal -->
   <div id="bugDetailsModal" class="modal-overlay" style="display: none;">

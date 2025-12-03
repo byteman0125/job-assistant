@@ -64,7 +64,7 @@ const testCookiesBtn = document.getElementById('testCookiesBtn');
 const addCookieSetBtn = document.getElementById('addCookieSetBtn');
 const cookieSetList = document.getElementById('cookieSetList');
 const cookieSetLabelInput = document.getElementById('cookieSetLabel');
-const cookieEditorSection = document.getElementById('cookieEditorSection');
+const cookieEditorSection = document.getElementById('cookieSetModal');
 const cookieStatus = document.getElementById('cookieStatus');
 const migrateCookiesBtn = document.getElementById('migrateCookiesBtn');
 
@@ -274,6 +274,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load profile and resumes on startup (after DOM is ready)
   await loadProfile();
   await loadResumes();
+  // Pre-load cookie sets for the initially selected platform so the list is visible on first open
+  if (cookiePlatform) {
+    await loadCookies();
+  }
   
 });
 
@@ -1193,22 +1197,28 @@ async function loadCookies() {
     // Render list
     if (cookieSetList) {
       if (currentCookieSets.length === 0) {
-        cookieSetList.innerHTML = '<p class="empty-state">No cookie sets for this platform. Click "Add Cookie Set" to create one.</p>';
+        cookieSetList.innerHTML = '<p class="empty-state">No cookie sets for this platform. Click "<strong>Add Cookie Set</strong>" to create one.</p>';
       } else {
         cookieSetList.innerHTML = currentCookieSets
-          .map(set => {
-            const label = set.label || `Set ${set.id}`;
-            const activeMark = set.is_active ? ' (active)' : '';
+          .map((set, index) => {
+            const label = set.label || `Set ${index + 1}`;
+            const statusText = set.is_active ? 'Active' : 'Idle';
+            const statusClass = set.is_active ? 'status-active' : 'status-idle';
+            const lastUsed = set.last_used ? new Date(set.last_used * 1000).toLocaleString() : 'Never used';
+            const cookieCount = Array.isArray(set.cookies) ? set.cookies.length : 0;
+            // Single-line layout: drag handle, name, status, meta, buttons
             return `
               <div class="cookie-set-item" draggable="true" data-id="${set.id}">
-                <div class="cookie-set-main">
-                  <span class="cookie-set-drag">⋮⋮</span>
-                  <button class="cookie-set-select" type="button" data-id="${set.id}">
-                    <span class="cookie-set-name">${label}${activeMark}</span>
-                    <span class="cookie-set-meta">Used ${set.usage_count}× • Last: ${set.last_used ? new Date(set.last_used * 1000).toLocaleString() : 'never'}</span>
-                  </button>
-                </div>
-                <button class="cookie-set-delete btn btn-danger" type="button" data-id="${set.id}">🗑</button>
+                <span class="cookie-set-drag" title="Drag to reorder">☰</span>
+                <span class="cookie-set-name">${label}</span>
+                <span class="cookie-set-status ${statusClass}">${statusText}</span>
+                <span class="cookie-set-meta">
+                  (${cookieCount} cookies • used ${set.usage_count}× • last: ${lastUsed})
+                </span>
+                <span class="cookie-set-actions">
+                  <button class="cookie-set-select btn btn-secondary" type="button" data-id="${set.id}">Edit</button>
+                  <button class="cookie-set-delete btn btn-danger" type="button" data-id="${set.id}">🗑</button>
+                </span>
               </div>
             `;
           })
@@ -1216,16 +1226,10 @@ async function loadCookies() {
       }
     }
 
-    // If there is at least one set, auto-select the first
-    if (currentCookieSets.length > 0) {
-      const firstId = currentCookieSets[0].id;
-      selectCookieSet(firstId);
-    } else {
-      selectedCookieSetId = null;
-      if (cookieEditorSection) cookieEditorSection.display = 'none';
-      if (cookieData) cookieData.value = '';
-      if (cookieSetLabelInput) cookieSetLabelInput.value = '';
-    }
+    // Nothing auto-selected; user will click "Edit" or "+" to open modal.
+    selectedCookieSetId = null;
+    if (cookieData) cookieData.value = '';
+    if (cookieSetLabelInput) cookieSetLabelInput.value = '';
 
     // Attach event listeners for select/delete and drag & drop
     attachCookieSetEventHandlers();
@@ -1266,13 +1270,20 @@ function selectCookieSet(id) {
   const set = currentCookieSets.find(s => s.id === id);
   if (!set) return;
   selectedCookieSetId = id;
-  if (cookieEditorSection) cookieEditorSection.style.display = 'block';
+  // Populate modal fields
   if (cookieSetLabelInput) {
     cookieSetLabelInput.value = set.label || `Set ${currentCookieSets.indexOf(set) + 1}`;
   }
   if (cookieData) {
     const json = Array.isArray(set.cookies) ? set.cookies : [];
     cookieData.value = JSON.stringify(json, null, 2);
+  }
+  const titleEl = document.getElementById('cookieSetModalTitle');
+  if (titleEl) {
+    titleEl.textContent = `Edit Cookie Set – ${cookieSetLabelInput.value || ''}`;
+  }
+  if (cookieEditorSection) {
+    cookieEditorSection.style.display = 'flex';
   }
 }
 
@@ -1364,7 +1375,7 @@ function addCookieSet() {
   const platform = cookiePlatform.value;
   const nextIndex = currentCookieSets.length + 1;
   selectedCookieSetId = null;
-  if (cookieEditorSection) cookieEditorSection.style.display = 'block';
+  if (cookieEditorSection) cookieEditorSection.style.display = 'flex';
   if (cookieSetLabelInput) {
     cookieSetLabelInput.value = `Set ${nextIndex}`;
   }
@@ -1373,6 +1384,14 @@ function addCookieSet() {
   }
   showMessage(cookieStatus, `Creating new cookie set for ${platform}.`, 'info');
 }
+
+// Modal close helper (used from HTML onclick)
+window.closeCookieSetModal = function () {
+  if (cookieEditorSection) {
+    cookieEditorSection.style.display = 'none';
+  }
+  selectedCookieSetId = null;
+};
 
 async function migrateLegacyCookies() {
   try {

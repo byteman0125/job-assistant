@@ -726,7 +726,89 @@ body {
 .profile-manager {
   max-width: 900px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 24px 24px 28px;
+}
+
+.cookie-platform-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.cookie-platform-row label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.cookie-platform-row select {
+  flex: 1;
+}
+
+/* Cookie Sets */
+.cookie-set-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.cookie-set-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px; /* fully rounded pill */
+  border: 1px solid #333;
+  background-color: #181818;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cookie-set-item:hover {
+  background-color: #222;
+  border-color: #4CAF50;
+}
+
+.cookie-set-drag {
+  cursor: grab;
+  color: #777;
+  padding: 0 4px;
+}
+
+.cookie-set-name {
+  font-weight: 600;
+  color: #eee;
+}
+
+.cookie-set-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.cookie-set-status.status-active {
+  border-color: #4CAF50;
+  color: #4CAF50;
+}
+
+.cookie-set-status.status-idle {
+  border-color: #555;
+  color: #999;
+}
+
+.cookie-set-meta {
+  color: #888;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cookie-set-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .profile-manager h2 {
