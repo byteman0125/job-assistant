@@ -54,6 +54,32 @@ class JungleScraper extends BaseScraper {
     }
   }
 
+  async closeAppModal() {
+    try {
+      // Check if "Get the app" modal is visible and close it
+      const closed = await this.page.evaluate(() => {
+        const closeButton = document.querySelector('div[data-testid="modal-remove-button"]');
+        if (closeButton) {
+          // Try to click the button or its SVG child
+          const clickable = closeButton.closest('button') || closeButton;
+          clickable.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (closed) {
+        console.log(`${this.platform}: ✅ Closed "Get the app" modal`);
+        await this.randomDelay(500, 800);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      // Modal might not be present or already closed, which is fine
+      return false;
+    }
+  }
+
   async login() {
     try {
       console.log(`${this.platform}: 🔐 Logging in to Jungle...`);
@@ -97,6 +123,10 @@ class JungleScraper extends BaseScraper {
       }
       
       await this.randomDelay(2000, 3000);
+      
+      // Close "Get the app" modal if it appears after login
+      await this.closeAppModal();
+      
       return true;
       
     } catch (error) {
@@ -112,6 +142,9 @@ class JungleScraper extends BaseScraper {
     await this.navigateToUrl(initialUrl);
     await this.randomDelay(2000, 3000);
     
+    // Close "Get the app" modal if it appears
+    await this.closeAppModal();
+    
     // Wait for page to load and check if we're on a job detail page or job list
     // If on job list, we need to click first job or wait for auto-redirect
     const currentUrl = this.page.url();
@@ -125,6 +158,9 @@ class JungleScraper extends BaseScraper {
     for (let jobIndex = 0; jobIndex < maxJobs && this.isRunning; jobIndex++) {
       console.log(`${this.platform}: ═══════════════════════════════════════════`);
       console.log(`${this.platform}: JOB ${jobIndex + 1}/${maxJobs} from ${initialUrl}`);
+      
+      // Close "Get the app" modal if it appears (check at start of each job)
+      await this.closeAppModal();
       
       const currentJobUrl = this.page.url();
       console.log(`${this.platform}: Current URL: ${currentJobUrl}`);
@@ -197,6 +233,10 @@ class JungleScraper extends BaseScraper {
       
       // Click Next button to go to next job
       await this.clickNextButton();
+      
+      // Close "Get the app" modal if it appears after clicking Next
+      await this.closeAppModal();
+      
       await this.randomDelay(1500, 2500);
     }
     
