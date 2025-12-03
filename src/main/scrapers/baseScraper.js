@@ -270,7 +270,7 @@ class BaseScraper {
       console.log(`${this.platform}: Launching browser (headless, mirroring to scraping tab)...`);
       
       this.browser = await puppeteer.launch({
-        headless: false,  // NO SEPARATE WINDOW! All work happens in background
+        headless: true,  // NO SEPARATE WINDOW! All work happens in background
         defaultViewport: { width: 1920, height: 1080 },
         args: [
           '--no-sandbox',
