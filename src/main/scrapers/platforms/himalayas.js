@@ -32,6 +32,128 @@ class HimalayasScraper extends BaseScraper {
     return text.toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
+  isSoftwareRole(title) {
+    if (!title) return false;
+    const t = this.normalizeText(title);
+    // Fast positive checks for software/engineering roles
+    const positive = [
+      // generic
+      'software engineer',
+      'software developer',
+      'software development engineer',
+      'developer',
+      'engineer',
+      'full stack',
+      'full-stack',
+      'frontend',
+      'front-end',
+      'backend',
+      'back-end',
+      'web developer',
+      'mobile developer',
+      'android developer',
+      'ios developer',
+      'react developer',
+      'node developer',
+      'typescript developer',
+      'python developer',
+      'java developer',
+      'golang developer',
+      // infra / reliability
+      'devops',
+      'site reliability engineer',
+      'sre',
+      'platform engineer',
+      'observability engineer',
+      'infrastructure engineer',
+      // data / ml / ai
+      'data engineer',
+      'analytics engineer',
+      'machine learning engineer',
+      'ml engineer',
+      'ai engineer',
+      // implementation / solutions / devrel
+      'implementation engineer',
+      'solutions engineer',
+      'solution engineer',
+      'solutions architect',
+      'solution architect',
+      'software architect',
+      'cloud engineer',
+      'cloud architect',
+      'developer advocate',
+      'developer relations engineer',
+      'developer relations',
+      'developer evangelist',
+      'developer productivity engineer',
+      'developer experience engineer',
+      // qa / test
+      'qa engineer',
+      'quality assurance engineer',
+      'test engineer',
+      'sdet',
+      // leadership but still technical
+      'staff engineer',
+      'principal engineer',
+      'founding engineer'
+    ];
+
+    let matchedPositive = false;
+    let i = 0;
+    while (i < positive.length) {
+      if (t.includes(positive[i])) {
+        matchedPositive = true;
+        break;
+      }
+      i++;
+    }
+    if (!matchedPositive) return false;
+
+    // Exclude clearly non-dev roles even if they contain some shared words
+    const negativePhrases = [
+      'drafting legal assistant',
+      'legal assistant',
+      'legal ',
+      'clinical tech support',
+      'rehab therapists',
+      'sales development representative',
+      'territory sales representative',
+      'commissioning technician',
+      'technician/engineer'
+    ];
+
+    let j = 0;
+    while (j < negativePhrases.length) {
+      if (t.includes(negativePhrases[j])) {
+        return false;
+      }
+      j++;
+    }
+
+    const negativeTokens = [
+      'assistant',
+      'recruiter',
+      'talent acquisition',
+      'marketing',
+      'customer support',
+      'customer success',
+      'account manager',
+      'sales ',
+      'sales-',
+      'sales,'
+    ];
+
+    let k = 0;
+    while (k < negativeTokens.length) {
+      if (t.includes(negativeTokens[k])) {
+        return false;
+      }
+      k++;
+    }
+
+    return true;
+  }
+
   shouldSkipByKeyword(title, keywords) {
     if (!title || !keywords.length) return false;
     const normalized = this.normalizeText(title);
@@ -103,6 +225,13 @@ class HimalayasScraper extends BaseScraper {
             continue;
           }
           seenJobs.add(dedupKey);
+
+        // Enforce software-only roles for Himalayas
+        if (!this.isSoftwareRole(jobCard.title)) {
+          console.log(`${this.platform}: ⏭️ SKIP (non-software role) - ${jobCard.title}`);
+          this.sendSkipNotification(jobCard, 'Non-software role on Himalayas');
+          continue;
+        }
 
           if (this.shouldSkipByKeyword(jobCard.title, settings.ignoreKeywords)) {
             console.log(`${this.platform}: ⏭️ SKIP (ignore keyword) - ${jobCard.title}`);
