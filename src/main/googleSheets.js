@@ -11,8 +11,9 @@ class GoogleSheetsService {
     this.initialized = false;
   }
 
-  // Determine which tab a job should go to based on platform and/or URL (case-insensitive)
-  detectTabName(url, platform) {
+  // Determine which tab a job should go to based on platform and URL (case-insensitive)
+  // This returns the ORIGINAL tab based on platform/URL logic (not considering new company status)
+  detectOriginalTabName(url, platform) {
     // Platform-specific tabs take priority when available
     if (platform) {
       const p = String(platform).toLowerCase();
@@ -240,6 +241,93 @@ class GoogleSheetsService {
     }
   }
 
+  // Helper method to append job to a specific tab
+  async appendJobToTab(tabName, job, date) {
+    // Check for duplicate in specific tab (extra safety check, though DB already checks)
+    console.log(`Google Sheets: Checking for duplicate in "${tabName}" tab: ${job.platform} - ${job.company} - ${job.title}`);
+    const isDuplicate = await this.checkDuplicate(job.company, job.title, job.url, tabName);
+    if (isDuplicate) {
+      console.log(`Google Sheets: ℹ️ Duplicate found in "${tabName}" tab, skipping: ${job.platform} - ${job.company} - ${job.title}`);
+      return false;
+    }
+
+    // Get next row number for this tab (resets to 1 when date changes)
+    console.log(`Google Sheets: Getting next row number for "${tabName}" tab (date: ${date})...`);
+    const rowNo = await this.getNextRowNumber(tabName, date);
+    console.log(`Google Sheets: Next row number for "${tabName}": ${rowNo}`);
+
+    // Prepare row data: Date, No, Company, Title, Url, Platform
+    const values = [[
+      date,                    // Column A: Date
+      rowNo.toString(),       // Column B: No
+      job.company || '',       // Column C: Company
+      job.title || '',         // Column D: Title
+      job.url || '',           // Column E: Url
+      job.platform || ''       // Column F: Platform
+    ]];
+
+    console.log(`Google Sheets: Appending row to "${tabName}" tab (ID: ${this.spreadsheetId}):`, values[0]);
+
+    // Append row to specific tab
+    const response = await this.sheets.spreadsheets.values.append({
+      spreadsheetId: this.spreadsheetId,
+      range: `${tabName}!A:F`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      resource: {
+        values: values
+      }
+    }).catch(async (error) => {
+      // If tab doesn't exist, create it first
+      if (error.message && error.message.includes('Unable to parse range')) {
+        console.log(`Google Sheets: Tab "${tabName}" doesn't exist, creating it...`);
+        
+        // Create the tab by adding a sheet
+        await this.sheets.spreadsheets.batchUpdate({
+          spreadsheetId: this.spreadsheetId,
+          resource: {
+            requests: [{
+              addSheet: {
+                properties: {
+                  title: tabName,
+                  gridProperties: {
+                    rowCount: 1000,
+                    columnCount: 10
+                  }
+                }
+              }
+            }]
+          }
+        });
+
+        // Add header row to new tab
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.spreadsheetId,
+          range: `${tabName}!A1:F1`,
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: [['Date', 'No', 'Company', 'Title', 'Url', 'Platform']]
+          }
+        });
+
+        // Retry appending the job row
+        return await this.sheets.spreadsheets.values.append({
+          spreadsheetId: this.spreadsheetId,
+          range: `${tabName}!A:F`,
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          resource: {
+            values: values
+          }
+        });
+      }
+      throw error;
+    });
+
+    console.log(`Google Sheets: ✅ Added job to "${tabName}" tab: ${job.platform} - ${job.company} - ${job.title} (Row #${rowNo}, Updated cells: ${response.data.updates?.updatedCells || 0})`);
+    return true;
+  }
+
   // Add job to Google Sheet (categorized by tab)
   async addJob(job) {
     try {
@@ -263,96 +351,34 @@ class GoogleSheetsService {
         }
       }
 
-      // Detect which tab this job should go to
-      const tabName = this.detectTabName(job.url, job.platform);
-      console.log(`Google Sheets: Detected tab: "${tabName}" for URL: ${job.url}`);
+      // Detect original tab based on platform/URL (ignoring new company status)
+      const originalTabName = this.detectOriginalTabName(job.url, job.platform);
+      console.log(`Google Sheets: Original tab: "${originalTabName}" for ${job.company} - ${job.title} (URL: ${job.url})`);
 
-      // Check for duplicate in specific tab (extra safety check, though DB already checks)
-      console.log(`Google Sheets: Checking for duplicate in "${tabName}" tab: ${job.platform} - ${job.company} - ${job.title}`);
-      const isDuplicate = await this.checkDuplicate(job.company, job.title, job.url, tabName);
-      if (isDuplicate) {
-        console.log(`Google Sheets: ℹ️ Duplicate found in "${tabName}" tab, skipping: ${job.platform} - ${job.company} - ${job.title}`);
-        return false;
+      // Check if this is a new company
+      const isNewCompany = job._isNewCompany === true;
+      if (isNewCompany) {
+        console.log(`Google Sheets: 🆕 NEW COMPANY detected: "${job.company}" → will save to both "New Company" and "${originalTabName}" tabs`);
       }
 
       // Format date consistently (MM/DD/YYYY)
       const date = this.getTodayDate();
 
-      // Get next row number for this tab (resets to 1 when date changes)
-      console.log(`Google Sheets: Getting next row number for "${tabName}" tab (date: ${date})...`);
-      const rowNo = await this.getNextRowNumber(tabName, date);
-      console.log(`Google Sheets: Next row number for "${tabName}": ${rowNo}`);
+      let success = false;
 
-      // Prepare row data: Date, No, Company, Title, Url, Platform
-      const values = [[
-        date,                    // Column A: Date
-        rowNo.toString(),       // Column B: No
-        job.company || '',       // Column C: Company
-        job.title || '',         // Column D: Title
-        job.url || '',           // Column E: Url
-        job.platform || ''       // Column F: Platform
-      ]];
+      // If new company, save to BOTH "New Company" tab AND original tab
+      if (isNewCompany) {
+        // Save to "New Company" tab
+        const newCompanySuccess = await this.appendJobToTab('New Company', job, date);
+        // Save to original tab
+        const originalTabSuccess = await this.appendJobToTab(originalTabName, job, date);
+        success = newCompanySuccess || originalTabSuccess; // At least one succeeded
+      } else {
+        // Not a new company, save only to original tab
+        success = await this.appendJobToTab(originalTabName, job, date);
+      }
 
-      console.log(`Google Sheets: Appending row to "${tabName}" tab (ID: ${this.spreadsheetId}):`, values[0]);
-
-      // Append row to specific tab
-      const response = await this.sheets.spreadsheets.values.append({
-        spreadsheetId: this.spreadsheetId,
-        range: `${tabName}!A:F`,
-        valueInputOption: 'USER_ENTERED',
-        insertDataOption: 'INSERT_ROWS',
-        resource: {
-          values: values
-        }
-      }).catch(async (error) => {
-        // If tab doesn't exist, create it first
-        if (error.message && error.message.includes('Unable to parse range')) {
-          console.log(`Google Sheets: Tab "${tabName}" doesn't exist, creating it...`);
-          
-          // Create the tab by adding a sheet
-          await this.sheets.spreadsheets.batchUpdate({
-            spreadsheetId: this.spreadsheetId,
-            resource: {
-              requests: [{
-                addSheet: {
-                  properties: {
-                    title: tabName,
-                    gridProperties: {
-                      rowCount: 1000,
-                      columnCount: 10
-                    }
-                  }
-                }
-              }]
-            }
-          });
-
-          // Add header row to new tab
-          await this.sheets.spreadsheets.values.update({
-            spreadsheetId: this.spreadsheetId,
-            range: `${tabName}!A1:F1`,
-            valueInputOption: 'USER_ENTERED',
-            resource: {
-              values: [['Date', 'No', 'Company', 'Title', 'Url', 'Platform']]
-            }
-          });
-
-          // Retry appending the job row
-          return await this.sheets.spreadsheets.values.append({
-            spreadsheetId: this.spreadsheetId,
-            range: `${tabName}!A:F`,
-            valueInputOption: 'USER_ENTERED',
-            insertDataOption: 'INSERT_ROWS',
-            resource: {
-              values: values
-            }
-          });
-        }
-        throw error;
-      });
-
-      console.log(`Google Sheets: ✅ Added job to "${tabName}" tab: ${job.platform} - ${job.company} - ${job.title} (Row #${rowNo}, Updated cells: ${response.data.updates?.updatedCells || 0})`);
-      return true;
+      return success;
     } catch (error) {
       console.error('Google Sheets: ❌ Error adding job:', error.message);
       return false;

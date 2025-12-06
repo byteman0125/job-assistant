@@ -473,6 +473,12 @@ ${JOBS_TABLE_COLUMNS}
     const title = String(job.title || 'Unknown').trim();
     const url = String(job.url || '').trim();
 
+    // Check if this is a "new company" BEFORE inserting (so we can route to correct tab)
+    const isNewCompany = this.isNewCompany(company);
+    if (isNewCompany) {
+      console.log(`Database: 🆕 NEW COMPANY detected: "${company}"`);
+    }
+
     // Check for duplicate BEFORE inserting
     if (this.isDuplicate(company, title, url)) {
       console.log(`Database: ⚠️ DUPLICATE detected - ${company} - ${title}`);
@@ -510,9 +516,11 @@ ${JOBS_TABLE_COLUMNS}
       console.log(`Database: Job saved to DB. Platform: ${job.platform}, Google Sheets enabled: ${enableGoogleSheets}`);
       if (enableGoogleSheets !== false) { // Default to true if not set
         // Save to Google Sheets asynchronously (don't block database operation)
+        // Pass isNewCompany flag so Google Sheets can route to correct tab
         const sheetsService = this.getGoogleSheets();
+        const jobWithNewCompanyFlag = { ...job, _isNewCompany: isNewCompany };
         console.log(`Database: Attempting to save to Google Sheets - ${job.platform}: ${job.company} - ${job.title}`);
-        sheetsService.addJob(job).catch(err => {
+        sheetsService.addJob(jobWithNewCompanyFlag).catch(err => {
           console.error(`Google Sheets: Error saving job (${job.platform}):`, err.message);
         });
       } else {
@@ -521,6 +529,20 @@ ${JOBS_TABLE_COLUMNS}
     }
     
     return saved;
+  }
+
+  // Check if a company is "new" (hasn't been seen in the database before)
+  isNewCompany(company) {
+    if (!company || typeof company !== 'string') return false;
+    const normalizedCompany = this.normalizeForDuplicate(company);
+    
+    // Check if any job exists with this company (case-insensitive, normalized)
+    const existing = this.db.prepare(`
+      SELECT COUNT(*) as count FROM jobs 
+      WHERE LOWER(TRIM(company)) = LOWER(TRIM(?))
+    `).get(company.trim());
+    
+    return existing && existing.count === 0;
   }
 
   getAllJobs() {
